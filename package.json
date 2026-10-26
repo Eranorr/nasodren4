@@ -10,6 +10,7 @@
   "scripts": {
     "postinstall": "npm ci --prefix tools/eslint --no-audit --no-fund",
     "dev": "vite",
+    "dev:mobile": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
