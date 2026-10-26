@@ -6,17 +6,28 @@
 import * as PIXI from 'pixi.js';
 import { COLS, HIDDEN, VIS, CFG } from '../config/gameConfig';
 import { PIECE, SHAPES } from '../game/pieces';
-import { COLORS, blockRecord, createBlockAtlas, createDropCanvas, createWaveCanvas } from './textures';
+import {
+  COLORS,
+  FACE_ID,
+  blockRecord,
+  createBlockAtlas,
+  createDropCanvas,
+  createHappyCloudCanvas,
+  createWaveCanvas,
+} from './textures';
 import {
   Budget,
   CYC_DONE,
+  AIRFLOW,
   CYC_TINTS,
-  GARBAGE_FX,
   LINE_FX,
   NEURO_BURST,
   NEURO_TINTS,
   OSMOTIC_TINT,
-  REBOUND_FX,
+  ROOM_FX,
+  SNEEZE_FX,
+  airflowRate,
+  airflowSpeed,
   flavorOf,
   glowAlpha,
   motionScale,
@@ -53,6 +64,8 @@ interface ClearAnim {
   readonly flavor: ClearFlavor;
   /** Sıklamen: çözünme parçacığı salınmış hücreler (görünür hücre indeksi). */
   readonly done?: Uint8Array;
+  /** NS4-24: hapşırık patladı mı (hazırlık evresi bitti; konfeti bir kez). */
+  burst?: boolean;
 }
 /** NS4-15: Texture.WHITE ile tahta üstü vuruşlu ışıma (yeni doku yok). */
 interface Glow {
@@ -65,6 +78,15 @@ interface Glow {
   /** Tahta kenarı çerçevesi (4 ince şerit; yalnızca tahta ışımasında). edgeK: kenar/zemin parlaklık oranı, 0 = kapalı. */
   readonly edges: readonly PIXI.Sprite[];
   edgeK: number;
+}
+/** NS4-21: hava akışı zerreciği (kendi havuzu; efekt parçacıklarından bağımsız). */
+interface AirMote {
+  readonly s: PIXI.Sprite;
+  vy: number;
+  life: number;
+  max: number;
+  x0: number;
+  phase: number;
 }
 interface BounceState {
   readonly s: PIXI.Sprite;
@@ -91,11 +113,17 @@ export class View {
   readonly ghostLayer: PIXI.Container;
   readonly activeLayer: PIXI.Container;
   readonly fxLayer: PIXI.Container;
+  /** NS4-21: hava akışı katmanı (blokların ve hayaletin arkasında). */
+  readonly airLayer: PIXI.Container;
+  readonly air: AirMote[];
+  airAcc: number;
   // buildTextures() içinde atanır; ilk çağrıya kadar tanımsızdır (bkz. NS4-02-VITE-MIGRATION.md)
   tex!: TextureMap;
   ghostTex!: TextureMap;
   dropTex!: PIXI.Texture;
   waveTex!: PIXI.Texture;
+  /** NS4-27: temizlenirken gülümseyen gri bulutçuk. */
+  happyTex!: PIXI.Texture;
   atlasBase?: PIXI.BaseTexture;
   wave!: PIXI.TilingSprite;
   readonly cells: PIXI.Sprite[];
@@ -137,7 +165,18 @@ export class View {
     this.ghostLayer = new PIXI.Container();
     this.activeLayer = new PIXI.Container();
     this.fxLayer = new PIXI.Container();
-    this.boardC.addChild(this.ghostLayer, this.cellLayer, this.activeLayer, this.fxLayer);
+    this.airLayer = new PIXI.Container();
+    this.boardC.addChild(this.airLayer, this.ghostLayer, this.cellLayer, this.activeLayer, this.fxLayer);
+    this.air = [];
+    for (let i = 0; i < AIRFLOW.count; i++) {
+      const s = new PIXI.Sprite();
+      s.anchor.set(0.5);
+      s.blendMode = PIXI.BLEND_MODES.ADD; // koyu zeminde gri toz değil, parlak kabarcık
+      s.visible = false;
+      this.airLayer.addChild(s);
+      this.air.push({ s, vy: 0, life: 0, max: 1, x0: 0, phase: 0 });
+    }
+    this.airAcc = 0;
     // NS4-02: orijinaldeki "this.tex = this.ghostTex = this.dropTex = this.waveTex = null" ataması kaldırıldı;
     // alanlar ilk buildTextures() çağrısına kadar undefined kalır (yalnızca truthiness ile kontrol ediliyorlar).
 
@@ -234,12 +273,18 @@ export class View {
     const oldBase = this.atlasBase,
       oldTex = [this.tex, this.ghostTex];
     const oldDrop = this.dropTex,
-      oldWave = this.waveTex;
+      oldWave = this.waveTex,
+      oldHappy = this.happyTex;
     const { atlas, P } = createBlockAtlas(px); // NS4-03: çizim rendering/textures.ts içinde
     const base = (this.atlasBase = PIXI.BaseTexture.from(atlas));
     // i: atlas sütunu (BLOCK_IDS sırası). NS4-04: önce bütün blok, sonra bütün hayalet karoları oluşturulur.
     this.tex = blockRecord((_id, i) => new PIXI.Texture(base, new PIXI.Rectangle(i * P + 2, 2, px, px)));
     this.ghostTex = blockRecord((_id, i) => new PIXI.Texture(base, new PIXI.Rectangle(i * P + 2, P + 2, px, px)));
+    // blok karolarıyla aynı çerçeve (2 px kenar boşluğu dışarıda): aynı boyutta görünür
+    this.happyTex = new PIXI.Texture(
+      PIXI.BaseTexture.from(createHappyCloudCanvas(px)),
+      new PIXI.Rectangle(2, 2, px, px),
+    );
     // damlacık
     this.dropTex = PIXI.Texture.from(createDropCanvas(cell, res));
     // sıvı dalga dokusu (yatay döşenir)
@@ -252,6 +297,7 @@ export class View {
       this.fxLayer.addChildAt(this.wave, 0);
     }
     for (const p of this.parts) p.s.texture = this.dropTex;
+    for (const m of this.air) m.s.texture = this.dropTex;
     // eski dokuları güvenle serbest bırak (sprite'lar sync ile yenisine geçer)
     this.seen.piece = this.seen.board = this.seen.queue = -1;
     this.syncAll();
@@ -259,6 +305,7 @@ export class View {
     if (oldBase) oldBase.destroy();
     if (oldDrop) oldDrop.destroy(true);
     if (oldWave) oldWave.destroy(true);
+    if (oldHappy) oldHappy.destroy(true);
   }
 
   layout(L: Layout) {
@@ -273,6 +320,7 @@ export class View {
     }
     // NS4-15: süren efekt yeni ölçüye uyar; eski ölçüdeki parçacıklar bırakılır (konumları eski hücre boyutunda)
     this.killParticles();
+    this.killAir();
     this.glow.s.width = this.band.s.width = this.crest.width = COLS * c;
     this.glow.s.height = VIS * c;
     this.band.s.height = c;
@@ -318,6 +366,7 @@ export class View {
           s.visible = true;
           s.alpha = 1;
           s.tint = 0xffffff;
+          s.rotation = 0; // NS4-24: hapşırıkta savrulan hücreler döner
           this.setSize(s, c);
           s.position.set(col * c + c / 2, r * c + c / 2);
         } else s.visible = false;
@@ -457,6 +506,63 @@ export class View {
     }
   }
 
+  /** NS4-21: hava akışı zerreciklerini söndürür (havuz boyutu değişmez). */
+  killAir() {
+    for (const m of this.air) {
+      m.life = 0;
+      m.s.visible = false;
+    }
+    this.airAcc = 0;
+  }
+
+  /** NS4-21: boş bir sütunda, yığın yüzeyinin biraz üstünde bir zerrecik doğurur (yer yoksa doğmaz). */
+  spawnAir(congestion: number) {
+    const m = this.air.find((a) => a.life <= 0);
+    if (!m) return;
+    const c = this.L.cell,
+      b = this.game.board,
+      col = (Math.random() * COLS) | 0;
+    let top = 0;
+    while (top < VIS && !b[(top + HIDDEN) * COLS + col]) top++;
+    if (top < 2) return;
+    const [l0, l1] = AIRFLOW.life,
+      [v0, v1] = AIRFLOW.speed,
+      [z0, z1] = AIRFLOW.size;
+    m.max = m.life = l0 + Math.random() * (l1 - l0);
+    m.vy = c * (v0 + Math.random() * (v1 - v0)) * airflowSpeed(congestion);
+    m.x0 = col * c + c * (0.2 + Math.random() * 0.6);
+    m.phase = Math.random() * Math.PI * 2;
+    m.s.position.set(m.x0, (top - 0.3 - Math.random() * Math.min(4, top * 0.5)) * c);
+    m.s.scale.set(((z0 + Math.random() * (z1 - z0)) * c) / this.dropTex.orig.width);
+    m.s.tint = AIRFLOW.tints[(Math.random() * AIRFLOW.tints.length) | 0];
+    m.s.alpha = 0;
+    m.s.visible = true;
+  }
+
+  /** NS4-21: hava akışı: oyun sürerken doğar, tıkanıklıkla seyrelir; reduced motion'da kapalı. */
+  updateAir(dt: number) {
+    const g = this.game;
+    const flowing = g.state === 'play' || g.state === 'clearing' || g.state === 'draining';
+    if (flowing && !this.reducedMotion && this.dropTex) {
+      const cg = g.congestion();
+      this.airAcc += (dt / 1000) * airflowRate(cg);
+      for (; this.airAcc >= 1; this.airAcc--) this.spawnAir(cg);
+    } else this.airAcc = 0;
+    for (const m of this.air) {
+      if (m.life <= 0) continue;
+      m.life -= dt;
+      if (m.life <= 0 || m.s.y < -this.L.cell) {
+        m.life = 0;
+        m.s.visible = false;
+        continue;
+      }
+      const f = 1 - m.life / m.max;
+      m.s.y -= (m.vy * dt) / 1000;
+      m.s.x = m.x0 + Math.sin(m.phase + f * Math.PI * 2) * this.L.cell * 0.12;
+      m.s.alpha = AIRFLOW.alpha * Math.sin(Math.PI * f);
+    }
+  }
+
   startGlow(gl: Glow, tint: number, peak: number, dur: number, beats: number, edgeK = 0) {
     const m = this.motion;
     gl.s.tint = tint;
@@ -511,6 +617,7 @@ export class View {
     this.stopGlow(this.glow);
     this.stopGlow(this.band);
     this.killParticles();
+    this.killAir();
     this.budget.reset();
     this.shake = 0;
     if (this.L) this.boardC.position.set(this.L.board.x, this.L.board.y);
@@ -586,13 +693,16 @@ export class View {
       kind: e.kind,
       rows: e.rows.map((r) => r - HIDDEN).filter((r) => r >= 0),
       t: 0,
-      dur: e.kind === 'cyc' ? CFG.drainMs : e.kind === 'syn' ? CFG.synClearMs : CFG.lineClearMs,
+      dur: { cyc: CFG.drainMs, sneeze: CFG.sneezeMs, room: CFG.roomClearMs, lines: CFG.lineClearMs }[e.kind],
       flavor,
       ...(e.kind === 'cyc' ? { done: new Uint8Array(COLS * VIS) } : {}),
     };
     const rows = this.anim.rows;
-    if (e.kind !== 'cyc') {
-      const R = LINE_FX[e.kind === 'syn' ? 'syn' : flavor],
+    if (e.kind === 'sneeze' || e.kind === 'room') {
+      // NS4-24: hazırlık ("ha… ha…") update() içinde; patlama evresinde konfeti ve sarsıntı
+      // NS4-27: oda kutlaması onRoomClear() (roomclear olayı, clearstart'tan hemen önce) ve update() içinde
+    } else if (e.kind !== 'cyc') {
+      const R = LINE_FX[flavor],
         dw = this.dropTex.orig.width;
       rows.forEach((r, i) => {
         const f = this.flashes[i];
@@ -637,17 +747,16 @@ export class View {
               c * 24,
               ((0.22 + Math.random() * 0.18) * c) / dw,
             );
-          // yatay kıvılcım çizgisi (Nörorefleks: T sütunundan dışa; sentetik: iki yana keskin)
+          // yatay kıvılcım çizgisi (Nörorefleks: T sütunundan dışa)
           for (let k = 0, n = this.count(R.streak); k < n; k++) {
-            const syn = e.kind === 'syn';
-            const dir = syn ? (Math.random() < 0.5 ? -1 : 1) : col >= tcol ? 1 : -1;
+            const dir = col >= tcol ? 1 : -1;
             this.emitDrop(
               x,
               r * c + c / 2 + (Math.random() - 0.5) * c * 0.5,
-              syn ? (k % 2 ? 0xffffff : 0xff8a95) : NEURO_TINTS[(col + k) % NEURO_TINTS.length],
+              NEURO_TINTS[(col + k) % NEURO_TINTS.length],
               dir * c * (7 + Math.random() * 4),
               (Math.random() - 0.5) * c * 0.8,
-              (syn ? 200 : 260) + Math.random() * 120,
+              260 + Math.random() * 120,
               0,
               ((0.24 + Math.random() * 0.12) * c) / dw,
               5,
@@ -700,33 +809,51 @@ export class View {
       );
   }
 
-  /** Rebound başladı: kısa, kontrollü kırmızı-turuncu uyarı (normal hareket: iki vuruş; azaltılmış: tek). */
-  onRebound() {
-    const R = REBOUND_FX;
-    this.startGlow(this.glow, R.tint, R.peak, R.dur, R.beats, R.edge);
-    this.kick(R.shake);
+  /** NS4-24: hapşırık patlaması: sarsıntı, tek sıcak vuruş ve savrulan hücrelerden yukarı saçılan konfeti. */
+  sneezeBurst(rows: readonly number[]) {
+    const c = this.L.cell,
+      dw = this.dropTex.orig.width,
+      F = SNEEZE_FX;
+    this.kick(F.shake);
+    this.startGlow(this.glow, F.glow, F.glowPeak, 320, 1);
+    for (const r of rows)
+      for (let col = 0; col < COLS; col++) {
+        if (!this.cells[r * COLS + col].visible) continue;
+        for (let k = 0, n = this.count(F.confetti); k < n; k++)
+          this.emitDrop(
+            col * c + c / 2,
+            r * c + c / 2,
+            F.tints[(col + k) % F.tints.length],
+            (col + 0.5 - COLS / 2) * c * (0.6 + Math.random() * 0.6),
+            -c * (8 + Math.random() * 6),
+            620 + Math.random() * 300,
+            c * 22,
+            ((0.22 + Math.random() * 0.16) * c) / dw,
+            1.2,
+            1.6,
+            0.7,
+          );
+      }
   }
 
-  /** Garbage geldi: alt satırda gri bant, yukarı itilen toz parçacıkları ve sarsıntı. Garbage dokusu değişmez. */
-  onGarbage() {
-    const G = GARBAGE_FX;
-    this.kick(G.shake);
+  /** NS4-27: "Sinüs açıldı": serin vuruş, hafif sarsıntı, alttan bütün genişlikte yükselen kabarcıklar. */
+  onRoomClear() {
     if (!this.L) return;
     const c = this.L.cell,
       dw = this.dropTex.orig.width;
-    this.band.s.y = (VIS - 1) * c;
-    this.startGlow(this.band, G.tint, G.peak, G.dur, G.beats);
-    for (let i = 0, n = this.count(G.puffs); i < n; i++)
+    this.startGlow(this.glow, ROOM_FX.glow, ROOM_FX.peak, ROOM_FX.dur, 1);
+    this.kick(ROOM_FX.shake);
+    for (let i = 0, n = this.count(ROOM_FX.bubbles); i < n; i++)
       this.emitDrop(
         ((i + Math.random()) / n) * COLS * c,
-        VIS * c - c * 0.2,
-        0xd5dae8,
-        (Math.random() - 0.5) * c * 1.5,
-        -c * (2 + Math.random() * 2),
-        380 + Math.random() * 200,
-        c * 3,
-        ((0.3 + Math.random() * 0.2) * c) / dw,
-        2,
+        VIS * c - c * 0.3,
+        i % 3 === 2 ? 0xffffff : CYC_TINTS[i % CYC_TINTS.length],
+        (Math.random() - 0.5) * c * 0.8,
+        -c * (7 + Math.random() * 6),
+        800 + Math.random() * 500,
+        c * 4,
+        ((0.3 + Math.random() * 0.25) * c) / dw,
+        1.2,
       );
   }
 
@@ -831,13 +958,48 @@ export class View {
             -c * 2,
             ((0.25 + Math.random() * 0.3) * c) / dw,
           );
+      } else if (a.kind === 'room') {
+        // NS4-27: kalan hücreler hafifçe yükselip söner; yeni oda geçiş sonunda (clearend → syncAll)
+        const p = Math.min(1, a.t / a.dur),
+          q = Math.max(0, (p - 0.25) / 0.75);
+        for (let i = 0; i < this.cells.length; i++) {
+          const s = this.cells[i];
+          if (!s.visible) continue;
+          const r = (i / COLS) | 0;
+          s.alpha = 1 - q;
+          s.y = r * c + c / 2 - q * c * 0.6;
+        }
+      } else if (a.kind === 'sneeze') {
+        // NS4-24: "ha… ha…" (iki şişme) → "HAPŞU" (hücreler dönerek yukarı savrulur)
+        const p = Math.min(1, a.t / a.dur),
+          w = SNEEZE_FX.windup;
+        if (p >= w && !a.burst) {
+          a.burst = true;
+          this.sneezeBurst(a.rows);
+        }
+        for (const r of a.rows)
+          for (let col = 0; col < COLS; col++) {
+            const s = this.cells[r * COLS + col];
+            if (!s.visible) continue;
+            const base = c / s.texture.orig.width;
+            if (p < w) {
+              const puff = Math.abs(Math.sin((p / w) * Math.PI * 2));
+              s.scale.set(base * (1 + 0.1 * puff * m.shake));
+              continue;
+            }
+            const q = (p - w) / (1 - w);
+            s.scale.set(base * (1 - 0.35 * q));
+            s.alpha = 1 - q;
+            s.y = r * c + c / 2 - q * q * c * 7;
+            s.x = col * c + c / 2 + (col + 0.5 - COLS / 2) * c * 0.35 * q;
+            s.rotation = (col % 2 ? 1 : -1) * q * 1.4 * m.shake;
+          }
       } else {
         const p = Math.min(1, a.t / a.dur),
-          syn = a.kind === 'syn',
-          R = LINE_FX[syn ? 'syn' : a.flavor];
+          R = LINE_FX[a.flavor];
         for (let i = 0; i < a.rows.length; i++) {
           const f = this.flashes[i];
-          let al = Math.max(0, 1 - p * (syn ? 2.2 : 1.6));
+          let al = Math.max(0, 1 - p * 1.6);
           // Nörorefleks: hızlı titreşimli flaş (reduced motion'da düz sönüm)
           if (a.flavor === 'neuro' && m.flicker) al *= 0.6 + 0.4 * Math.cos(p * Math.PI * 8);
           f.alpha = al;
@@ -851,12 +1013,13 @@ export class View {
             const s = this.cells[r * COLS + col];
             if (!s.visible) continue;
             const base = c / s.texture.orig.width;
-            if (syn) {
-              // sentetik: hızlı ve keskin; hücre yatay bir çizgiye sıkışır
-              const q = 1 - p;
-              s.scale.set(base * (1 + 0.18 * p), base * Math.max(0.001, q * q));
-              s.alpha = 1 - p * p;
-              s.y = r * c + c / 2;
+            // NS4-27: gri bulutçuk gülümser ve süzülerek yukarı uçar (sıkışmaz)
+            if (s.texture === this.tex[FACE_ID] || s.texture === this.happyTex) {
+              s.texture = this.happyTex;
+              s.scale.set((c / this.happyTex.orig.width) * (1 + 0.15 * p));
+              s.alpha = 1 - p * p * p; // sona kadar görünür kalır
+              s.y = r * c + c / 2 - p * c * 2.2;
+              s.x = col * c + c / 2 + Math.sin(p * Math.PI * 2 + col) * c * 0.12;
               continue;
             }
             s.scale.set(base * Math.max(0.001, k), base * Math.max(0.001, k * 0.7));
@@ -867,6 +1030,9 @@ export class View {
           }
       }
     }
+
+    // NS4-21: hava akışı
+    this.updateAir(dt);
 
     // tahta ışıması ve satır bandı
     this.updateGlow(this.glow, dt);

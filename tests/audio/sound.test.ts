@@ -1,7 +1,15 @@
 // NS4-17: SoundManager — AudioContext yalnızca unlock() ile, ayarlar, müzik oturumu (tek zamanlayıcı, düğüm
 // temizliği), sekme gizleme, desteklenmeyen ortam ve sık tekrar seyreltmesi. Web Audio taklit edilir.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MOVE_MIN_GAP, MUSIC_CHORD_MS, Sound } from '../../src/audio/SoundManager';
+import {
+  MOVE_MIN_GAP,
+  MUFFLE_CLOSED_HZ,
+  MUFFLE_OPEN_HZ,
+  MUFFLE_START,
+  MUSIC_CHORD_MS,
+  Sound,
+  muffleCutoff,
+} from '../../src/audio/SoundManager';
 import { FakeAudioContext, installFakeAudio } from '../helpers/fakeAudio';
 
 const settings = () => ({ sound: true, music: true });
@@ -78,9 +86,7 @@ describe('AudioContext yalnızca kullanıcı etkileşimiyle açılır', () => {
         s.clear(4, 0);
         s.clear(2, 2);
         s.cyc();
-        s.syn();
-        s.warn();
-        s.garbage();
+        s.sneeze();
         s.level();
         s.over();
         s.setHidden(true);
@@ -170,14 +176,15 @@ describe('ortam müziği oturumu', () => {
     const s = new Sound(settings());
     s.unlock();
     s.setMusic(true);
-    // master'a bağlanan kazançlar: sfx, sonra müzik ana kanalı (unlock sırası)
+    // NS4-20: müzik ana kanalı master'a muffle süzgeci üzerinden bağlanır
     const master = ctx().nodes[1];
-    const mus = ctx().nodes.filter((n) => n.kind === 'gain' && n.outputs.has(master))[1];
+    const muffle = ctx().nodes.find((n) => n.kind === 'biquad' && n.outputs.has(master));
+    const mus = ctx().nodes.find((n) => n.kind === 'gain' && muffle && n.outputs.has(muffle));
     expect(mus).toBeDefined();
     s.cyc();
     s.clear(4, 0);
     s.clear(2, 2);
-    s.syn();
+    s.sneeze();
     // setTargetAtTime son değeri 1 (geri dönüş planlandı)
     const g = (mus as unknown as { gain: { value: number; calls: string[] } }).gain;
     expect(g.calls.filter((c) => c === 'target').length).toBeGreaterThanOrEqual(8);
@@ -238,7 +245,7 @@ describe('sık tekrar ve ayırt edicilik', () => {
     expect(hard.map((x) => x.kind)).toEqual(['osc', 'buffer']);
     expect(hard[0].stopped! - hard[0].started!).toBeGreaterThan(lock[0].stopped! - lock[0].started!);
   });
-  it('sentetik kısa (≤ 0,2 sn), sıklamen en uzun ve yumuşak özel an', () => {
+  it('hapşırık: hazırlık + patlama (< 1 sn, sıklamenden kısa); sıklamen en uzun ve yumuşak özel an', () => {
     const { ctx } = installFakeAudio();
     const s = new Sound(settings());
     s.unlock();
@@ -249,10 +256,72 @@ describe('sık tekrar ve ayırt edicilik', () => {
       const xs = c.sources().slice(n);
       return Math.max(...xs.map((x) => x.stopped!)) - Math.min(...xs.map((x) => x.started!));
     };
-    expect(span(() => s.syn())).toBeLessThanOrEqual(0.2);
+    const sneeze = span(() => s.sneeze());
+    expect(sneeze).toBeGreaterThan(0.4);
+    expect(sneeze).toBeLessThan(1);
     const cyc = span(() => s.cyc());
     expect(cyc).toBeGreaterThan(span(() => s.clear(4, 0)));
     expect(cyc).toBeGreaterThan(1.5);
-    expect(span(() => s.garbage())).toBeLessThan(span(() => s.warn()));
+    expect(cyc).toBeGreaterThan(sneeze);
+  });
+});
+
+describe('NS4-20: tıkalı burun süzgeci', () => {
+  type Biquad = { kind: string; outputs: Set<unknown>; frequency: { value: number; calls: string[] } };
+  const graph = (c: FakeAudioContext) => {
+    const master = c.nodes[1];
+    const muffle = c.nodes.find((n) => n.kind === 'biquad' && n.outputs.has(master)) as unknown as Biquad;
+    return { master, muffle };
+  };
+
+  it('kesim frekansı: eşiğe kadar açık, sonra monoton azalır, tam tıkanıklıkta en düşük', () => {
+    expect(muffleCutoff(0)).toBe(MUFFLE_OPEN_HZ);
+    expect(muffleCutoff(MUFFLE_START)).toBe(MUFFLE_OPEN_HZ);
+    expect(muffleCutoff(1)).toBeCloseTo(MUFFLE_CLOSED_HZ, 6);
+    expect(muffleCutoff(-1)).toBe(MUFFLE_OPEN_HZ);
+    expect(muffleCutoff(5)).toBeCloseTo(MUFFLE_CLOSED_HZ, 6);
+    let prev = Infinity;
+    for (let c = 0; c <= 1; c += 0.05) {
+      const hz = muffleCutoff(c);
+      expect(hz).toBeLessThanOrEqual(prev);
+      prev = hz;
+    }
+  });
+
+  it('yalnızca müzik süzülür: müzik kanalı → muffle → master; oynanış sesleri doğrudan master', () => {
+    const { ctx } = installFakeAudio();
+    const s = new Sound(settings());
+    s.unlock();
+    const { master, muffle } = graph(ctx());
+    expect(muffle).toBeDefined();
+    const intoMuffle = ctx().nodes.filter((n) => n.kind === 'gain' && n.outputs.has(muffle as never));
+    expect(intoMuffle).toHaveLength(1); // müzik ana kanalı
+    const sfx = ctx().nodes.filter((n) => n.kind === 'gain' && n.outputs.has(master));
+    expect(sfx).toHaveLength(1);
+    expect(muffle.frequency.value).toBe(MUFFLE_OPEN_HZ);
+  });
+
+  it('tıkanıklık süzgeci kapatır, drenaj açar; küçük değişimler yeniden zamanlanmaz', () => {
+    const { ctx } = installFakeAudio();
+    const s = new Sound(settings());
+    s.unlock();
+    const { muffle } = graph(ctx());
+    s.setCongestion(0.9);
+    expect(muffle.frequency.value).toBeCloseTo(muffleCutoff(0.9), 6);
+    const n = muffle.frequency.calls.length;
+    s.setCongestion(0.9001); // her karede aynı değer: iş yok
+    expect(muffle.frequency.calls.length).toBe(n);
+    s.setCongestion(0.1);
+    expect(muffle.frequency.value).toBe(MUFFLE_OPEN_HZ);
+    expect(s.muffleTarget).toBe(MUFFLE_OPEN_HZ);
+  });
+
+  it('unlock() öncesi bildirilen tıkanıklık grafik kurulurken uygulanır', () => {
+    const { ctx } = installFakeAudio();
+    const s = new Sound(settings());
+    s.setCongestion(1);
+    expect(FakeAudioContext.instances).toHaveLength(0);
+    s.unlock();
+    expect(graph(ctx()).muffle.frequency.value).toBeCloseTo(MUFFLE_CLOSED_HZ, 6);
   });
 });

@@ -1,4 +1,5 @@
 // NS4-10: güçlendirici durumu dar ekranlarda da metinle anlaşılır (kısa durum etiketi + erişilebilir ad).
+import { CFG } from '../../src/config/gameConfig';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import html from '../../index.html?raw';
 import { installFakeDom, type FakeDom } from '../helpers/fakeDom';
@@ -12,11 +13,11 @@ beforeEach(() => {
   dom = installFakeDom();
 });
 
-const read = (id: 'btn-cyc' | 'btn-syn') => {
+const read = (id: 'btn-cyc' | 'btn-sneeze') => {
   const b = dom.el(id);
   return {
     state: b.dataset['state'],
-    chip: dom.el(id === 'btn-cyc' ? 'cyc-chip' : 'syn-chip').textContent,
+    chip: dom.el(id === 'btn-cyc' ? 'cyc-chip' : 'sneeze-chip').textContent,
     label: b.getAttribute('aria-label'),
   };
 };
@@ -50,35 +51,32 @@ describe('kısa durum etiketi ve erişilebilir ad', () => {
     });
   });
 
-  it('sentetik: Kilitli → Hazır → Rebound riski → Rebound sürüyor', async () => {
+  it('hapşırık: Kilitli → Hazır → Doluyor (yüzdeyle) → Hazır', async () => {
     const { g, lc, frame } = await loadUi();
     lc.start();
     frame();
-    expect(read('btn-syn')).toEqual({ state: 'locked', chip: 'Kilitli', label: 'Sentetik açıcı: Hızlı rahatlama' });
-    stackRows(g, 7);
-    frame();
-    expect(read('btn-syn')).toEqual({
-      state: 'ready',
-      chip: 'Hazır',
-      label: 'Sentetik açıcı: Hazır · hızlı rahatlama',
-    });
-    g.useSyn();
-    finishClear(g);
-    frame();
-    expect(read('btn-syn')).toEqual({
-      state: 'risk',
-      chip: 'Rebound riski',
-      label: 'Sentetik açıcı: Tekrarı rebound yapar',
+    expect(read('btn-sneeze')).toEqual({
+      state: 'locked',
+      chip: 'Kilitli',
+      label: 'Hapşırık: Tıkanıklık %35’te açılır',
     });
     stackRows(g, 7);
-    g.useSyn();
+    frame();
+    expect(read('btn-sneeze')).toEqual({ state: 'ready', chip: 'Hazır', label: 'Hapşırık: Hazır · üstü savurur' });
+    g.useSneeze();
     finishClear(g);
     frame();
-    expect(read('btn-syn')).toEqual({
-      state: 'rebound',
-      chip: 'Rebound sürüyor',
-      label: 'Sentetik açıcı: Rebound sürüyor',
-    });
+    expect(read('btn-sneeze')).toEqual({ state: 'charging', chip: 'Doluyor', label: 'Hapşırık: Burun kaşınıyor… %0' });
+    expect(dom.el('sneeze-fill').style['transform']).toBe('scaleX(0)');
+    g.sneezePieces = CFG.sneezePieces / 2;
+    frame();
+    expect(read('btn-sneeze').label).toBe('Hapşırık: Burun kaşınıyor… %50');
+    expect(dom.el('sneeze-fill').style['transform']).toBe('scaleX(0.5)');
+    g.sneezePieces = CFG.sneezePieces;
+    stackRows(g, 7);
+    frame();
+    expect(read('btn-sneeze').state).toBe('ready');
+    expect(dom.el('sneeze-fill').style['transform']).toBe('scaleX(1)');
   });
 
   it('ana menüye dönüşte etiketler başlangıç durumuna döner', async () => {
@@ -93,14 +91,15 @@ describe('kısa durum etiketi ve erişilebilir ad', () => {
       chip: 'Kilitli',
       label: 'Sıklamen özütü: Tıkanıklık %35’te açılır',
     });
-    expect(read('btn-syn').chip).toBe('Kilitli');
+    expect(read('btn-sneeze').chip).toBe('Kilitli');
   });
 });
 
 describe('işaretleme ve stiller', () => {
   it('güçlendirici butonlarında kısa durum etiketi elemanı var', () => {
     expect(html).toMatch(/<span class="chip" id="cyc-chip" aria-hidden="true">Kilitli<\/span>/);
-    expect(html).toMatch(/<span class="chip" id="syn-chip" aria-hidden="true">Kilitli<\/span>/);
+    expect(html).toMatch(/<span class="chip" id="sneeze-chip" aria-hidden="true">Kilitli<\/span>/);
+    expect(html).toMatch(/<span class="charge" aria-hidden="true"><i id="sneeze-fill"><\/i><\/span>/);
   });
 
   it('kısa etiket yalnızca dar (compact) düzende görünür; geniş düzende uzun alt metin kalır', () => {
@@ -110,11 +109,11 @@ describe('işaretleme ve stiller', () => {
   });
 
   it('durum etiketleri renge ek olarak kenar çizgisiyle de ayrılır', () => {
-    for (const s of ['ready', 'used', 'active', 'risk', 'rebound'])
+    for (const s of ['ready', 'used', 'active', 'charging'])
       expect(rule(`.gbtn[data-state='${s}'] .chip`), s).toMatch(/box-shadow:\s*inset 0 0 0 1px/);
   });
 
-  it('×2 / Rebound rozetleri tahtanın genişliğini aşmaz (satır kırılır)', () => {
+  it('×2 rozeti tahtanın genişliğini aşmaz (satır kırılır)', () => {
     expect(rule('#fx-badges')).toMatch(/flex-direction:\s*column/);
     expect(rule('#fx-badges .badge')).toMatch(/white-space:\s*normal/);
     expect(rule('#fx-badges .badge')).toMatch(/max-width:\s*100%/);

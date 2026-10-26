@@ -66,7 +66,7 @@ describe('görünür metinler değişmedi (a67fe7f)', () => {
     [
       'scr-how',
       how,
-      'Nasıl oynanır Dokunmatik Sağa-sola sürükle Bloğu kaydır Dokun Döndür (tahtanın sol üçte biri: ters yön) Aşağı sürükle Yavaşça indir Aşağı fırlat Anında bırak Yukarı fırlat Beklet Klavye ← → Kaydır ↑ / X · Z Döndür · ters döndür ↓ · Boşluk Yavaş indir · anında bırak C / Shift Beklet 1 · 2 Sıklamen özütü · sentetik açıcı Esc / P Duraklat Oyun alanı bir sinüs boşluğu Düşen bloklar biriken mukus; alan dolarsa sinüs tamamen tıkanır. Tam satır = drenaj. Dört satır birden: ozmotik etki. T-spin: nörorefleks etki. Tıkanıklık yükselince iki destek açılır. Sıklamen özütü oyunda bir kez kullanılır, alt yarıyı yavaşça boşaltır ve 30 sn puanları ikiye katlar. Sentetik açıcı anında 3 satır açar. Tekrarlarsan tıkanıklık geri teper: bloklar hızlanır, alttan yeni tıkanıklık yükselir. Tamam Öğreticiyle oyna',
+      'Nasıl oynanır Dokunmatik Sağa-sola sürükle Bloğu kaydır Dokun Döndür (tahtanın sol üçte biri: ters yön) Aşağı sürükle Yavaşça indir Aşağı fırlat Anında bırak Yukarı fırlat Beklet Klavye ← → Kaydır ↑ / X · Z Döndür · ters döndür ↓ · Boşluk Yavaş indir · anında bırak C / Shift Beklet 1 · 2 Sıklamen özütü · hapşırık Esc / P Duraklat Oyun alanı bir sinüs boşluğu Düşen bloklar biriken mukus; alan dolarsa sinüs tamamen tıkanır. Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla başlar; hepsini temizleyince sinüs açılır. Sonra serbest nefes. Tam satır = drenaj. Dört satır birden: ozmotik etki. T-spin: nörorefleks etki. Tıkanıklık yükselince iki destek açılır. Sıklamen özütü oyunda bir kez kullanılır, alt yarıyı yavaşça boşaltır ve 30 sn puanları ikiye katlar. Hapşırık tıkanıklığın en üstteki 3 sırasını savurur. 20 blok yerleştirince yeniden dolar. Tamam Öğreticiyle oyna',
     ],
   ])('%s', (_id, sec, expected) => {
     // NS4-18: oyun sonundaki global gönderim formu ayrı testte sabitlenir; mevcut metinler aynı kalmalı
@@ -339,7 +339,7 @@ describe('rozet durumları', () => {
       ['Ozmotik usta', 'earned', 'earned'],
       ['Nörorefleks uzmanı', 'locked', 'locked'],
       ['Akış hali', 'new', 'new'],
-      ['Doğal yol', 'locked', 'locked'],
+      ['Çok yaşa!', 'locked', 'locked'],
       ['Derin nefes', 'locked', 'locked'],
     ]);
     expect(BADGE_IDS).toHaveLength(5);

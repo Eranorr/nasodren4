@@ -15,9 +15,7 @@ export interface FxDemo {
   tetris(): void;
   tspin(n?: 0 | 1 | 2 | 3): void;
   cyc(): void;
-  syn(): void;
-  rebound(): void;
-  garbage(): void;
+  sneeze(): void;
   /** Reduced motion önizlemesi (yalnızca bu oturum; işletim sistemi tercihine dönmek için sayfayı yenileyin). */
   reduced(on?: boolean): boolean;
   /** Bütün efektleri sırayla gösterir. */
@@ -37,7 +35,7 @@ export function createFxDemo(view: View, game: Game): FxDemo {
     view.syncBoard();
     before?.();
     view.onClearStart({ kind, rows });
-    const dur = kind === 'cyc' ? CFG.drainMs : kind === 'syn' ? CFG.synClearMs : CFG.lineClearMs;
+    const dur = kind === 'cyc' ? CFG.drainMs : kind === 'sneeze' ? CFG.sneezeMs : CFG.lineClearMs;
     setTimeout(() => {
       game.board.set(snapshot);
       game.boardVer++;
@@ -70,9 +68,7 @@ export function createFxDemo(view: View, game: Game): FxDemo {
         });
     },
     cyc: () => run('cyc', rowsFrom(10)),
-    syn: () => run('syn', rowsFrom(3)),
-    rebound: () => view.onRebound(),
-    garbage: () => view.onGarbage(),
+    sneeze: () => run('sneeze', rowsFrom(3)),
     reduced: (on) => {
       if (on !== undefined) view.reducedMotion = on;
       return view.reducedMotion;
@@ -84,9 +80,7 @@ export function createFxDemo(view: View, game: Game): FxDemo {
         () => demo.tetris(),
         () => demo.tspin(0),
         () => demo.tspin(2),
-        () => demo.syn(),
-        () => demo.rebound(),
-        () => demo.garbage(),
+        () => demo.sneeze(),
         () => demo.cyc(),
       ];
       seq.forEach((f, i) => setTimeout(f, i * 1400));

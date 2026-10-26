@@ -7,8 +7,10 @@ import badgesUiSrc from '../../src/ui/badges.ts?raw';
 import tutorialViewSrc from '../../src/ui/tutorialView.ts?raw';
 import settingsPanelSrc from '../../src/ui/settingsPanel.ts?raw';
 import { BADGES } from '../../src/content/badges';
+import { ROOMS } from '../../src/config/gameConfig';
+import { ALL_CLEAR, FREE_GOAL, FREE_NAME, ROOM_CLEAR, ROOM_GOAL, roomLabel, roomText } from '../../src/content/rooms';
 import { HEALTH_TIPS, HEALTH_TOASTS } from '../../src/content/health';
-import { CYC_NAME, CYC_SHORT, CYC_TEXT, SYN_NAME, SYN_SHORT, SYN_TEXT } from '../../src/ui/powerups';
+import { CYC_NAME, CYC_SHORT, CYC_TEXT, SNEEZE_NAME, SNEEZE_SHORT, SNEEZE_TEXT } from '../../src/ui/powerups';
 import { GLOBAL_TEXT, NO_NICKNAME } from '../../src/ui/scoresView';
 import { SUBMIT_TEXT } from '../../src/ui/submitScore';
 import { ROTATE_O_NOTE, STEP_COPY, TUTORIAL_DONE_TEXT } from '../../src/tutorial/steps';
@@ -103,16 +105,20 @@ export const INVENTORY: Readonly<Record<Area, readonly string[]>> = {
   nasil_oynanir: blocks(section('scr-how')),
   hud: [
     ...nodes(hudHtml.slice(0, hudHtml.indexOf('<button id="btn-hold"'))),
-    ...[...hudSrc.matchAll(/`((?:Ferah nefes|Rebound)[^`]*)`/g)].map((m) => m[1] ?? ''),
+    // NS4-27: oda etiketleri
+    ...ROOMS.map((_, i) => roomLabel(i)),
+    FREE_NAME,
+    'Bulutçuk',
+    ...[...hudSrc.matchAll(/`((?:Ferah nefes)[^`]*)`/g)].map((m) => m[1] ?? ''),
   ],
   guclendiriciler: [
     ...blocks(hudHtml.slice(hudHtml.indexOf('<button id="btn-hold"'))),
     CYC_NAME,
-    SYN_NAME,
+    SNEEZE_NAME,
     ...Object.values(CYC_TEXT),
-    ...Object.values(SYN_TEXT),
+    ...Object.values(SNEEZE_TEXT),
     ...Object.values(CYC_SHORT),
-    ...Object.values(SYN_SHORT),
+    ...Object.values(SNEEZE_SHORT),
   ],
   mola: blocks(section('scr-pause')),
   ayarlar: [
@@ -145,9 +151,16 @@ export const INVENTORY: Readonly<Record<Area, readonly string[]>> = {
   ],
   bildirimler: [
     ...notices(eventsSrc),
-    HEALTH_TOASTS.rebound.text,
+    ...notices(hudSrc),
     HEALTH_TOASTS.cyclamenReady.text,
     ...notices(badgesUiSrc),
+    // NS4-27: oda popup'ları (şablonlu metinler)
+    ...ROOMS.map((_, i) => `${i + 1}. oda · ${roomText(i).name}`),
+    ROOM_GOAL,
+    ROOM_CLEAR,
+    ...ROOMS.map((_, i) => `${roomText(i).name} ferahladı · +<bonus>`),
+    ALL_CLEAR,
+    FREE_GOAL,
   ],
   rozetler: Object.values(BADGES).flatMap((b) => [b.name, b.desc]),
 };

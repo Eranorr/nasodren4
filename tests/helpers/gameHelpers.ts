@@ -90,7 +90,8 @@ export function dropVerticalI(g: Game): void {
 export function finishClear(g: Game): void {
   const p = g.pending;
   if (!p) throw new Error('finishClear: bekleyen temizleme yok');
-  g.update(p.kind === 'lines' ? CFG.lineClearMs : p.kind === 'syn' ? CFG.synClearMs : CFG.drainMs);
+  const ms = { lines: CFG.lineClearMs, sneeze: CFG.sneezeMs, cyc: CFG.drainMs, room: CFG.roomClearMs };
+  g.update(ms[p.kind]);
 }
 
 const EVENT_FLAGS: Record<GameEventName, true> = {
@@ -98,7 +99,6 @@ const EVENT_FLAGS: Record<GameEventName, true> = {
   move: true,
   rotate: true,
   hold: true,
-  garbage: true,
   lock: true,
   harddrop: true,
   levelup: true,
@@ -107,6 +107,8 @@ const EVENT_FLAGS: Record<GameEventName, true> = {
   clearend: true,
   scored: true,
   powerdone: true,
+  roomstart: true,
+  roomclear: true,
 };
 /** GameEvents içindeki tüm olay adları (Record tipi eksik/fazla adı derleme hatası yapar). */
 export const ALL_EVENTS = Object.keys(EVENT_FLAGS) as GameEventName[];

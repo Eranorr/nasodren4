@@ -1,3 +1,4 @@
+import html from '../../index.html?raw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAppStubs } from '../helpers/appStubs';
 import { installFakeDom, type FakeDom } from '../helpers/fakeDom';
@@ -63,19 +64,13 @@ describe('tehlike vinyeti', () => {
   });
 });
 
-describe('efekt rozetleri (×2 ve Rebound)', () => {
-  /** Siklamen + iki sentetik: ×2 ve Rebound sayaçları çalışır. */
+describe('efekt rozeti (×2)', () => {
+  /** Sıklamen: ×2 sayacı çalışır. NS4-24: Rebound rozeti kaldırıldı. */
   function activateEffects(g: ReturnType<typeof createGame>) {
     stackRows(g, 7);
     g.useCyc();
     finishClear(g);
-    for (let i = 0; i < 2; i++) {
-      stackRows(g, 7);
-      g.useSyn();
-      finishClear(g);
-    }
     expect(g.multT).toBeGreaterThan(0);
-    expect(g.reboundT).toBeGreaterThan(0);
   }
 
   it('oynarken görünür, game-over sırasında gizlenir', async () => {
@@ -84,12 +79,10 @@ describe('efekt rozetleri (×2 ve Rebound)', () => {
     activateEffects(g);
     frame();
     expect(dom.el('badge-mult').style['display']).toBe('block');
-    expect(dom.el('badge-rebound').style['display']).toBe('block');
-    g.gameOver('garbage');
+    g.gameOver('lockout');
     expect(lc.getState()).toBe('over');
     frame();
     expect(dom.el('badge-mult').style['display']).toBe('none');
-    expect(dom.el('badge-rebound').style['display']).toBe('none');
     frame(); // sonraki karelerde de gizli kalır
     expect(dom.el('badge-mult').style['display']).toBe('none');
   });
@@ -99,13 +92,16 @@ describe('efekt rozetleri (×2 ve Rebound)', () => {
     lc.start();
     activateEffects(g);
     frame();
-    g.gameOver('garbage');
+    g.gameOver('lockout');
     frame();
     lc.start();
     frame();
     expect(dom.el('badge-mult').style['display']).toBe('none');
-    expect(dom.el('badge-rebound').style['display']).toBe('none');
     expect(dom.el('hud-score').textContent).toBe('0');
     expect(dom.el('danger').classList.contains('on')).toBe(false);
+  });
+
+  it('NS4-24: Rebound rozeti işaretlemeden kaldırıldı', () => {
+    expect(html).not.toMatch(/badge-rebound|Rebound/);
   });
 });

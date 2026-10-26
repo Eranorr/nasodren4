@@ -33,7 +33,7 @@ const inside = (r: Rect, W: number, H: number) => r.x >= 0 && r.y >= 0 && r.x + 
 
 describe.each(VIEWPORTS)('%i×%i', (W, H) => {
   const L = computeLayout(W, H);
-  const controls = { btnHold: L.btnHold, btnCyc: L.btnCyc, btnSyn: L.btnSyn, btnPause: L.btnPause };
+  const controls = { btnHold: L.btnHold, btnCyc: L.btnCyc, btnSneeze: L.btnSneeze, btnPause: L.btnPause };
   const panels = { hold: L.hold, next: L.next, stats: L.stats, meter: L.meter };
 
   it('tahta ölçüsü değişmedi', () => {

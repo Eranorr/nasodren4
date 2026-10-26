@@ -4,17 +4,15 @@ import { installFakeDom, type FakeDom } from '../helpers/fakeDom';
 import { finishClear, stackRows } from '../helpers/gameHelpers';
 import { loadUi } from '../helpers/uiHarness';
 
-const REBOUND_TOAST = 'Dekonjestanların uzun süreli kullanımı tıkanıklığın geri dönmesine yol açabilir.';
-
 let dom: FakeDom;
 beforeEach(() => {
   vi.useFakeTimers();
   dom = installFakeDom();
 });
 
-function btn(id: 'btn-cyc' | 'btn-syn') {
+function btn(id: 'btn-cyc' | 'btn-sneeze') {
   const b = dom.el(id);
-  const sub = dom.el(id === 'btn-cyc' ? 'cyc-sub' : 'syn-sub');
+  const sub = dom.el(id === 'btn-cyc' ? 'cyc-sub' : 'sneeze-sub');
   return {
     state: b.dataset['state'],
     text: sub.textContent,
@@ -65,63 +63,53 @@ describe('sıklamen butonu', () => {
   });
 });
 
-describe('sentetik açıcı butonu', () => {
-  it('ilk kullanım öncesi hızlı rahatlama, sonrası rebound uyarısı; ikinci kullanım mümkün', async () => {
+// NS4-24: sentetik açıcı ve rebound yerine hapşırık
+describe('hapşırık butonu', () => {
+  it('eşikte hazır; kullanınca doluyor (devre dışı), dolunca yeniden hazır ve haber verilir', async () => {
     const { g, lc, frame } = await loadUi();
     lc.start();
     frame();
-    expect(btn('btn-syn')).toEqual({ state: 'locked', text: 'Hızlı rahatlama', disabled: true, ready: false });
+    expect(btn('btn-sneeze')).toEqual({
+      state: 'locked',
+      text: 'Tıkanıklık %35’te açılır',
+      disabled: true,
+      ready: false,
+    });
     stackRows(g, 7);
     frame();
-    expect(btn('btn-syn')).toEqual({ state: 'ready', text: 'Hazır · hızlı rahatlama', disabled: false, ready: true });
-    g.useSyn();
+    expect(btn('btn-sneeze')).toEqual({ state: 'ready', text: 'Hazır · üstü savurur', disabled: false, ready: true });
+    g.useSneeze();
     finishClear(g);
     frame();
-    expect(g.reboundT).toBe(0); // ilk kullanım rebound başlatmaz (değişmedi)
-    expect(btn('btn-syn')).toMatchObject({ state: 'risk', text: 'Tekrarı rebound yapar' });
+    expect(btn('btn-sneeze')).toEqual({ state: 'charging', text: 'Burun kaşınıyor…', disabled: true, ready: false });
+    dom.el('toast').textContent = '';
+    g.sneezePieces = CFG.sneezePieces;
     stackRows(g, 7);
     frame();
-    expect(btn('btn-syn')).toEqual({ state: 'risk', text: 'Tekrarı rebound yapar', disabled: false, ready: false });
+    expect(btn('btn-sneeze')).toEqual({ state: 'ready', text: 'Hazır · üstü savurur', disabled: false, ready: true });
+    expect(dom.el('toast').textContent).toBe('Burnun yine kaşınıyor… Hapşırık hazır!');
   });
 
-  it('rebound başlayınca buton ve rozet doğru durumda; bitince temizlenir', async () => {
+  it('ilk açılışta hapşırık toast’u sıklamen duyurusunu ezmez', async () => {
     const { g, lc, frame } = await loadUi();
     lc.start();
-    for (let i = 0; i < 2; i++) {
-      stackRows(g, 7);
-      g.useSyn();
-      finishClear(g);
-    }
+    stackRows(g, 7);
     frame();
-    expect(g.reboundT).toBe(CFG.reboundMs);
-    expect(btn('btn-syn')).toMatchObject({ state: 'rebound', text: 'Rebound sürüyor' });
-    expect(dom.el('badge-rebound').style['display']).toBe('block');
-    expect(dom.el('badge-rebound').textContent).toBe('Rebound: tıkanıklık geri tepiyor · 40 sn');
-    g.update(CFG.reboundMs);
-    frame();
-    expect(g.reboundT).toBe(0);
-    expect(dom.el('badge-rebound').style['display']).toBe('none');
-    expect(btn('btn-syn')).toMatchObject({ state: 'risk', text: 'Tekrarı rebound yapar' });
+    expect(dom.el('toast').textContent).toBe('Sinüslerin dolmaya başladı. Sıklamen özütü hazır.');
   });
 
-  it('rebound popup her rebound kullanımında, uyarı toast’u oyunda bir kez gösterilir', async () => {
+  it('popup her hapşırıkta; 3. hapşırıkta "Çok yaşa!" rozeti; Rebound rozeti/uyarısı yok', async () => {
     const { g, lc } = await loadUi();
     lc.start();
     const popups = () => dom.el('popups').children.map((p) => p.children[0]?.textContent);
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       stackRows(g, 7);
-      g.useSyn();
+      g.sneezePieces = CFG.sneezePieces;
+      g.useSneeze();
       finishClear(g);
     }
-    expect(dom.el('toast').textContent).toBe(REBOUND_TOAST);
-    expect(popups()).toContain('Rebound');
-    dom.el('toast').textContent = '';
-    dom.el('popups').replaceChildren();
-    stackRows(g, 7);
-    g.useSyn();
-    finishClear(g);
-    expect(g.reboundT).toBe(CFG.reboundMs * 2); // üçüncü kullanım: mevcut kural
-    expect(popups()).toEqual(['Rebound']);
-    expect(dom.el('toast').textContent).toBe('');
+    expect(popups().filter((t) => t === 'HAPŞUU!')).toHaveLength(3);
+    expect(popups()).not.toContain('Rebound');
+    expect(dom.el('toast').textContent).toMatch(/Rozet kazandın: Çok yaşa!/);
   });
 });

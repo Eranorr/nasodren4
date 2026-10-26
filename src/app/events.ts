@@ -9,9 +9,11 @@ import type { Sound } from '../audio/SoundManager';
 import type { Lifecycle } from './lifecycle';
 import { HAPTIC, type Buzz } from '../haptics/haptics';
 import { track } from '../analytics/analytics';
-import { toast, popup } from '../ui/notifications';
+import { popup } from '../ui/notifications';
 import { award } from '../ui/badges';
-import { HEALTH_TOASTS } from '../content/health';
+import { ALL_CLEAR, FREE_GOAL, ROOM_CLEAR, ROOM_GOAL, roomText } from '../content/rooms';
+import { ROOMS } from '../config/gameConfig';
+import { fmt } from '../ui/hud';
 
 export interface WireDeps {
   game: Game;
@@ -49,9 +51,10 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
       sound.cyc();
       buzz(HAPTIC.cyc);
       popup('Sıklamen özütü', 'Ozmotik drenaj başladı', 'cyc');
-    } else if (e.kind === 'syn') {
-      sound.syn();
-      buzz(HAPTIC.syn);
+    } else if (e.kind === 'sneeze') {
+      sound.sneeze();
+      buzz(HAPTIC.sneeze);
+      popup('HAPŞUU!', 'Çok yaşa!', 'sneeze');
     }
   });
   // NS4-03: powerup_use analitiği Game.useCyc/useSyn içinden buraya taşındı. Orijinalde track() emit('clearstart')
@@ -59,7 +62,7 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
   game.on('clearstart', (e) => {
     if (e.kind === 'cyc')
       track('powerup_use', { kind: 'siklamen', level: game.level, congestion: +game.congestion().toFixed(2) });
-    else if (e.kind === 'syn') track('powerup_use', { kind: 'sentetik', uses: game.synUses, level: game.level });
+    else if (e.kind === 'sneeze') track('powerup_use', { kind: 'hapsirik', uses: game.sneezeUses, level: game.level });
   });
   game.on('clearend', () => view.onClearEnd());
   game.on('scored', (e) => {
@@ -98,28 +101,28 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
     sound.level();
     popup(`Nefes seviyesi ${lv}`, 'Mukus daha hızlı birikiyor');
     track('level_up', { level: lv });
-    if (lv >= 5 && game.synUses === 0) award('dogal');
   });
+  // NS4-24: sentetik açıcı / rebound / garbage kaldırıldı; hapşırık rozeti
   game.on('powerdone', (e) => {
-    if (e.kind === 'syn') {
-      if (e.rebound) {
-        view.onRebound();
-        sound.warn();
-        buzz(HAPTIC.rebound);
-        track('rebound_started', { uses: game.synUses, level: game.level });
-        popup('Rebound', 'Sık kullanım tıkanıklığı geri getirdi', 'warn');
-        // NS4-07: uyarı metni oyunda bir kez (rebound'un ilk başladığı 2. kullanımda); popup her seferinde
-        if (game.synUses === 2) toast(HEALTH_TOASTS.rebound.text, 3600);
-      } else {
-        popup('3 satır açıldı', 'Tekrarlarsan geri tepebilir', 'warn');
-      }
-    }
+    if (e.kind === 'sneeze' && game.sneezeUses >= 3) award('hapsu');
   });
-  game.on('garbage', () => {
-    view.onGarbage(); // NS4-15: önceden yalnızca view.shake = 0.35
-    // NS4-17: tekrar eden garbage için kısa alçak darbe (önceden rebound uyarısı her satırda yeniden çalıyordu)
-    sound.garbage();
-    buzz(HAPTIC.garbage);
+  // NS4-27: Sinüs Odaları
+  game.on('roomstart', (e) => {
+    if (e.room < ROOMS.length) popup(`${e.room + 1}. oda · ${roomText(e.room).name}`, ROOM_GOAL);
+    else popup(ALL_CLEAR, FREE_GOAL, 'cyc');
+    track('room_start', { room: e.room, gray: e.gray });
+  });
+  game.on('roomclear', (e) => {
+    view.onRoomClear();
+    sound.roomClear();
+    buzz(HAPTIC.room);
+    popup(ROOM_CLEAR, `${roomText(e.room).name} ferahladı · +${fmt(e.bonus)}`, 'cyc');
+    track('room_clear', {
+      room: e.room,
+      level: game.level,
+      dur_s: Math.round(game.elapsed / 1000),
+      bonus: e.bonus,
+    });
   });
   game.on('gameover', (reason) => lifecycle.handleGameOver(reason));
 }

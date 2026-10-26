@@ -8,12 +8,12 @@ import {
   dropVerticalI,
   finishClear,
   recordEvents,
-  setCell,
+  placePiece,
   setupWell,
   stackRows,
 } from '../helpers/gameHelpers';
 
-const NO_PAYLOAD: readonly GameEventName[] = ['spawn', 'move', 'rotate', 'hold', 'garbage'];
+const NO_PAYLOAD: readonly GameEventName[] = ['spawn', 'move', 'rotate', 'hold'];
 
 describe('olaylar', () => {
   it('olay adları sabittir', () => {
@@ -21,7 +21,6 @@ describe('olaylar', () => {
       [
         'clearend',
         'clearstart',
-        'garbage',
         'gameover',
         'harddrop',
         'hold',
@@ -29,6 +28,8 @@ describe('olaylar', () => {
         'lock',
         'move',
         'powerdone',
+        'roomclear',
+        'roomstart',
         'rotate',
         'scored',
         'spawn',
@@ -58,31 +59,32 @@ describe('olaylar', () => {
     const g = createGame(1);
     stackRows(g, 7);
     const log = recordEvents(g);
-    g.useSyn();
+    g.useSneeze();
     expect(log.names()).toEqual(['clearstart']);
     log.clear();
-    g.update(CFG.synClearMs);
+    g.update(CFG.sneezeMs);
     expect(log.names()).toEqual(['powerdone', 'clearend']);
   });
 
   it('tam bir oturum tüm olayları üretir; payload’sız olaylar argümansız çağrılır', () => {
     const g = createGame(1);
     const log = recordEvents(g);
+    g.reset({ rooms: true }); // NS4-27: oda akışı (roomstart)
     g.move(1);
     g.rotate(1);
     g.doHold();
-    setupWell(g, 1);
+    setupWell(g, 1); // gri bulutçuklar silinir: bu temizlemeyle oda açılır
     g.lines = 9;
     dropVerticalI(g);
+    finishClear(g); // satırlar → roomclear
+    finishClear(g); // "Sinüs açıldı" geçişi → sonraki oda (roomstart)
+    stackRows(g, 7);
+    g.useSneeze();
     finishClear(g);
-    for (let i = 0; i < 2; i++) {
-      stackRows(g, 7);
-      g.useSyn();
-      finishClear(g);
-    }
-    g.update(CFG.reboundGarbageEvery / 2); // çöp satırı
-    setCell(g, 0, 0, PIECE.GARBAGE);
-    g.update(CFG.reboundGarbageEvery); // en üst satır dolu → oyun sonu
+    // görünür alan dolu: gizli satırlarda kilitlenen parça → oyun sonu (lockout)
+    placePiece(g, PIECE.O, 0, 3, 0);
+    stackRows(g, 20);
+    g.hardDrop();
     expect(g.state).toBe('over');
     expect(new Set(log.names())).toEqual(new Set(ALL_EVENTS));
     for (const e of log.all) expect(e.args).toHaveLength(NO_PAYLOAD.includes(e.name) ? 0 : 1);

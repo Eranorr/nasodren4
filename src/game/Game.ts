@@ -3,8 +3,12 @@
    NS4-03: main.ts'ten taşındı. Bu sınıf DOM, PixiJS, localStorage, ses,
    titreşim, analitik ve CTA bilmez; dış dünyayla yalnızca on()/emit()
    olaylarıyla konuşur. Kurallar, süreler ve skor tabloları değişmedi.
+   NS4-24: sentetik açıcı, rebound (hızlanma) ve alttan çöp kaldırıldı;
+   yerine yeniden dolan Hapşırık: yığının en üstteki sıralarını savurur.
+   NS4-27: Sinüs Odaları (reset({ rooms: true })): her oda alttan delikli gri
+   bulutçuklarla başlar; hepsi temizlenince oda açılır, sonra Serbest nefes.
    ===================================================================== */
-import { COLS, ROWS, HIDDEN, VIS, CFG } from '../config/gameConfig';
+import { COLS, ROWS, HIDDEN, VIS, CFG, ROOMS } from '../config/gameConfig';
 import { PIECE, SHAPES, KICK_JLSTZ, KICK_I, kickKey, nextRotation } from './pieces';
 import type { GameEventArgs, GameEventListener, GameEventName, PendingClear } from '../types/events';
 import type {
@@ -50,10 +54,15 @@ export class Game {
   lastRot!: boolean;
   lastKick!: number;
   cycUsed!: boolean;
-  synUses!: number;
+  /** NS4-24: bu oyundaki hapşırık sayısı ve son hapşırıktan beri kilitlenen parça (CFG.sneezePieces'te dolu). */
+  sneezeUses!: number;
+  sneezePieces!: number;
   multT!: number;
-  reboundT!: number;
-  garbageT!: number;
+  /** NS4-27: oda akışı açık mı, mevcut oda (ROOMS.length = Serbest nefes), kalan gri bulutçuk, açılan oda sayısı. */
+  rooms!: boolean;
+  room!: number;
+  roomGray!: number;
+  roomsCleared!: number;
   elapsed!: number;
   pieceVer!: number;
   boardVer!: number;
@@ -92,7 +101,8 @@ export class Game {
     return t;
   }
 
-  reset() {
+  /** Yeni oyun. `rooms`: Sinüs Odaları akışı (uygulama açar); verilmezse tahta boş başlar (testler ve eski davranış). */
+  reset(opts?: { readonly rooms?: boolean }) {
     this.board.fill(0);
     this.bag = [];
     this.queue = [];
@@ -118,15 +128,76 @@ export class Game {
     this.lastRot = false;
     this.lastKick = 0;
     this.cycUsed = false;
-    this.synUses = 0;
+    this.sneezeUses = 0;
+    this.sneezePieces = CFG.sneezePieces; // ilk hapşırık hazır (yalnızca tıkanıklık eşiğini bekler)
     this.multT = 0;
-    this.reboundT = 0;
-    this.garbageT = 0;
+    this.rooms = opts?.rooms === true;
+    this.room = 0;
+    this.roomGray = 0;
+    this.roomsCleared = 0;
     this.elapsed = 0;
     this.pieceVer = 0;
     this.boardVer = 0;
     this.queueVer = 0;
+    if (this.rooms) this.enterRoom(0);
     this.spawn();
+  }
+
+  /** NS4-27: tahtadaki gri bulutçuk (hücre 8) sayısı. */
+  grayCount() {
+    let n = 0;
+    for (let i = 0; i < this.board.length; i++) if (this.board[i] === PIECE.GARBAGE) n++;
+    return n;
+  }
+
+  /**
+   * NS4-27: odaya girer: tahta temizlenir; oda ise alttan `rows` sıra gri bulutçuk dizilir (her sırada 1..maxHoles
+   * rastgele boşluk; hiçbir sıra dolu değildir). ROOMS.length: Serbest nefes (boş tahta).
+   */
+  enterRoom(i: number) {
+    this.room = i;
+    this.board.fill(0);
+    const def = ROOMS[i];
+    if (def)
+      for (let k = 0; k < def.rows; k++) {
+        const y = ROWS - 1 - k,
+          holes = 1 + ((Math.random() * def.maxHoles) | 0);
+        for (let x = 0; x < COLS; x++) this.board[y * COLS + x] = PIECE.GARBAGE;
+        for (let h = 0; h < holes;) {
+          const x = (Math.random() * COLS) | 0;
+          if (this.board[y * COLS + x]) {
+            this.board[y * COLS + x] = 0;
+            h++;
+          }
+        }
+      }
+    this.roomGray = this.grayCount();
+    this.boardVer++;
+    this.emit('roomstart', { room: i, gray: this.roomGray });
+  }
+
+  /** NS4-27: odadaki son gri bulutçuk temizlendi mi (Serbest nefeste ve oda akışı kapalıyken hep false). */
+  roomCleared() {
+    if (!this.rooms || this.room >= ROOMS.length) return false;
+    this.roomGray = this.grayCount();
+    return this.roomGray === 0;
+  }
+
+  /** NS4-27: "Sinüs açıldı" geçişi: bonus, aktif parça kuyruğun başına döner, CFG.roomClearMs sonra yeni oda. */
+  beginRoomClear() {
+    if (this.type) this.queue.unshift(this.type);
+    this.type = 0;
+    this.pieceVer++;
+    this.queueVer++;
+    const bonus = CFG.roomBonus * (this.room + 1) * this.level;
+    this.score += bonus;
+    this.roomsCleared++;
+    const p = { kind: 'room', rows: [] as number[] } as const;
+    this.state = 'clearing';
+    this.stateT = CFG.roomClearMs;
+    this.pending = p;
+    this.emit('roomclear', { room: this.room, bonus });
+    this.emit('clearstart', p);
   }
 
   fillQueue() {
@@ -272,9 +343,7 @@ export class Game {
 
   gravityMs() {
     const l = Math.min(this.level, CFG.maxLevel) - 1;
-    let ms = Math.pow(0.8 - l * 0.007, l) * 1000;
-    if (this.reboundT > 0) ms /= CFG.reboundSpeed;
-    return ms;
+    return Math.pow(0.8 - l * 0.007, l) * 1000;
   }
 
   tspinKind(): TSpinKind {
@@ -311,6 +380,7 @@ export class Game {
     }
     this.boardVer++;
     this.canHold = true;
+    if (this.sneezePieces < CFG.sneezePieces) this.sneezePieces++;
     this.emit('lock', cells);
     if (allHidden) return this.gameOver('lockout');
 
@@ -414,8 +484,25 @@ export class Game {
   canCyc() {
     return this.state === 'play' && !this.cycUsed && this.congestion() >= CFG.powerThreshold;
   }
-  canSyn() {
-    return this.state === 'play' && this.congestion() >= CFG.powerThreshold;
+  /** Hapşırık dolu mu (0..1; tıkanıklık eşiğinden bağımsız). */
+  sneezeCharge() {
+    return Math.min(1, this.sneezePieces / CFG.sneezePieces);
+  }
+  canSneeze() {
+    return this.state === 'play' && this.sneezeCharge() >= 1 && this.congestion() >= CFG.powerThreshold;
+  }
+
+  /** Yığının en üstteki `maxCount` dolu sırası (küçükten büyüğe). */
+  topNonEmptyRows(maxCount: number) {
+    const out: number[] = [];
+    for (let y = 0; y < ROWS && out.length < maxCount; y++) {
+      for (let x = 0; x < COLS; x++)
+        if (this.board[y * COLS + x]) {
+          out.push(y);
+          break;
+        }
+    }
+    return out;
   }
 
   useCyc() {
@@ -429,14 +516,16 @@ export class Game {
     return true;
   }
 
-  useSyn() {
-    if (!this.canSyn()) return false;
-    this.synUses++;
-    const rows = this.nonEmptyBottomRows(3, HIDDEN);
+  /** NS4-24: Hapşırık: yığının en üstteki CFG.sneezeRows sırası savrulur; şarj sıfırlanır. */
+  useSneeze() {
+    if (!this.canSneeze()) return false;
+    this.sneezeUses++;
+    this.sneezePieces = 0;
+    const rows = this.topNonEmptyRows(CFG.sneezeRows);
     this.state = 'clearing';
-    this.stateT = CFG.synClearMs;
-    this.pending = { kind: 'syn', rows };
-    this.emit('clearstart', { rows, kind: 'syn' }); // NS4-03: powerup_use analitiği app/events.ts içinde bu olaydan gönderilir
+    this.stateT = CFG.sneezeMs;
+    this.pending = { kind: 'sneeze', rows };
+    this.emit('clearstart', { rows, kind: 'sneeze' }); // powerup_use analitiği app/events.ts içinde bu olaydan gönderilir
     return true;
   }
 
@@ -444,22 +533,24 @@ export class Game {
     const p = this.pending!;
     this.pending = null; // NS4-02: yalnızca clearing/draining sırasında çağrılır, pending doludur
     this.state = 'play';
+    if (p.kind === 'room') {
+      this.enterRoom(this.room + 1);
+      this.emit('clearend', p);
+      this.spawn();
+      return;
+    }
     this.removeRows(p.rows);
     if (p.kind === 'cyc') {
       this.score += 150 * p.rows.length * this.level;
       this.multT = CFG.cycMultMs;
       this.emit('powerdone', { kind: 'cyc', n: p.rows.length });
-    } else if (p.kind === 'syn') {
+    } else if (p.kind === 'sneeze') {
       this.score += 50 * p.rows.length * this.level;
-      if (this.synUses >= 2) {
-        // tekrarlanan kullanım -> rebound
-        this.reboundT = CFG.reboundMs * (this.synUses - 1);
-        this.garbageT = CFG.reboundGarbageEvery * 0.5;
-      }
-      this.emit('powerdone', { kind: 'syn', n: p.rows.length, rebound: this.synUses >= 2 });
+      this.emit('powerdone', { kind: 'sneeze', n: p.rows.length });
     }
     this.emit('clearend', p);
-    if (p.kind === 'lines') this.spawn();
+    if (this.roomCleared()) this.beginRoomClear();
+    else if (p.kind === 'lines') this.spawn();
     else this.fixActiveOverlap();
   }
 
@@ -468,25 +559,6 @@ export class Game {
     for (let k = 0; k < 4 && !this.fits(this.type, this.rot, this.x, this.y); k++) this.y--;
     if (!this.fits(this.type, this.rot, this.x, this.y)) this.gameOver('overlap');
     this.pieceVer++;
-  }
-
-  addGarbage() {
-    for (let x = 0; x < COLS; x++) if (this.board[x]) return this.gameOver('garbage');
-    this.board.copyWithin(0, COLS);
-    const hole = (Math.random() * COLS) | 0;
-    const off = (ROWS - 1) * COLS;
-    for (let x = 0; x < COLS; x++) this.board[off + x] = x === hole ? 0 : PIECE.GARBAGE;
-    this.boardVer++;
-    this.emit('garbage');
-    this.fixActiveOverlap();
-  }
-
-  /**
-   * Durumu yeniden okur. update() içinde addGarbage() durumu 'over' yapabilir; TypeScript yöntem çağrısından
-   * sonra daraltmayı sıfırlamadığı için doğrudan karşılaştırma "imkansız" görünür (NS4-04).
-   */
-  private isOver(): boolean {
-    return this.state === 'over';
   }
 
   gameOver(reason: GameOverReason) {
@@ -504,15 +576,6 @@ export class Game {
       this.stateT -= dt;
       if (this.stateT <= 0) this.finishPending();
       return;
-    }
-    if (this.reboundT > 0) {
-      this.reboundT = Math.max(0, this.reboundT - dt);
-      this.garbageT -= dt;
-      if (this.garbageT <= 0) {
-        this.garbageT += CFG.reboundGarbageEvery;
-        this.addGarbage();
-        if (this.isOver()) return;
-      }
     }
     // yerçekimi
     const interval = this.gravityMs();

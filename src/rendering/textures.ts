@@ -3,6 +3,8 @@
    NS4-03: View.buildTextures() içindeki çizim kodu saf fonksiyonlara
    ayrıldı (çizim komutları değişmedi). PIXI texture oluşturma ve eski
    texture'ları yok etme sırası View.buildTextures() içinde kalır.
+   NS4-21: yalnızca gri tıkanıklık bloğuna (8) somurtkan, sevimli bir yüz
+   eklendi; renkli tetromino blokları (1-7) ve hayaletler değişmedi.
    ===================================================================== */
 import type { BlockId } from '../types/game';
 
@@ -60,6 +62,87 @@ export function blockRecord<V>(make: (id: BlockId, i: number) => V): Record<Bloc
   };
 }
 
+/** NS4-21: tıkanıklık bulutçuğunun yüzü (yalnızca blok karosu 8; hayalete çizilmez). */
+export const FACE_ID = 8 as const satisfies BlockId;
+const FACE_INK = 'rgba(38,44,62,.72)';
+
+/**
+ * Bulutçuk yüzü: iki yuvarlak göz (küçük parlak noktalı) ve ağız. `sad`: aşağı kıvrık (tıkanık);
+ * `happy` (NS4-27, temizlenirken): gülümseme ve pembe yanaklar. Ölçüler px ile orantılıdır.
+ */
+function drawFace(x: CanvasRenderingContext2D, px: number, mood: 'sad' | 'happy' = 'sad') {
+  const r = Math.max(1, px * 0.06);
+  x.fillStyle = FACE_INK;
+  for (const ex of [0.36, 0.64]) {
+    x.beginPath();
+    x.arc(px * ex, px * 0.5, r, 0, Math.PI * 2);
+    x.fill();
+  }
+  x.fillStyle = 'rgba(255,255,255,.85)';
+  for (const ex of [0.36, 0.64]) {
+    x.beginPath();
+    x.arc(px * ex - r * 0.35, px * 0.5 - r * 0.35, r * 0.38, 0, Math.PI * 2);
+    x.fill();
+  }
+  x.strokeStyle = FACE_INK;
+  x.lineWidth = Math.max(1, px * 0.05);
+  x.lineCap = 'round';
+  x.beginPath();
+  if (mood === 'sad') x.arc(px * 0.5, px * 0.8, px * 0.12, Math.PI * 1.2, Math.PI * 1.8);
+  else x.arc(px * 0.5, px * 0.6, px * 0.13, Math.PI * 0.2, Math.PI * 0.8);
+  x.stroke();
+  if (mood === 'happy') {
+    x.fillStyle = 'rgba(255,140,190,.5)';
+    for (const ex of [0.24, 0.76]) {
+      x.beginPath();
+      x.ellipse(px * ex, px * 0.66, px * 0.07, px * 0.045, 0, 0, Math.PI * 2);
+      x.fill();
+    }
+  }
+}
+
+/** Parlak jöle blok karosu (atlas ve tek karo aynı çizimi kullanır; NS4-15 parmak izi korunur). */
+function drawBlock(x: CanvasRenderingContext2D, c: string, px: number) {
+  const ins = px * 0.045,
+    r = px * 0.26,
+    w = px - ins * 2;
+  let g = x.createLinearGradient(0, 0, 0, px);
+  g.addColorStop(0, shade(c, 0.28));
+  g.addColorStop(0.55, c);
+  g.addColorStop(1, shade(c, -0.22));
+  rr(x, ins, ins, w, w, r);
+  x.fillStyle = g;
+  x.fill();
+  x.lineWidth = Math.max(1, px * 0.035);
+  x.strokeStyle = shade(c, -0.32);
+  x.globalAlpha = 0.55;
+  x.stroke();
+  x.globalAlpha = 1;
+  g = x.createRadialGradient(px * 0.34, px * 0.3, 0, px * 0.34, px * 0.3, px * 0.5);
+  g.addColorStop(0, 'rgba(255,255,255,.55)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  rr(x, ins, ins, w, w, r);
+  x.fillStyle = g;
+  x.fill();
+  x.fillStyle = 'rgba(255,255,255,.75)';
+  x.beginPath();
+  x.ellipse(px * 0.3, px * 0.24, px * 0.11, px * 0.06, -0.5, 0, Math.PI * 2);
+  x.fill();
+}
+
+/** NS4-27: gülümseyen gri bulutçuk karosu (temizlenirken uçan hücreler). Boyut px + 4, karo (2, 2)'de. */
+export function createHappyCloudCanvas(px: number): HTMLCanvasElement {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = px + 4;
+  const x = context2d(cv);
+  x.save();
+  x.translate(2, 2);
+  drawBlock(x, COLORS[FACE_ID], px);
+  drawFace(x, px, 'happy');
+  x.restore();
+  return cv;
+}
+
 /** Tek atlas: 8 blok + 8 hayalet karo -> tahtanın tamamı tek draw call. `P` karo adımıdır. */
 export function createBlockAtlas(px: number): { atlas: HTMLCanvasElement; P: number } {
   const P = px + 4,
@@ -73,31 +156,8 @@ export function createBlockAtlas(px: number): { atlas: HTMLCanvasElement; P: num
       ox = i * P + 2;
     x.save();
     x.translate(ox, 2);
-    const ins = px * 0.045,
-      r = px * 0.26,
-      w = px - ins * 2;
-    let g = x.createLinearGradient(0, 0, 0, px);
-    g.addColorStop(0, shade(c, 0.28));
-    g.addColorStop(0.55, c);
-    g.addColorStop(1, shade(c, -0.22));
-    rr(x, ins, ins, w, w, r);
-    x.fillStyle = g;
-    x.fill();
-    x.lineWidth = Math.max(1, px * 0.035);
-    x.strokeStyle = shade(c, -0.32);
-    x.globalAlpha = 0.55;
-    x.stroke();
-    x.globalAlpha = 1;
-    g = x.createRadialGradient(px * 0.34, px * 0.3, 0, px * 0.34, px * 0.3, px * 0.5);
-    g.addColorStop(0, 'rgba(255,255,255,.55)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    rr(x, ins, ins, w, w, r);
-    x.fillStyle = g;
-    x.fill();
-    x.fillStyle = 'rgba(255,255,255,.75)';
-    x.beginPath();
-    x.ellipse(px * 0.3, px * 0.24, px * 0.11, px * 0.06, -0.5, 0, Math.PI * 2);
-    x.fill();
+    drawBlock(x, c, px);
+    if (k === FACE_ID) drawFace(x, px);
     x.restore();
     x.save();
     x.translate(ox, P + 2);

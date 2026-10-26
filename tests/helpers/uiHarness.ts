@@ -5,13 +5,13 @@ import { vi } from 'vitest';
 import { createAppStubs } from './appStubs';
 import { createGame } from './gameHelpers';
 
-export async function loadUi(seed = 1) {
+export async function loadUi(seed = 1, rooms = false) {
   vi.resetModules();
   const { createLifecycle } = await import('../../src/app/lifecycle');
   const { wireGameEvents } = await import('../../src/app/events');
   const { updateHud } = await import('../../src/ui/hud');
   const g = createGame(seed);
-  const stubs = createAppStubs(g);
+  const stubs = createAppStubs(g, rooms);
   const lc = createLifecycle(stubs.deps);
   wireGameEvents({ ...stubs.deps, lifecycle: lc });
   /** bootstrap'taki ana döngünün HUD adımı (menü/pause'da HUD güncellenmez). */

@@ -11,6 +11,7 @@ import {
   clearBoard,
   createGame,
   dropVerticalI,
+  fillRow,
   finishClear,
   placePiece,
   setupWell,
@@ -24,17 +25,18 @@ type Kind = 'number' | 'boolean' | readonly string[];
 const STATES = ['menu', 'playing', 'paused', 'over'] as const;
 const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
   game_start: { best: 'number' },
-  powerup_use: { kind: ['siklamen', 'sentetik'], level: 'number', congestion: 'number', uses: 'number' },
+  powerup_use: { kind: ['siklamen', 'hapsirik'], level: 'number', congestion: 'number', uses: 'number' },
   level_up: { level: 'number' },
-  badge: { id: ['ozmotik', 'noro', 'akis', 'dogal', 'derin'] },
+  badge: { id: ['ozmotik', 'noro', 'akis', 'hapsu', 'derin'] },
   game_over: {
-    reason: ['blockout', 'lockout', 'garbage', 'overlap'],
+    reason: ['blockout', 'lockout', 'overlap'],
     score: 'number',
     level: 'number',
     lines: 'number',
     dur_s: 'number',
     cyc_used: 'boolean',
-    syn_uses: 'number',
+    sneeze_uses: 'number',
+    rooms_cleared: 'number',
     tetrises: 'number',
   },
   cta_click: { placement: ['game_over', 'pause_menu'], score: 'number', level: 'number', state: STATES },
@@ -45,8 +47,9 @@ const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
   tutorial_skipped: { step: 'number' },
   first_drain: { lines: 'number', level: 'number', dur_s: 'number' },
   cyclamen_available: { level: 'number', congestion: 'number' },
-  synthetic_available: { level: 'number', congestion: 'number' },
-  rebound_started: { uses: 'number', level: 'number' },
+  sneeze_available: { level: 'number', congestion: 'number' },
+  room_start: { room: 'number', gray: 'number' },
+  room_clear: { room: 'number', level: 'number', dur_s: 'number', bonus: 'number' },
   replay_clicked: {},
   leaderboard_opened: {},
   leaderboard_tab_changed: { tab: ['local', 'global'] },
@@ -94,12 +97,12 @@ const names = () => records().map((r) => r.event.replace(/^fn_/, ''));
 const count = (n: AnalyticsEvent) => names().filter((x) => x === n).length;
 const last = (n: AnalyticsEvent) => [...records()].reverse().find((r) => r.event === `fn_${n}`);
 
-async function loadGame(seed = 1) {
+async function loadGame(seed = 1, rooms = false) {
   const { createLifecycle } = await import('../../src/app/lifecycle');
   const { wireGameEvents } = await import('../../src/app/events');
   const { updateHud } = await import('../../src/ui/hud');
   const g = createGame(seed);
-  const stubs = createAppStubs(g);
+  const stubs = createAppStubs(g, rooms);
   const lc = createLifecycle(stubs.deps);
   wireGameEvents({ ...stubs.deps, lifecycle: lc });
   const frame = () => updateHud(g, lc.getState() === 'playing');
@@ -134,7 +137,8 @@ describe('tracker: dataLayer, console, oturum kimliği', () => {
       lines: 0,
       dur_s: 1,
       cyc_used: false,
-      syn_uses: 0,
+      sneeze_uses: 0,
+      rooms_cleared: 0,
       tetrises: 0,
     });
     createTracker({ dev: false, layer: () => ({ push: vi.fn() }) }).track('level_up', { level: 2 }); // dizi değilse yok sayılır
@@ -188,32 +192,49 @@ describe('oyun hunisi: her olay doğru anda bir kez', () => {
     expect(count('game_start')).toBe(2);
     for (const r of records()) expect(validate(r), r.event).toEqual([]);
   });
-  it('güçlendiriciler: kullanılabilir olunca oyun başına bir kez; kullanım; rebound her tekrar kullanımda', async () => {
+  it('NS4-27 odalar: başta room_start; oda açılınca room_clear, sonra sıradaki odanın room_start; oyun sonunda sayı', async () => {
+    const { g, lc } = await loadGame(1, true);
+    lc.start();
+    expect(last('room_start')).toMatchObject({ room: 0, gray: g.roomGray });
+    clearBoard(g);
+    fillRow(g, 21, PIECE.GARBAGE, [9]);
+    dropVerticalI(g);
+    finishClear(g);
+    expect(count('room_clear')).toBe(1);
+    expect(last('room_clear')).toMatchObject({ room: 0, level: 1, bonus: CFG.roomBonus });
+    finishClear(g);
+    expect(count('room_start')).toBe(2);
+    expect(last('room_start')).toMatchObject({ room: 1 });
+    g.gameOver('lockout');
+    expect(last('game_over')).toMatchObject({ rooms_cleared: 1 });
+    for (const r of records()) expect(validate(r), r.event).toEqual([]);
+  });
+  it('güçlendiriciler: kullanılabilir olunca oyun başına bir kez; her hapşırık kullanımı', async () => {
     const { g, lc, frame } = await loadGame();
     lc.start();
     stackRows(g, 7); // %35
     frame();
     frame();
-    expect([count('cyclamen_available'), count('synthetic_available')]).toEqual([1, 1]);
+    expect([count('cyclamen_available'), count('sneeze_available')]).toEqual([1, 1]);
     for (let i = 0; i < 3; i++) {
       stackRows(g, 7);
-      g.useSyn();
+      g.sneezePieces = CFG.sneezePieces; // şarj dolu
+      g.useSneeze();
       finishClear(g);
       frame();
     }
     expect(count('powerup_use')).toBe(3);
-    expect(count('rebound_started')).toBe(2); // 2. ve 3. kullanım
-    expect(last('rebound_started')).toMatchObject({ uses: 3 });
+    expect(last('powerup_use')).toMatchObject({ kind: 'hapsirik', uses: 3 });
     stackRows(g, 8);
     g.useCyc();
     finishClear(g);
     frame();
-    expect([count('cyclamen_available'), count('synthetic_available')]).toEqual([1, 1]);
+    expect([count('cyclamen_available'), count('sneeze_available')]).toEqual([1, 1]);
     // yeni oyunda yeniden bir kez
     lc.start();
     stackRows(g, 7);
     frame();
-    expect([count('cyclamen_available'), count('synthetic_available')]).toEqual([2, 2]);
+    expect([count('cyclamen_available'), count('sneeze_available')]).toEqual([2, 2]);
     for (const r of records()) expect(validate(r), r.event).toEqual([]);
   });
   it('arayüz: Tekrar oyna, Skorlar, CTA (yerleşim + oyun durumu); gezinme engellenmez', async () => {

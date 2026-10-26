@@ -199,7 +199,7 @@ describe('işaretleme ve odak', () => {
   it('kart #stage içinde, Duraklat’tan sonra (Tab: Beklet › … › Duraklat › Atla); kart odak çalmaz', async () => {
     const stageHtml = html.slice(html.indexOf('<div id="stage"'), html.indexOf('<div id="danger"'));
     const order = [...stageHtml.matchAll(/<button[^>]*id="([^"]+)"/g)].map((m) => m[1]);
-    expect(order).toEqual(['btn-hold', 'btn-cyc', 'btn-syn', 'btn-pause', 'tut-skip', 'tut-done']);
+    expect(order).toEqual(['btn-hold', 'btn-cyc', 'btn-sneeze', 'btn-pause', 'tut-skip', 'tut-done']);
     expect(html).toMatch(/<div id="tutorial" class="tutorial" hidden>/);
     expect(html).toMatch(/class="tut-live" aria-live="polite"/);
     const { lc } = await load();

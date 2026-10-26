@@ -1,5 +1,7 @@
 # NS4-19 · Analitik olayları
 
+> **NS4-24 notu:** sentetik açıcı ve rebound kaldırıldı. `synthetic_available` → `sneeze_available`; `rebound_started` kaldırıldı; `powerup_use.kind` `'sentetik'` → `'hapsirik'`; `game_over.syn_uses` → `sneeze_uses`; `game_over.reason` artık `'garbage'` içermez; `badge.id` `'dogal'` → `'hapsu'`. Ayrıntı: `docs/NS4-24-SNEEZE-POWER.md`.
+
 Oyun hunisi kişisel veri toplamadan ölçülebilir hale getirildi.
 
 - Olaylar tiplidir (`src/types/analytics.ts`); gönderim `src/analytics/analytics.ts` üzerindendir.

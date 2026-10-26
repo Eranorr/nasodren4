@@ -28,19 +28,17 @@ describe('efekt bağlantıları', () => {
     expect(popups()).toContainEqual(['TETRİS', 'Ozmotik etki: dört satır birden']);
   });
 
-  it('rebound → view.onRebound, garbage → view.onGarbage (eski doğrudan shake ataması yok)', async () => {
+  it('hapşırık: clearstart görünüme gider; popup "HAPŞUU! / Çok yaşa!"; rebound/garbage bağlantısı yok', async () => {
     const { g, lc, calls } = await loadUi();
     lc.start();
-    for (let i = 0; i < 2; i++) {
-      stackRows(g, 7);
-      g.useSyn();
-      finishClear(g);
-    }
-    expect(calls).toContain('view.onRebound');
+    stackRows(g, 7);
     calls.length = 0;
-    g.garbageT = 1;
-    g.update(16);
-    expect(calls).toContain('view.onGarbage');
+    expect(g.useSneeze()).toBe(true);
+    expect(calls).toContain('view.onClearStart');
+    expect(popups()).toContainEqual(['HAPŞUU!', 'Çok yaşa!']);
+    finishClear(g);
+    expect(calls).toContain('view.onClearEnd');
+    expect(calls.filter((c) => /onRebound|onGarbage/.test(c))).toEqual([]);
   });
 
   // NS4-16: NS4-15'te izinsiz eklenen "Puan ×2 · 30 sn · sıklamen tek kullanımlık" popup'ı kaldırıldı.

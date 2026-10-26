@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CFG, COLS } from '../../src/config/gameConfig';
 import { PIECE } from '../../src/game/pieces';
 import {
@@ -13,15 +13,6 @@ import {
   setupWell,
   stackRows,
 } from '../helpers/gameHelpers';
-
-/** İki sentetik kullanımla rebound'u başlatır (her kullanımdan önce tıkanıklık yeniden kurulur). */
-function startRebound(g: ReturnType<typeof createGame>) {
-  for (let i = 0; i < 2; i++) {
-    stackRows(g, 7);
-    expect(g.useSyn()).toBe(true);
-    finishClear(g);
-  }
-}
 
 describe('tıkanıklık (congestion)', () => {
   it('yığın yüksekliği / 20 olarak hesaplanır ve 1 ile sınırlıdır', () => {
@@ -42,12 +33,12 @@ describe('siklamen (cyc)', () => {
     const log = recordEvents(g, ['clearstart']);
     expect(g.canCyc()).toBe(false);
     expect(g.useCyc()).toBe(false);
-    expect(g.canSyn()).toBe(false);
-    expect(g.useSyn()).toBe(false);
-    expect([g.state, g.cycUsed, g.synUses, log.count('clearstart')]).toEqual(['play', false, 0, 0]);
+    expect(g.canSneeze()).toBe(false);
+    expect(g.useSneeze()).toBe(false);
+    expect([g.state, g.cycUsed, g.sneezeUses, log.count('clearstart')]).toEqual(['play', false, 0, 0]);
     stackRows(g, 7); // 0.35
     expect(g.canCyc()).toBe(true);
-    expect(g.canSyn()).toBe(true);
+    expect(g.canSneeze()).toBe(true);
   });
 
   it('alt bölgedeki (satır 12..21) dolu satırları drenajla temizler; puan ve 30 sn ×2 verir', () => {
@@ -79,7 +70,7 @@ describe('siklamen (cyc)', () => {
     stackRows(g, 7);
     expect(g.canCyc()).toBe(false);
     expect(g.useCyc()).toBe(false);
-    expect(g.canSyn()).toBe(true);
+    expect(g.canSneeze()).toBe(true);
   });
 
   it('×2 çarpanı 30 saniye sürer, sonra biter', () => {
@@ -107,81 +98,77 @@ describe('siklamen (cyc)', () => {
   });
 });
 
-describe('sentetik (syn) ve rebound', () => {
-  it('en alttaki üç dolu satırı temizler; ilk kullanım rebound başlatmaz', () => {
+// NS4-24: sentetik açıcı ve rebound kaldırıldı; yerine yeniden dolan hapşırık
+describe('hapşırık (sneeze)', () => {
+  it('oyun başında dolu; yalnızca %35 tıkanıklıkta kullanılabilir', () => {
     const g = createGame(1);
+    expect(g.sneezeCharge()).toBe(1);
+    expect(g.canSneeze()).toBe(false);
     stackRows(g, 7);
-    const log = recordEvents(g, ['clearstart', 'powerdone']);
-    expect(g.useSyn()).toBe(true);
+    expect(g.canSneeze()).toBe(true);
+  });
+
+  it('yığının en üstteki üç dolu sırasını savurur; puan verir, şarjı boşaltır', () => {
+    const g = createGame(1);
+    stackRows(g, 7); // satır 15..21
+    setCell(g, 4, 21, PIECE.L); // alttaki sıralar yerinde kalır
+    const log = recordEvents(g, ['clearstart', 'powerdone', 'clearend']);
+    expect(g.useSneeze()).toBe(true);
     expect(g.state).toBe('clearing');
-    expect(log.payloads('clearstart')).toEqual([{ rows: [19, 20, 21], kind: 'syn' }]);
-    g.update(CFG.synClearMs - 1);
+    expect(log.payloads('clearstart')).toEqual([{ rows: [15, 16, 17], kind: 'sneeze' }]);
+    expect([g.sneezeUses, g.sneezeCharge()]).toEqual([1, 0]);
+    g.update(CFG.sneezeMs - 1);
     expect(g.state).toBe('clearing');
     g.update(1);
     expect(g.state).toBe('play');
-    expect(log.payloads('powerdone')).toEqual([{ kind: 'syn', n: 3, rebound: false }]);
+    expect(log.payloads('powerdone')).toEqual([{ kind: 'sneeze', n: 3 }]);
+    expect(log.payloads('clearend')).toEqual([{ rows: [15, 16, 17], kind: 'sneeze' }]);
     expect(g.score).toBe(50 * 3);
     expect(g.stackHeight()).toBe(4);
-    expect(g.reboundT).toBe(0);
-    expect(g.gravityMs()).toBe(1000);
+    expect(getCell(g, 4, 21)).toBe(PIECE.L);
   });
 
-  it('ikinci kullanım rebound başlatır; üçüncü kullanım süreyi uzatır', () => {
+  it('boşken kullanılamaz; her kilitlenen parça şarjı doldurur, CFG.sneezePieces parçada yeniden hazır', () => {
     const g = createGame(1);
-    const log = recordEvents(g, ['powerdone']);
-    startRebound(g);
-    expect(log.payloads('powerdone').map((e) => (e.kind === 'syn' ? e.rebound : null))).toEqual([false, true]);
-    expect(g.synUses).toBe(2);
-    expect(g.reboundT).toBe(CFG.reboundMs);
-    expect(g.garbageT).toBe(CFG.reboundGarbageEvery / 2);
-    stackRows(g, 7);
-    g.useSyn();
+    stackRows(g, 10);
+    g.useSneeze();
     finishClear(g);
-    expect(g.reboundT).toBe(CFG.reboundMs * 2);
+    expect(g.canSneeze()).toBe(false);
+    expect(g.useSneeze()).toBe(false);
+    for (let i = 0; i < CFG.sneezePieces; i++) {
+      expect(g.canSneeze()).toBe(false);
+      placePiece(g, PIECE.O, 0, 3, 0);
+      g.hardDrop();
+      stackRows(g, 10); // yığın sabit: tıkanıklık eşik üstünde kalır, oyun bitmez
+    }
+    expect(g.sneezeCharge()).toBe(1);
+    expect(g.canSneeze()).toBe(true);
   });
 
-  it('rebound sırasında yerçekimi 1.5 kat hızlanır, süre bitince normale döner', () => {
+  it('oyunda birden çok kez kullanılır; ceza (hızlanma, alttan tıkanıklık) yoktur', () => {
     const g = createGame(1);
-    startRebound(g);
-    expect(g.gravityMs()).toBeCloseTo(1000 / CFG.reboundSpeed, 9);
-    placePiece(g, PIECE.T, 0, 3, 1);
-    g.update(666);
-    expect(g.y).toBe(1);
-    g.update(1);
-    expect(g.y).toBe(2);
-    g.update(CFG.reboundMs);
-    expect(g.reboundT).toBe(0);
+    const log = recordEvents(g, ['powerdone', 'gameover']);
+    for (let k = 0; k < 3; k++) {
+      stackRows(g, 10);
+      g.sneezePieces = CFG.sneezePieces;
+      expect(g.useSneeze()).toBe(true);
+      finishClear(g);
+    }
+    expect(g.sneezeUses).toBe(3);
+    expect(log.count('powerdone')).toBe(3);
     expect(g.gravityMs()).toBe(1000);
+    const before = g.board.slice();
+    g.update(20000 / 3); // eski rebound çöp aralığından uzun: tahtanın altına bir şey eklenmez
+    expect(rowCells(g, 21)).toEqual(Array.from(before.slice(21 * COLS, 22 * COLS)));
+    expect(log.count('gameover')).toBe(0);
   });
 
-  it('rebound çöp satırı alttan eklenir, tek deliklidir ve tahtayı bir sıra yukarı iter', () => {
+  it('üst sıra seçimi: yığın kısaysa yalnızca mevcut sıralar; eşik altında kullanılamaz', () => {
     const g = createGame(1);
-    startRebound(g);
-    const oldBottom = rowCells(g, 21);
-    vi.spyOn(Math, 'random').mockReturnValue(0.55); // delik sütunu (0.55 × 10) | 0 = 5
-    const log = recordEvents(g, ['garbage']);
-    g.update(CFG.reboundGarbageEvery / 2 - 1);
-    expect(log.count('garbage')).toBe(0);
-    g.update(1);
-    expect(log.count('garbage')).toBe(1);
-    const expected = new Array<number>(COLS).fill(PIECE.GARBAGE);
-    expected[5] = 0;
-    expect(rowCells(g, 21)).toEqual(expected);
-    expect(rowCells(g, 20)).toEqual(oldBottom);
-    g.update(CFG.reboundGarbageEvery - 1);
-    expect(log.count('garbage')).toBe(1);
-    g.update(1);
-    expect(log.count('garbage')).toBe(2);
-  });
-
-  it('en üst satır doluyken çöp eklenirse oyun "garbage" nedeniyle biter', () => {
-    const g = createGame(1);
-    startRebound(g);
-    setCell(g, 0, 0);
-    const log = recordEvents(g, ['gameover', 'garbage']);
-    g.update(CFG.reboundGarbageEvery / 2);
-    expect(g.state).toBe('over');
-    expect(log.names()).toEqual(['gameover']);
-    expect(log.payloads('gameover')).toEqual(['garbage']);
+    stackRows(g, 2);
+    g.sneezePieces = CFG.sneezePieces;
+    // eşik altı: kullanılamaz (yalnızca tıkanıklıkta)
+    expect(g.useSneeze()).toBe(false);
+    expect(g.topNonEmptyRows(3)).toEqual([20, 21]);
   });
 });

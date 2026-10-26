@@ -15,7 +15,6 @@ describe('mekanik sabitler', () => {
       lockDelay: 500,
       maxLockResets: 15,
       lineClearMs: 300,
-      synClearMs: 260,
       drainMs: 800,
       softDropFactor: 20,
       maxLevel: 20,
@@ -23,9 +22,13 @@ describe('mekanik sabitler', () => {
       powerThreshold: 0.35,
       cycMultMs: 30000,
       cycMult: 2,
-      reboundMs: 40000,
-      reboundSpeed: 1.5,
-      reboundGarbageEvery: 10000,
+      // NS4-24: sentetik/rebound yerine hapşırık
+      sneezePieces: 20,
+      sneezeRows: 3,
+      sneezeMs: 650,
+      // NS4-27: Sinüs Odaları
+      roomBonus: 1000,
+      roomClearMs: 1400,
     });
   });
 });

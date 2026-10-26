@@ -24,7 +24,7 @@ export interface AnalyticsPayloads {
   // ---- NS4-01..NS4-18 (korunur) ----
   game_start: { best: number };
   powerup_use:
-    { kind: 'siklamen'; level: number; congestion: number } | { kind: 'sentetik'; uses: number; level: number };
+    { kind: 'siklamen'; level: number; congestion: number } | { kind: 'hapsirik'; uses: number; level: number };
   level_up: { level: number };
   badge: { id: BadgeId };
   game_over: {
@@ -34,7 +34,8 @@ export interface AnalyticsPayloads {
     lines: number;
     dur_s: number;
     cyc_used: boolean;
-    syn_uses: number;
+    sneeze_uses: number;
+    rooms_cleared: number;
     tetrises: number;
   };
   cta_click:
@@ -53,9 +54,11 @@ export interface AnalyticsPayloads {
   first_drain: { lines: number; level: number; dur_s: number };
   /** Güçlendirici ilk kez kullanılabilir oldu (oyun başına bir kez). */
   cyclamen_available: { level: number; congestion: number };
-  synthetic_available: { level: number; congestion: number };
-  /** Sentetik tekrar kullanımı rebound başlattı/uzattı (her seferinde). */
-  rebound_started: { uses: number; level: number };
+  /** NS4-24: sentetik açıcı (synthetic_available, rebound_started) yerine hapşırık. */
+  sneeze_available: { level: number; congestion: number };
+  /** NS4-27: odaya girildi (room: 0 tabanlı; ROOMS.length = Serbest nefes) ve oda açıldı. */
+  room_start: { room: number; gray: number };
+  room_clear: { room: number; level: number; dur_s: number; bonus: number };
   /** Oyun sonu "Tekrar oyna". */
   replay_clicked: NoPayload;
   leaderboard_opened: NoPayload;

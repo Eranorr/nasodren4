@@ -102,11 +102,9 @@ describe('sağlık metinleri değişmedi (NS4-18 / 93adcf1 ile birebir)', () => 
     expect(HEALTH_TIPS).toHaveLength(6);
   });
   it('toast metinleri aynı ve kayıttan okunur', () => {
-    expect(HEALTH_TOASTS.rebound.text).toBe(
-      'Dekonjestanların uzun süreli kullanımı tıkanıklığın geri dönmesine yol açabilir.',
-    );
+    // NS4-24: rebound toast'u sentetik açıcıyla birlikte kaldırıldı
+    expect(Object.keys(HEALTH_TOASTS)).toEqual(['cyclamenReady']);
     expect(HEALTH_TOASTS.cyclamenReady.text).toBe('Sinüslerin dolmaya başladı. Sıklamen özütü hazır.');
-    expect(files['../../src/app/events.ts']).toContain('toast(HEALTH_TOASTS.rebound.text, 3600)');
     expect(files['../../src/ui/hud.ts']).toContain('toast(HEALTH_TOASTS.cyclamenReady.text)');
   });
   it('tıbbi uyarı ana menüde aynen korunur', () => {
@@ -137,14 +135,18 @@ describe('marka ve iddia taraması (görünür metin)', () => {
   });
   it('"doğal" ifadesi risksizlik garantisine dönüşmüyor', () => {
     const natural = ALL_VISIBLE.filter((t) => /doğal/i.test(t));
-    expect(natural).toEqual(['Doğal yol']); // yalnızca rozet adı
+    expect(natural).toEqual([]); // NS4-24: "Doğal yol" rozeti kaldırıldı
     expect(corpus).not.toMatch(/doğal[^.]{0,40}(risksiz|zararsız|güvenli|yan etkisiz|sorunsuz)/i);
   });
-  it('sentetik seçenek için korkutucu veya aşağılayıcı dil yok', () => {
-    const syn = ALL_VISIBLE.filter((t) => /sentetik|dekonjestan|açıcı/i.test(t));
-    expect(syn.length).toBeGreaterThan(0);
-    for (const t of syn)
-      expect(t).not.toMatch(/zehir|kimyasal|tehlikeli|zararlı|kötü|korkunç|bağımlılık|felaket|asla/i);
+  it('NS4-24: sentetik açıcı / rebound karşılaştırması oyundan kalktı; dekonjestan yalnızca sağlık ipucunda', () => {
+    expect(corpus).not.toMatch(/sentetik|rebound|açıcı|geri tep/i);
+    const decon = ALL_VISIBLE.filter((t) => /dekonjestan/i.test(t));
+    const tips: readonly string[] = HEALTH_TIPS.map((t) => t.text);
+    for (const t of decon) expect(tips).toContain(t);
+  });
+  it('NS4-24: hapşırık ve oyun metinleri iğrenç / ıslak dil içermez (her yaşa uygun)', () => {
+    expect(corpus).toMatch(/hapşırık/i);
+    expect(corpus).not.toMatch(/sümük|balgam|tükür|iğrenç|yapış|salya|vıcık/i);
   });
   it('CTA sağlık bilgisi yönlendirmesi olarak kalır (rehber), ürün/satış dili yok', () => {
     expect(INVENTORY.cta).toEqual(['Sinüs sağlığı rehberi', 'Rahat nefes rehberini aç']);

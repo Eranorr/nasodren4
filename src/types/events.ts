@@ -17,15 +17,24 @@ export interface ScoredEvent {
 }
 
 export type PowerDoneEvent =
-  | { readonly kind: 'cyc'; readonly n: number }
-  | { readonly kind: 'syn'; readonly n: number; readonly rebound: boolean };
+  { readonly kind: 'cyc'; readonly n: number } | { readonly kind: 'sneeze'; readonly n: number };
+
+/** NS4-27: oda olayları (room: ROOMS indeksi; ROOMS.length = Serbest nefes). */
+export interface RoomStartEvent {
+  readonly room: number;
+  /** Odadaki gri bulutçuk sayısı (Serbest nefeste 0). */
+  readonly gray: number;
+}
+export interface RoomClearEvent {
+  readonly room: number;
+  readonly bonus: number;
+}
 
 export interface GameEvents {
   spawn: void;
   move: void;
   rotate: void;
   hold: void;
-  garbage: void;
   /** Kilitlenen 4 hücrenin tahta indeksleri. */
   lock: readonly number[];
   /** Hard drop mesafesi (satır). */
@@ -36,6 +45,8 @@ export interface GameEvents {
   clearend: PendingClear;
   scored: ScoredEvent;
   powerdone: PowerDoneEvent;
+  roomstart: RoomStartEvent;
+  roomclear: RoomClearEvent;
 }
 
 export type GameEventName = keyof GameEvents;

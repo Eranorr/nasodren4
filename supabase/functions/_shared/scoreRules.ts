@@ -25,9 +25,12 @@ export const GAME_RULES = {
   cycMult: 2,
   cycBonusPerRow: 150,
   cycMaxRows: 20,
-  /** Sentetik açıcı: 50 × satır × seviye, 3 satır. */
-  synBonusPerRow: 50,
-  synRows: 3,
+  /** NS4-24: Hapşırık (sentetik açıcının yerine): 50 × satır × seviye, 3 üst sıra (gameConfig sneezeRows). */
+  sneezeBonusPerRow: 50,
+  sneezeRows: 3,
+  /** NS4-27: Sinüs Odaları: oda bonusu 1000 × oda sırası × seviye, 4 oda (en çok 1000 × (1+2+3+4) × seviye). */
+  roomBonus: 1000,
+  rooms: 4,
   /** Hard drop: satır başına 2 puan, en çok 22 satır. */
   hardDropPerRow: 2,
   boardRows: 22,
@@ -86,8 +89,9 @@ export function minDurationForLines(lines: number): number {
 /**
  * Cömert puan üst sınırı (oyunun puan kurallarından; ulaşılması fiilen imkânsız en kötü durum).
  * Satır başına en yüksek taban T-spin tekli (800) × seviye × art arda 1,5 × sıklamen 2; kombo terimi en çok
- * 50 × kombo × seviye × 2 her temizlemede; parça başına T-spin (satırsız, 400) + hard drop + sentetik bonusu;
- * tek seferlik sıklamen drenajı. Seviye son seviyedir (seviye yalnızca artar).
+ * 50 × kombo × seviye × 2 her temizlemede; parça başına T-spin (satırsız, 400) + hard drop + hapşırık bonusu (gerçekte 20 parçada bir;
+ * cömert kalsın diye her parçada sayılır);
+ * tek seferlik sıklamen drenajı; dört oda bonusu (NS4-27). Seviye son seviyedir (seviye yalnızca artar).
  */
 export function maxPlausibleScore(lines: number, level: number, durationSeconds: number): number {
   const R = GAME_RULES;
@@ -95,9 +99,10 @@ export function maxPlausibleScore(lines: number, level: number, durationSeconds:
   const linePts = lines * 800 * level * 1.5 * R.cycMult;
   const comboPts = ((50 * level * lines * (lines + 1)) / 2) * R.cycMult;
   const piecePts =
-    pieces * (400 * level * R.cycMult + R.hardDropPerRow * R.boardRows + R.synBonusPerRow * R.synRows * level);
+    pieces * (400 * level * R.cycMult + R.hardDropPerRow * R.boardRows + R.sneezeBonusPerRow * R.sneezeRows * level);
   const cycPts = R.cycBonusPerRow * R.cycMaxRows * level;
-  return Math.min(SCORE_LIMITS.maxScore, Math.floor(linePts + comboPts + piecePts + cycPts));
+  const roomPts = ((R.roomBonus * R.rooms * (R.rooms + 1)) / 2) * level;
+  return Math.min(SCORE_LIMITS.maxScore, Math.floor(linePts + comboPts + piecePts + cycPts + roomPts));
 }
 
 /** Global gönderim gövdesi (istemci → Edge Function). */

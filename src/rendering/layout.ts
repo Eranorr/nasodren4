@@ -66,7 +66,7 @@ function portraitLayout(W: number, H: number, pad: number): PortraitLayout {
     stats: { x: hold.x + hw + 6, y: pad, w: next.x - (hold.x + hw) - 12, h: hb },
     btnHold: { x: pad, y: by2, w: bw3, h: 56 },
     btnCyc: { x: pad + bw3 + gap, y: by2, w: bw3, h: 56 },
-    btnSyn: { x: pad + (bw3 + gap) * 2, y: by2, w: bw3, h: 56 },
+    btnSneeze: { x: pad + (bw3 + gap) * 2, y: by2, w: bw3, h: 56 },
     btnPause: { x: W - pad - 46, y: by2 + 5, w: 46, h: 46 },
     compactBtns: bw3 < 150,
     compactStats: true,
@@ -99,7 +99,7 @@ function landscapeLayout(W: number, H: number, pad: number): LandscapeLayout {
     stats: { x: lx + 4, y: by + cell * 4.6, w: sw - 4, h: cell * 3 },
     btnHold: { x: lx, y: by + bh - bh2 * 3 - 16, w: sw, h: bh2 },
     btnCyc: { x: lx, y: by + bh - bh2 * 2 - 8, w: sw, h: bh2 },
-    btnSyn: { x: lx, y: by + bh - bh2, w: sw, h: bh2 },
+    btnSneeze: { x: lx, y: by + bh - bh2, w: sw, h: bh2 },
     // NS4-11: 5. parça 12,6 + 0,62 = 13,22 hücreye iniyordu; panel 13 hücreydi (taşma). Slotlar aynı.
     next: { x: rx, y: by, w: sw, h: cell * 13.6 },
     nextSlots: [0, 1, 2, 3, 4].map((k) => ({ x: rx + sw / 2, y: by + cell * (k === 0 ? 2.6 : 2.6 + 0.4 + k * 2.4) })),

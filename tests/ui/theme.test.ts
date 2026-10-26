@@ -170,7 +170,7 @@ describe('tasarım tokenları', () => {
     expect(contrast(fg, bg)).toBeGreaterThanOrEqual(min);
   });
 
-  it('sıklamen ve rebound/tehlike renkleri ayırt edilebilir tonlarda', () => {
+  it('sıklamen, hapşırık ve tehlike renkleri ayırt edilebilir tonlarda', () => {
     const hue = (name: string) => {
       const n = parseInt(token(name).slice(1), 16);
       const [r, g, b] = [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
@@ -180,8 +180,13 @@ describe('tasarım tokenları', () => {
       const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
       return (h * 60 + 360) % 360;
     };
-    const diff = Math.abs(hue('--color-cyclamen') - hue('--color-danger'));
-    expect(Math.min(diff, 360 - diff)).toBeGreaterThanOrEqual(30);
+    const apart = (a: string, b: string) => {
+      const diff = Math.abs(hue(a) - hue(b));
+      return Math.min(diff, 360 - diff);
+    };
+    expect(apart('--color-cyclamen', '--color-danger')).toBeGreaterThanOrEqual(30);
+    expect(apart('--color-sneeze', '--color-danger')).toBeGreaterThanOrEqual(30);
+    expect(apart('--color-sneeze', '--color-cyclamen')).toBeGreaterThanOrEqual(30);
   });
 });
 
@@ -194,16 +199,16 @@ describe('bileşen kuralları', () => {
     expect(body).toMatch(/color:\s*var\(--color-btn-locked-text\)/);
   });
 
-  it('güçlendirici durumları (aktif, kullanıldı, risk, rebound) ayrı stillere sahip', () => {
+  it('güçlendirici durumları (aktif, kullanıldı, doluyor) ayrı stillere sahip', () => {
     for (const sel of [
       "#btn-cyc[data-state='active']",
       "#btn-cyc[data-state='used']",
-      "#btn-syn[data-state='risk']",
-      "#btn-syn[data-state='rebound']",
+      "#btn-sneeze[data-state='charging']",
     ])
       expect(rule(sel).length, sel).toBeGreaterThan(0);
     expect(rule("#btn-cyc[data-state='active']")).toMatch(/--color-cyclamen/);
-    expect(rule("#btn-syn[data-state='rebound']")).toMatch(/--color-danger/);
+    expect(rule("#btn-sneeze[data-state='charging']")).toMatch(/--color-sneeze/);
+    expect(rule('.gbtn .charge i')).toMatch(/background:\s*var\(--color-sneeze\)/);
   });
 
   it('focus-visible görünür odak halkasını korur', () => {
@@ -216,6 +221,5 @@ describe('bileşen kuralları', () => {
     expect(rule('.btn.primary')).toMatch(/background:\s*var\(--color-cyclamen\)/);
     expect(rule('.btn.cta')).toMatch(/background:\s*var\(--color-fresh-strong\)/);
     expect(rule('#badge-mult')).toMatch(/background:\s*var\(--color-cyclamen\)/);
-    expect(rule('#badge-rebound')).toMatch(/background:\s*var\(--color-danger\)/);
   });
 });

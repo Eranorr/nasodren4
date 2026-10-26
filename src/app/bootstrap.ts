@@ -177,6 +177,8 @@ export function bootstrap(): void {
     view.update(dt);
     const appState = lifecycle.getState(); // game.update içinde 'over' olmuş olabilir; orijinaldeki gibi burada okunur
     if (appState === 'playing' || appState === 'over') updateHud(game, appState === 'playing');
+    // NS4-20: tıkalı burun: müzik tıkanıklıkla boğuklaşır; oyun dışında açık
+    sound.setCongestion(appState === 'playing' ? game.congestion() : 0);
     if (settings.fps) {
       fpsAcc += raw;
       fpsFrames++;

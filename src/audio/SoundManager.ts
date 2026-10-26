@@ -9,10 +9,13 @@
    - müzik her başlatmada kendi oturum veri yolunu (bus) kurar; durunca
      kaynaklar (gürültü, LFO, akor osilatörleri) durdurulur ve bağlantıları
      kesilir. Müzik kapalıyken çalışan düğüm kalmaz; tek zamanlayıcı vardır;
-   - büyük anlarda (Tetris, T-spin, sıklamen, sentetik) müzik kısa süre kısılır;
+   - büyük anlarda (Tetris, T-spin, sıklamen, hapşırık) müzik kısa süre kısılır;
    - hareket/döndürme sesleri sık tekrarda seyreltilir ve kısılır;
    - AudioContext oluşturma/resume hataları yutulur (ses olmadan oyun sürer);
    - sekme gizlenince context askıya alınır, görünür olunca devam eder.
+   NS4-20: tıkalı burun hissi: müzik kanalı bir alçak geçiren süzgeçten
+   (muffle) geçer; tıkanıklık arttıkça müzik boğuklaşır, drenajla açılır.
+   Oynanış sesleri süzülmez (geri bildirim net kalır).
    ===================================================================== */
 import type { Settings } from '../types/settings';
 
@@ -23,6 +26,8 @@ interface AudioGraph {
   readonly sfx: GainNode;
   /** Müzik ana kanalı (kısma/ducking burada); oturum veri yolları buna bağlanır. */
   readonly mus: GainNode;
+  /** NS4-20: müzik → muffle → master. Kesim frekansı tıkanıklığa göre (setCongestion). */
+  readonly muffle: BiquadFilterNode;
   /** 2 sn'lik beyaz gürültü (nefes efektleri ve rüzgâr). */
   readonly noise: AudioBuffer;
 }
@@ -49,6 +54,25 @@ const ROTATE_MIN_GAP = 0.045;
 /** Durdurulan müziğin söndükten sonra kaynaklarının durdurulduğu süre (sn). */
 const MUSIC_RELEASE = 1.4;
 
+/** NS4-20: tıkanıklık bu orana kadar müzik açık kalır; üstünde boğuklaşır. */
+export const MUFFLE_START = 0.3;
+/** Açık ve tamamen tıkalı durumda müzik süzgecinin kesim frekansı (Hz). */
+export const MUFFLE_OPEN_HZ = 16000;
+export const MUFFLE_CLOSED_HZ = 520;
+/** Kesim frekansı bu orandan az değişirse yeniden zamanlanmaz (her karede çağrılır). */
+const MUFFLE_MIN_STEP = 0.03;
+
+/**
+ * Tıkanıklık (0..1) → müzik süzgecinin kesim frekansı. MUFFLE_START altında açık; üstünde üstel (kulağa
+ * doğrusal gelen) bir eğriyle MUFFLE_CLOSED_HZ'e iner.
+ */
+export function muffleCutoff(congestion: number): number {
+  const c = Math.min(1, Math.max(0, congestion));
+  if (c <= MUFFLE_START) return MUFFLE_OPEN_HZ;
+  const k = (c - MUFFLE_START) / (1 - MUFFLE_START);
+  return MUFFLE_OPEN_HZ * Math.pow(MUFFLE_CLOSED_HZ / MUFFLE_OPEN_HZ, k);
+}
+
 const CHORDS = [
   [220, 277.2, 329.6],
   [196, 246.9, 293.7],
@@ -70,6 +94,8 @@ export class Sound {
   private suspendedByHide = false;
   private lastMove = -1;
   private lastRotate = -1;
+  /** NS4-20: son zamanlanan müzik süzgeci kesim frekansı. */
+  private muffleHz = MUFFLE_OPEN_HZ;
   private readonly settings: AudioSettings; // NS4-03: ayar nesnesi dışarıdan verilir
 
   constructor(settings: AudioSettings) {
@@ -113,14 +139,19 @@ export class Sound {
       master.connect(ctx.destination);
       const sfx = ctx.createGain();
       sfx.connect(master);
+      const muffle = ctx.createBiquadFilter();
+      muffle.type = 'lowpass';
+      muffle.frequency.value = this.muffleHz;
+      muffle.Q.value = 0.9;
+      muffle.connect(master);
       const mus = ctx.createGain();
       mus.gain.value = 1;
-      mus.connect(master);
+      mus.connect(muffle);
       const len = ctx.sampleRate * 2,
         buf = ctx.createBuffer(1, len, ctx.sampleRate),
         d = buf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-      this.audio = { ctx, master, sfx, mus, noise: buf };
+      this.audio = { ctx, master, sfx, mus, muffle, noise: buf };
       this.applySettings();
     }
     this.suspendedByHide = false;
@@ -223,6 +254,25 @@ export class Sound {
     g.setTargetAtTime(1, t + hold, 0.35);
   }
 
+  /**
+   * NS4-20: tıkanıklığa göre müziği boğuklaştırır (her karede çağrılabilir; küçük değişimler atlanır).
+   * unlock() öncesi çağrılırsa değer saklanır ve grafik kurulurken uygulanır.
+   */
+  setCongestion(congestion: number): void {
+    const hz = muffleCutoff(congestion);
+    if (Math.abs(hz - this.muffleHz) / this.muffleHz < MUFFLE_MIN_STEP) return;
+    this.muffleHz = hz;
+    const a = this.audio;
+    if (!a) return;
+    const f = a.muffle.frequency;
+    f.cancelScheduledValues(a.ctx.currentTime);
+    f.setTargetAtTime(hz, a.ctx.currentTime, 0.18);
+  }
+  /** Müzik süzgecinin hedef kesim frekansı (tanı/test). */
+  get muffleTarget(): number {
+    return this.muffleHz;
+  }
+
   // ---- olay sesleri ----
   /** Sık tekrarda seyreltilir (DAS/ARR); art arda gelenler biraz daha kısık çalınır. */
   move() {
@@ -285,22 +335,32 @@ export class Sound {
     [392, 523, 659, 784].forEach((f, i) => this.voice(f, 1.6, 0.03, 0.25 + i * 0.1, 0.35));
     this.duck(0.5, 1.4);
   }
-  /** Sentetik açıcı: kısa, mekanik — sprey "pşt" ve iki tık. */
-  syn() {
-    this.breath(0.14, 3200, 2000, 0.12, 1.8);
-    this.tone(1400, 0.025, 'square', 0.022);
-    this.tone(1000, 0.025, 'square', 0.018, 0, 0.07);
-    this.duck(0.3, 0.3);
+  /**
+   * NS4-24: Hapşırık: iki yükselen "ha…" nefesi ve tonu, ardından geniş, kısa "HAPŞU" (gürültü patlaması + tok
+   * darbe) ve neşeli bir "boing" ile parıltılar. Islak/burun sesi yok; çizgi film tınısı. Zamanlama, görseldeki
+   * hazırlık evresiyle (SNEEZE_FX.windup × CFG.sneezeMs ≈ 0,29 sn) örtüşür.
+   */
+  sneeze() {
+    this.breath(0.16, 400, 1100, 0.05, 1.2);
+    this.tone(392, 0.14, 'triangle', 0.03, 523);
+    this.breath(0.18, 500, 1500, 0.07, 1.2, 0.15);
+    this.tone(523, 0.16, 'triangle', 0.035, 698, 0.15);
+    this.breath(0.3, 3800, 900, 0.16, 0.6, 0.3);
+    this.tone(150, 0.2, 'sine', 0.16, 70, 0.3);
+    this.tone(330, 0.32, 'sine', 0.05, 660, 0.4);
+    [1319, 1568, 2093].forEach((f, i) => this.tone(f, 0.08, 'sine', 0.02, 0, 0.46 + i * 0.05));
+    this.duck(0.45, 0.7);
   }
-  /** Rebound uyarısı: iki inen üçgen ton; dikkat çeker, sert değildir. */
-  warn() {
-    this.tone(233, 0.22, 'triangle', 0.065, 196);
-    this.tone(220, 0.22, 'triangle', 0.06, 185, 0.18);
-  }
-  /** NS4-17: garbage gelişi (rebound sırasında tekrarlar): kısa, kısık alçak darbe; rebound uyarısını tekrarlamaz. */
-  garbage() {
-    this.tone(95, 0.12, 'sine', 0.09, 60);
-    this.breath(0.06, 500, 200, 0.03, 1);
+  /**
+   * NS4-27: "Sinüs açıldı": derin içe nefes, ardından rahat bir dışa "ahh" nefesi ve yavaş açılan majör akor;
+   * müzik kısılır (tıkalı burun süzgeci de tıkanıklık düşünce kendiliğinden açılır).
+   */
+  roomClear() {
+    this.breath(0.6, 260, 1400, 0.07, 0.8);
+    this.breath(1.1, 1200, 300, 0.08, 0.7, 0.6);
+    [392, 494, 587, 784, 988].forEach((f, i) => this.voice(f, 1.5, 0.035, 0.45 + i * 0.09, 0.2));
+    [1568, 2093].forEach((f, i) => this.tone(f, 0.12, 'sine', 0.02, 0, 0.9 + i * 0.08));
+    this.duck(0.55, 1.6);
   }
   level() {
     [523, 659, 784].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.05, 0, i * 0.07));

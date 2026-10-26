@@ -5,11 +5,14 @@ import { CFG, COLS, VIS } from '../../src/config/gameConfig';
 import { PIECE } from '../../src/game/pieces';
 import type { Game } from '../../src/game/Game';
 import {
+  AIRFLOW,
   Budget,
-  GARBAGE_FX,
   LINE_FX,
-  REBOUND_FX,
   REDUCED,
+  ROOM_FX,
+  SNEEZE_FX,
+  airflowRate,
+  airflowSpeed,
   flavorOf,
   glowAlpha,
   motionScale,
@@ -64,18 +67,20 @@ describe('efekt tarifleri (saf)', () => {
     expect(new Budget().take(3, 1)).toBe(3);
   });
 
-  it('Ozmotik, Nörorefleks ve sentetik farklı görsel dillerde', () => {
+  it('Ozmotik, Nörorefleks ve hapşırık farklı görsel dillerde', () => {
     expect(LINE_FX.osmotic.bloom).toBeGreaterThan(0);
     expect(LINE_FX.osmotic.splash).toBeGreaterThan(LINE_FX.drain.splash);
     expect(LINE_FX.neuro.streak).toBeGreaterThan(0);
     expect(LINE_FX.neuro.splash).toBe(0);
-    expect(LINE_FX.syn.flash).not.toBe(LINE_FX.drain.flash);
-    expect(REBOUND_FX.tint).toBe(0xff5a1f);
-    expect(REBOUND_FX.dur).toBeLessThanOrEqual(700);
+    // NS4-24: hapşırık önce hazırlanır (ha… ha…), sonra patlar; kırmızı uyarı rengi kullanılmaz
+    expect(SNEEZE_FX.windup).toBeGreaterThan(0.3);
+    expect(SNEEZE_FX.windup).toBeLessThan(0.6);
+    expect(SNEEZE_FX.confetti).toBeGreaterThan(0);
+    expect(SNEEZE_FX.tints).not.toContain(0xff5a1f);
   });
 
   it('mekanik süreler değişmedi', () => {
-    expect([CFG.lineClearMs, CFG.synClearMs, CFG.drainMs]).toEqual([300, 260, 800]);
+    expect([CFG.lineClearMs, CFG.sneezeMs, CFG.drainMs]).toEqual([300, 650, 800]);
   });
 });
 
@@ -94,10 +99,7 @@ function wire() {
   g.on('scored', (e) => v.onScored(e));
   g.on('clearstart', (e) => v.onClearStart(e));
   g.on('clearend', () => v.onClearEnd());
-  g.on('garbage', () => v.onGarbage());
-  g.on('powerdone', (e) => {
-    if (e.kind === 'syn' && e.rebound) v.onRebound();
-  });
+  g.on('roomclear', () => v.onRoomClear());
 }
 
 /** Görsel durumun tamamen temiz olduğunu doğrular (efekt sonrası temizlik). */
@@ -189,48 +191,29 @@ describe('GameView efektleri: başlama, bitiş ve temizlik', () => {
     expect(live()).toHaveLength(0);
   });
 
-  it('sentetik: hızlı ve keskin (kırmızı flaş, yatay çizgiler, hücre sıkışması)', () => {
-    stackRows(g, 7);
-    expect(g.useSyn()).toBe(true);
-    expect(v.anim).toMatchObject({ kind: 'syn', dur: CFG.synClearMs });
-    expect(v.flashes[0].tint).toBe(LINE_FX.syn.flash);
-    expect(live().every((p) => p.sx > 1 && p.drag > 0)).toBe(true);
-    H.step(CFG.synClearMs * 0.7);
-    const s = v.cells[(VIS - 1) * COLS];
-    expect(s.scale.y).toBeLessThan(s.scale.x * 0.2);
+  it('hapşırık: önce şişme (parçacık yok), sonra konfeti ve sarsıntıyla yukarı savrulma; sonra tamamen temiz', () => {
+    stackRows(g, 7); // savrulan sıralar 15..17 → görünür 13..15
+    expect(g.useSneeze()).toBe(true);
+    expect(v.anim).toMatchObject({ kind: 'sneeze', dur: CFG.sneezeMs });
+    expect(v.flashes.every((f) => !f.visible)).toBe(true);
+    const cell = v.cells[13 * COLS];
+    H.step(CFG.sneezeMs * SNEEZE_FX.windup * 0.5);
+    expect(live()).toHaveLength(0);
+    expect(v.shake).toBe(0);
+    expect(cell.y).toBeCloseTo(13 * v.L.cell + v.L.cell / 2, 6); // hazırlıkta yerinde, yalnızca şişer
+    H.step(CFG.sneezeMs * SNEEZE_FX.windup * 0.6);
+    expect(v.anim?.burst).toBe(true);
+    expect(live().length).toBeGreaterThan(0);
+    expect(v.shake).toBeGreaterThan(0);
+    expect([v.glow.on, v.glow.s.tint]).toEqual([true, SNEEZE_FX.glow]);
+    H.step(CFG.sneezeMs * 0.3);
+    expect(cell.y).toBeLessThan(13 * v.L.cell); // yukarı savruldu
+    expect(cell.rotation).not.toBe(0);
+    expect(cell.alpha).toBeLessThan(1);
+    const untouched = v.cells[19 * COLS]; // alttaki sıralar yerinde
+    expect([untouched.y, untouched.alpha]).toEqual([19 * v.L.cell + v.L.cell / 2, 1]);
     finishClear(g);
-    H.step(1500);
-    expectClean();
-  });
-
-  it('rebound: kısa kırmızı-turuncu iki vuruşlu uyarı, sonra kapanır', () => {
-    for (let i = 0; i < 2; i++) {
-      stackRows(g, 7);
-      g.useSyn();
-      finishClear(g);
-    }
-    expect(v.glow.on).toBe(true);
-    expect([v.glow.s.tint, v.glow.beats, v.glow.peak]).toEqual([REBOUND_FX.tint, 2, REBOUND_FX.peak]);
-    // kenar çerçevesi zeminden belirgin (kırmızı-turuncu), tahta kenarlarında
-    expect(v.glow.edges.every((e) => e.visible && e.tint === REBOUND_FX.tint)).toBe(true);
-    H.step(160);
-    expect(v.glow.edges[0].alpha).toBeGreaterThan(v.glow.s.alpha * 4);
-    expect(v.glow.edges[3].x + v.glow.edges[3].width).toBeCloseTo(COLS * v.L.cell, 6);
-    H.step(REBOUND_FX.dur + 1500);
-    expectClean();
-  });
-
-  it('garbage: alt bantta gri vuruş, yukarı toz ve sarsıntı; garbage dokusu aynı', () => {
-    g.reboundT = 10000;
-    g.garbageT = 1;
-    g.update(16);
-    expect(v.band.on).toBe(true);
-    expect(v.band.s.y).toBe((VIS - 1) * v.L.cell);
-    expect(v.shake).toBeCloseTo(GARBAGE_FX.shake, 6);
-    expect(live()).toHaveLength(GARBAGE_FX.puffs);
-    v.syncBoard();
-    const bottom = v.cells.slice((VIS - 1) * COLS).filter((s) => s.visible);
-    expect(bottom.every((s) => s.texture === v.tex[PIECE.GARBAGE])).toBe(true);
+    expect(v.cells.filter((c) => c.visible).every((c) => c.rotation === 0)).toBe(true); // gizli hücre görünürken sıfırlanır
     H.step(1500);
     expectClean();
   });
@@ -254,8 +237,7 @@ describe('GameView efektleri: başlama, bitiş ve temizlik', () => {
   it('resetFx yeni oyunda süren her efekti temizler', () => {
     setupWell(g, 4);
     dropVerticalI(g);
-    v.onRebound();
-    v.onGarbage();
+    v.sneezeBurst([VIS - 1]);
     H.step(50);
     v.resetFx();
     g.reset();
@@ -288,17 +270,18 @@ describe('reduced motion', () => {
     expectClean();
   });
 
-  it('hard drop, garbage ve rebound sarsıntısı azalır; rebound tek, yumuşak vuruş', () => {
+  it('hard drop ve hapşırık sarsıntısı azalır; hapşırık vuruşu yumuşar, konfeti az', () => {
     v.reducedMotion = true;
     v.onHard(18);
     expect(v.shake).toBeLessThanOrEqual(0.25);
     v.shake = 0;
-    v.onGarbage();
-    expect(v.shake).toBeLessThanOrEqual(GARBAGE_FX.shake * 0.3);
-    expect(live().length).toBeLessThanOrEqual(3);
-    v.onRebound();
-    expect(v.glow.beats).toBe(1);
-    expect(v.glow.peak).toBeCloseTo(REBOUND_FX.peak * REDUCED.glow, 6);
+    stackRows(g, 7);
+    g.useSneeze();
+    H.step(CFG.sneezeMs * SNEEZE_FX.windup + 1);
+    expect(v.shake).toBeLessThanOrEqual(SNEEZE_FX.shake * 0.3);
+    expect(live().length).toBeLessThanOrEqual(Math.ceil(3 * COLS * SNEEZE_FX.confetti * REDUCED.particles));
+    expect(v.glow.peak).toBeCloseTo(SNEEZE_FX.glowPeak * REDUCED.glow, 6);
+    finishClear(g);
     H.step(2000);
     expectClean();
   });
@@ -314,13 +297,118 @@ describe('reduced motion', () => {
   });
 });
 
+// NS4-27: Sinüs Odaları görselleri
+describe('odalar', () => {
+  it('temizlenen gri bulutçuklar gülümser ve yukarı süzülür; renkli hücreler eski dille sıkışır', () => {
+    clearBoard(g);
+    fillRow(g, 21, PIECE.GARBAGE, [9]);
+    for (let x = 0; x < 3; x++) setCell(g, x, 21, PIECE.S);
+    dropVerticalI(g);
+    H.step(CFG.lineClearMs * 0.5);
+    const gray = v.cells[(VIS - 1) * COLS + 5],
+      color = v.cells[(VIS - 1) * COLS + 1];
+    expect(gray.texture).toBe(v.happyTex);
+    expect(gray.y).toBeLessThan((VIS - 1) * v.L.cell + v.L.cell / 2);
+    expect(gray.scale.x).toBeGreaterThanOrEqual(v.L.cell / v.happyTex.orig.width); // sıkışmaz, hafifçe büyür
+    expect(color.texture).not.toBe(v.happyTex);
+    expect(color.scale.y).toBeLessThan(color.scale.x);
+    finishClear(g);
+    H.step(1500);
+    expectClean();
+  });
+
+  it('"Sinüs açıldı": serin vuruş, alttan kabarcıklar; geçişte kalan hücreler söner, sonra yeni oda tahtası', () => {
+    g.reset({ rooms: true });
+    v.syncAll();
+    clearBoard(g);
+    fillRow(g, 21, PIECE.GARBAGE, [9]);
+    for (let x = 0; x < 9; x++) setCell(g, x, 20, PIECE.L); // kalan renkli sıra
+    dropVerticalI(g);
+    finishClear(g); // → roomclear
+    expect(v.anim).toMatchObject({ kind: 'room', dur: CFG.roomClearMs });
+    expect([v.glow.on, v.glow.s.tint]).toEqual([true, ROOM_FX.glow]);
+    expect(live().length).toBeGreaterThanOrEqual(ROOM_FX.bubbles * 0.9);
+    H.step(CFG.roomClearMs * 0.9);
+    const left = v.cells.filter((c) => c.visible);
+    expect(left.length).toBeGreaterThan(0);
+    for (const c of left) expect(c.alpha).toBeLessThan(0.3);
+    finishClear(g); // → yeni oda
+    H.step(2500);
+    expectClean();
+    expect(v.cells.filter((c) => c.visible).length).toBe(g.grayCount() - 0);
+  });
+
+  it('reduced motion: kabarcıklar ve sarsıntı azalır', () => {
+    v.reducedMotion = true;
+    v.onRoomClear();
+    expect(live().length).toBeLessThanOrEqual(Math.ceil(ROOM_FX.bubbles * REDUCED.particles));
+    expect(v.shake).toBeLessThanOrEqual(ROOM_FX.shake * REDUCED.shake + 1e-9);
+    H.step(2500);
+    expectClean();
+  });
+});
+
+// NS4-21: hava akışı (blokların arkasında, kendi havuzu)
+describe('hava akışı', () => {
+  const airLive = () => v.air.filter((m) => m.life > 0);
+
+  it('oran ve hız tıkanıklıkla azalır; tam tıkanıklıkta doğum yok', () => {
+    expect(airflowRate(0)).toBe(AIRFLOW.rate);
+    expect(airflowRate(1)).toBe(0);
+    expect(airflowRate(0.5)).toBeLessThan(airflowRate(0.2));
+    expect(airflowSpeed(0)).toBe(1);
+    expect(airflowSpeed(1)).toBeCloseTo(0.35, 9);
+  });
+
+  it('açık sinüste zerrecikler boş alanda, blokların arkasında yükselir; havuz sabit', () => {
+    const nodes = countNodes(v.app.stage);
+    H.step(2000);
+    const motes = airLive();
+    expect(motes.length).toBeGreaterThan(3);
+    expect(v.boardC.getChildIndex(v.airLayer)).toBe(0); // en arkada
+    const y0 = motes.map((m) => m.s.y);
+    H.step(100);
+    motes.forEach((m, i) => m.life > 0 && expect(m.s.y).toBeLessThan(y0[i] ?? 0));
+    expect(v.air).toHaveLength(AIRFLOW.count);
+    expect(countNodes(v.app.stage)).toBe(nodes);
+    expect(live().length).toBe(0); // efekt parçacık havuzunu kullanmaz
+  });
+
+  it('dolu sütunun içinde doğmaz (yığının üstünde)', () => {
+    stackRows(g, 6); // görünür satır 14..19 dolu (9. sütun boş)
+    H.step(3000);
+    for (const m of airLive()) {
+      const col = Math.floor(m.x0 / v.L.cell);
+      if (col !== 9) expect(m.s.y).toBeLessThan(14 * v.L.cell);
+    }
+  });
+
+  it('tam tıkanıklıkta, oyun bitince ve reduced motion altında doğum yok; resetFx söndürür', () => {
+    stackRows(g, 20);
+    H.step(3000);
+    expect(airLive()).toHaveLength(0);
+    clearBoard(g);
+    v.reducedMotion = true;
+    H.step(3000);
+    expect(airLive()).toHaveLength(0);
+    v.reducedMotion = false;
+    H.step(2000);
+    expect(airLive().length).toBeGreaterThan(0);
+    v.resetFx();
+    expect(airLive()).toHaveLength(0);
+    g.gameOver('lockout');
+    H.step(3000);
+    expect(airLive()).toHaveLength(0);
+  });
+});
+
 describe('performans ve dayanıklılık', () => {
-  it('parçacık havuzu taşmaz: art arda 25 Tetris + sıklamen + garbage', () => {
+  it('parçacık havuzu taşmaz: art arda 25 Tetris + hapşırık konfetisi + sıklamen', () => {
     const nodes = countNodes(v.app.stage);
     for (let i = 0; i < 25; i++) {
       setupWell(g, 4);
       dropVerticalI(g);
-      v.onGarbage();
+      v.sneezeBurst([VIS - 1]);
       H.step(48);
       finishClear(g);
     }
@@ -342,7 +430,6 @@ describe('performans ve dayanıklılık', () => {
     const nodes = countNodes(v.app.stage);
     setupWell(g, 4);
     dropVerticalI(g);
-    v.onRebound();
     H.step(100);
     H.resize(390, 844);
     const c = v.L.cell;

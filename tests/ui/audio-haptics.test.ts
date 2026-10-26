@@ -124,34 +124,19 @@ describe('olay → ses ve haptik (her önemli olay bir kez)', () => {
     expect(rec.log.map(([n]) => n).filter((n) => n !== 'setMusic')).toEqual(['cyc']);
     expect(buzz.mock.calls).toEqual([[HAPTIC.cyc]]);
   });
-  it('sentetik: syn bir kez; tekrar kullanım rebound → warn ve rebound deseni bir kez', async () => {
+  it('hapşırık: her kullanımda sneeze sesi ve deseni bir kez; uyarı/ceza sesi yok', async () => {
     const { g, lc, rec, buzz } = await wire();
     lc.start();
-    stackRows(g, 7);
-    rec.log.length = 0;
-    buzz.mockClear();
-    g.useSyn();
-    finishClear(g);
-    expect([rec.count('syn'), rec.count('warn')]).toEqual([1, 0]);
-    expect(buzz.mock.calls).toEqual([[HAPTIC.syn]]);
-    stackRows(g, 7);
-    rec.log.length = 0;
-    buzz.mockClear();
-    g.useSyn();
-    finishClear(g);
-    expect([rec.count('syn'), rec.count('warn')]).toEqual([1, 1]);
-    expect(buzz.mock.calls).toEqual([[HAPTIC.syn], [HAPTIC.rebound]]);
-  });
-  it('garbage: kendi kısa sesi ve deseni (rebound uyarısı tekrarlanmaz)', async () => {
-    const { g, lc, rec, buzz } = await wire();
-    lc.start();
-    g.reboundT = 10_000;
-    g.garbageT = 1;
-    rec.log.length = 0;
-    buzz.mockClear();
-    g.update(16);
-    expect([rec.count('garbage'), rec.count('warn')]).toEqual([1, 0]);
-    expect(buzz.mock.calls).toEqual([[HAPTIC.garbage]]);
+    for (let k = 0; k < 2; k++) {
+      stackRows(g, 7);
+      g.sneezePieces = CFG.sneezePieces;
+      rec.log.length = 0;
+      buzz.mockClear();
+      g.useSneeze();
+      finishClear(g);
+      expect(rec.log.map(([n]) => n).filter((n) => n !== 'setMusic')).toEqual(['sneeze']);
+      expect(buzz.mock.calls).toEqual([[HAPTIC.sneeze]]);
+    }
   });
   it('oyun sonu: over sesi, deseni ve müzik kapanışı bir kez', async () => {
     const { g, lc, rec, buzz } = await wire();
@@ -210,11 +195,12 @@ describe('haptik', () => {
     expect(HAPTIC.lock).toBeLessThan(HAPTIC.hard);
     const c = [1, 2, 3, 4].map((n) => patternMs(HAPTIC.clear(n)));
     expect([...c].sort((a, b) => a - b)).toEqual(c);
-    for (const p of [HAPTIC.syn, HAPTIC.cyc, HAPTIC.rebound, HAPTIC.clear(4)])
-      expect(patternMs(p)).toBeLessThanOrEqual(260);
+    for (const p of [HAPTIC.cyc, HAPTIC.clear(4)]) expect(patternMs(p)).toBeLessThanOrEqual(260);
+    // NS4-24: hapşırık "ha… ha… HAPŞU" ritmi biraz daha uzun ama oyun sonundan kısa
+    expect(patternMs(HAPTIC.sneeze)).toBeLessThanOrEqual(420);
+    expect(patternMs(HAPTIC.sneeze)).toBeLessThan(patternMs(HAPTIC.over));
     expect(patternMs(HAPTIC.over)).toBeLessThanOrEqual(520);
     expect(patternMs(HAPTIC.over)).toBeGreaterThan(patternMs(HAPTIC.clear(4)));
-    expect(HAPTIC.garbage).toBeLessThan(HAPTIC.hard);
   });
 });
 
@@ -320,7 +306,7 @@ describe('erişilebilirlik', () => {
       ['listitem', '', 'Ozmotik usta', 'İlk 4 satırlık drenaj', 'sr-only', ', kazanıldı'],
       ['listitem', '', 'Nörorefleks uzmanı', 'İlk T-spin temizliği', 'sr-only', ', kilitli'],
       ['listitem', '', 'Akış hali', '5’li kombo', 'sr-only', ', bu oyunda kazanıldı'],
-      ['listitem', '', 'Doğal yol', 'Sentetik açıcısız 5. seviye', 'sr-only', ', kilitli'],
+      ['listitem', '', 'Çok yaşa!', 'Bir oyunda 3 hapşırık', 'sr-only', ', kilitli'],
       ['listitem', '', 'Derin nefes', 'Toplam 100 satır drenaj', 'sr-only', ', kilitli'],
     ]);
     expect(Object.keys(BADGE_STATE_LABEL).sort()).toEqual(['earned', 'locked', 'new']);
@@ -370,10 +356,9 @@ describe('erişilebilirlik', () => {
     const src = sources['../../src/ui/settingsPanel.ts'] ?? '';
     expect(src).toContain("inp.setAttribute('aria-valuetext', `${settings[k]} ms`)");
   });
-  it('durum yalnızca ses/titreşimle verilmez: rebound ve garbage görsel geri bildirimi bağlı', () => {
+  it('durum yalnızca ses/titreşimle verilmez: hapşırık sesi popup ile birlikte', () => {
     const ev = sources['../../src/app/events.ts'] ?? '';
-    expect(ev).toMatch(/view\.onRebound\(\);\s*sound\.warn\(\);/);
-    expect(ev).toMatch(/popup\('Rebound', 'Sık kullanım tıkanıklığı geri getirdi', 'warn'\)/);
-    expect(ev).toMatch(/view\.onGarbage\(\);[\s\S]*?sound\.garbage\(\);/);
+    expect(ev).toMatch(/sound\.sneeze\(\);\s*buzz\(HAPTIC\.sneeze\);\s*popup\('HAPŞUU!', 'Çok yaşa!', 'sneeze'\);/);
+    expect(ev).not.toMatch(/onRebound|onGarbage|sound\.warn/);
   });
 });

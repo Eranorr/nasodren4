@@ -165,7 +165,7 @@ export class InputController {
             game.useCyc();
             break;
           case '2':
-            game.useSyn();
+            game.useSneeze();
             break;
           case 'Escape':
           case 'p':
@@ -286,8 +286,8 @@ export class InputController {
     this.bindBtn('btn-cyc', () => {
       if (playing()) game.useCyc();
     });
-    this.bindBtn('btn-syn', () => {
-      if (playing()) game.useSyn();
+    this.bindBtn('btn-sneeze', () => {
+      if (playing()) game.useSneeze();
     });
     this.bindBtn('btn-pause', () => {
       if (playing()) this.deps.pause();

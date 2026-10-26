@@ -2,6 +2,8 @@
    HUD: skor/seviye/drenaj, tıkanıklık metresi, güç butonları, sayaç rozetleri
    ve layout sonrası DOM yerleşimi. Oyun kuralı hesaplamaz; Game'den okur.
    NS4-03: main.ts'ten taşındı; eşikler değişmedi. NS4-07: güçlendirici durum metinleri ui/powerups.ts'te.
+   NS4-24: sentetik açıcı / Rebound rozeti yerine hapşırık butonu ve şarj çubuğu.
+   NS4-20: nefes halkası (tıkanıklığa göre derin → sığ nefes) ve kademeli basınç vinyeti.
    ===================================================================== */
 import { $, place } from './dom';
 import { toast, clearNotifications } from './notifications';
@@ -11,15 +13,18 @@ import {
   CYC_NAME,
   CYC_SHORT,
   CYC_TEXT,
-  SYN_NAME,
-  SYN_SHORT,
-  SYN_TEXT,
+  SNEEZE_NAME,
+  SNEEZE_SHORT,
+  SNEEZE_TEXT,
   cycState,
-  synState,
+  sneezePercent,
+  sneezeState,
   type CycState,
-  type SynState,
+  type SneezeState,
 } from './powerups';
 import type { Game } from '../game/Game';
+import { ROOMS } from '../config/gameConfig';
+import { roomLabel, roomText } from '../content/rooms';
 import type { Layout } from '../types/layout';
 
 /** Son yazılan değerler: yalnızca değişen değerler DOM'a yazılır (-1 / null = henüz yazılmadı). */
@@ -29,16 +34,22 @@ interface HudCache {
   lines: number;
   cong: number;
   cyc: boolean | null;
-  syn: boolean | null;
+  sneeze: boolean | null;
   mult: number;
-  reb: number;
   danger: boolean | null;
+  breath: BreathState | null;
+  pressure: number;
+  /** NS4-27: oda indeksi ve kalan gri bulutçuk (-1 = yazılmadı). */
+  room: number;
+  gray: number;
   cycState: CycState | null;
-  synState: SynState | null;
+  sneezeState: SneezeState | null;
+  /** Hapşırık şarj yüzdesi (dolum çubuğu ve erişilebilir ad). */
+  sneezePct: number;
   /** "Sıklamen özütü hazır" toast'u bu oyunda gösterildi mi. */
   cycAnnounced: boolean;
-  /** NS4-19: sentetik açıcı bu oyunda ilk kez kullanılabilir oldu mu (analitik bir kez). */
-  synAnnounced: boolean;
+  /** NS4-24: hapşırık bu oyunda ilk kez kullanılabilir oldu mu (toast + analitik bir kez). */
+  sneezeAnnounced: boolean;
 }
 
 function initialHud(): HudCache {
@@ -48,17 +59,35 @@ function initialHud(): HudCache {
     lines: -1,
     cong: -1,
     cyc: null,
-    syn: null,
+    sneeze: null,
     mult: -1,
-    reb: -1,
     danger: null,
+    breath: null,
+    pressure: -1,
+    room: -1,
+    gray: -1,
     cycState: null,
-    synState: null,
+    sneezeState: null,
+    sneezePct: -1,
     cycAnnounced: false,
-    synAnnounced: false,
+    sneezeAnnounced: false,
   };
 }
 const hud: HudCache = initialHud();
+
+/** NS4-20: nefes halkasının ritmi. ferah: derin ve yavaş; orta; tikali: sığ ve hızlı. */
+export type BreathState = 'ferah' | 'orta' | 'tikali';
+/** Nefes halkası eşikleri (tıkanıklık oranı). `orta`, güçlerin açıldığı eşikle aynıdır. */
+export const BREATH_MID = 0.35;
+export const BREATH_TIGHT = 0.7;
+export function breathState(congestion: number): BreathState {
+  return congestion >= BREATH_TIGHT ? 'tikali' : congestion >= BREATH_MID ? 'orta' : 'ferah';
+}
+/** NS4-20: basınç vinyeti BREATH_MID'den başlar, tam tıkanıklıkta 1 olur; 0,05 adımlarla (gereksiz stil yazımı yok). */
+export function pressureLevel(congestion: number): number {
+  const k = (congestion - BREATH_MID) / (1 - BREATH_MID);
+  return Math.round(Math.min(1, Math.max(0, k)) * 20) / 20;
+}
 
 export function fmt(n: number): string {
   return n.toLocaleString('tr-TR');
@@ -90,8 +119,36 @@ export function updateHud(g: Game, playing: boolean): void {
     hud.danger = d;
     $('danger').classList.toggle('on', d);
   }
+  const br = playing ? breathState(cg) : 'ferah';
+  if (br !== hud.breath) {
+    hud.breath = br;
+    $('breath').dataset['state'] = br;
+  }
+  const pr = playing ? pressureLevel(cg) : 0;
+  if (pr !== hud.pressure) {
+    hud.pressure = pr;
+    $('pressure').style.opacity = String(pr);
+  }
+  // NS4-27: oda etiketi, kalan bulutçuk ve odaya özgü tahta tonu (data-room)
+  const room = g.rooms ? g.room : -2;
+  if (room !== hud.room) {
+    hud.room = room;
+    const on = room >= 0;
+    $('room-hud').style.display = on ? 'flex' : 'none';
+    $('board-bg').dataset['room'] = on ? String(Math.min(room, ROOMS.length)) : '';
+    if (on) {
+      $('room-name').textContent = roomLabel(room);
+      $('room-name').setAttribute('aria-label', `Oda: ${roomText(room).name}`);
+      $('room-gray').style.display = room < ROOMS.length ? '' : 'none';
+    }
+  }
+  const gray = g.rooms && g.room < ROOMS.length ? g.roomGray : 0;
+  if (gray !== hud.gray) {
+    hud.gray = gray;
+    $('room-gray-n').textContent = String(gray);
+  }
   const cyc = g.canCyc(),
-    syn = g.canSyn();
+    sneeze = g.canSneeze();
   if (cyc !== hud.cyc) {
     hud.cyc = cyc;
     $('btn-cyc', HTMLButtonElement).disabled = !cyc;
@@ -102,27 +159,32 @@ export function updateHud(g: Game, playing: boolean): void {
       track('cyclamen_available', { level: g.level, congestion: cg });
     }
   }
-  if (syn !== hud.syn) {
-    hud.syn = syn;
-    $('btn-syn', HTMLButtonElement).disabled = !syn;
-    $('btn-syn').classList.toggle('ready', syn && g.synUses === 0);
-    if (syn && !hud.synAnnounced) {
-      hud.synAnnounced = true;
-      track('synthetic_available', { level: g.level, congestion: cg });
+  if (sneeze !== hud.sneeze) {
+    hud.sneeze = sneeze;
+    $('btn-sneeze', HTMLButtonElement).disabled = !sneeze;
+    $('btn-sneeze').classList.toggle('ready', sneeze);
+    // ilk açılış sıklamenle aynı eşikte (sıklamen toast'u görünür kalır); yeniden dolunca her seferinde haber verilir
+    if (sneeze && g.sneezeUses > 0) toast('Burnun yine kaşınıyor… Hapşırık hazır!');
+    if (sneeze && !hud.sneezeAnnounced) {
+      hud.sneezeAnnounced = true;
+      track('sneeze_available', { level: g.level, congestion: cg });
     }
   }
-  // NS4-07: buton durumu (kilitli / hazır / kullanıldı / aktif etki / rebound riski) ve alt metni
+  // NS4-07: buton durumu (kilitli / hazır / kullanıldı / aktif etki / doluyor) ve alt metni
   const cs = cycState(g, playing);
   if (cs !== hud.cycState) {
     hud.cycState = cs;
     renderPowerup('cyc', cs);
   }
-  const ss = synState(g, playing);
-  if (ss !== hud.synState) {
-    hud.synState = ss;
-    renderPowerup('syn', ss);
+  const ss = sneezeState(g),
+    sp = sneezePercent(g);
+  if (ss !== hud.sneezeState || sp !== hud.sneezePct) {
+    hud.sneezeState = ss;
+    hud.sneezePct = sp;
+    renderPowerup('sneeze', ss);
+    $('sneeze-fill').style.transform = `scaleX(${sp / 100})`;
   }
-  // NS4-06: oyun bitince (playing=false) ×2 ve Rebound sayaçları gösterilmez; game-over ekranının arkasında
+  // NS4-06: oyun bitince (playing=false) ×2 sayacı gösterilmez; game-over ekranının arkasında
   // donmuş süre kalmaz (NS4-01 Not C). Yeni oyunda resetHud() önbelleği sıfırlar.
   const m = playing ? Math.ceil(g.multT / 1000) : 0;
   if (m !== hud.mult) {
@@ -130,13 +192,6 @@ export function updateHud(g: Game, playing: boolean): void {
     const el = $('badge-mult');
     el.style.display = m > 0 ? 'block' : 'none';
     if (m > 0) el.textContent = `Ferah nefes ×2 · ${m} sn`;
-  }
-  const rb = playing ? Math.ceil(g.reboundT / 1000) : 0;
-  if (rb !== hud.reb) {
-    hud.reb = rb;
-    const el = $('badge-rebound');
-    el.style.display = rb > 0 ? 'block' : 'none';
-    if (rb > 0) el.textContent = `Rebound: tıkanıklık geri tepiyor · ${rb} sn`;
   }
 }
 /**
@@ -152,15 +207,17 @@ export function resetHud(): void {
  * ve erişilebilir ad. NS4-10: durum yalnızca renkle değil, her düzende metinle de okunur.
  */
 function renderPowerup(kind: 'cyc', state: CycState): void;
-function renderPowerup(kind: 'syn', state: SynState): void;
-function renderPowerup(kind: 'cyc' | 'syn', state: CycState | SynState): void {
+function renderPowerup(kind: 'sneeze', state: SneezeState): void;
+function renderPowerup(kind: 'cyc' | 'sneeze', state: CycState | SneezeState): void {
   const [text, short, name] =
     kind === 'cyc'
       ? [CYC_TEXT[state as CycState], CYC_SHORT[state as CycState], CYC_NAME]
-      : [SYN_TEXT[state as SynState], SYN_SHORT[state as SynState], SYN_NAME];
-  const b = $(kind === 'cyc' ? 'btn-cyc' : 'btn-syn');
+      : [SNEEZE_TEXT[state as SneezeState], SNEEZE_SHORT[state as SneezeState], SNEEZE_NAME];
+  const b = $(kind === 'cyc' ? 'btn-cyc' : 'btn-sneeze');
   b.dataset['state'] = state;
-  b.setAttribute('aria-label', `${name}: ${text}`);
+  // NS4-24: dolarken yüzde erişilebilir adda da okunur
+  const pct = kind === 'sneeze' && state === 'charging' ? ` %${hud.sneezePct}` : '';
+  b.setAttribute('aria-label', `${name}: ${text}${pct}`);
   $(kind + '-sub').textContent = text;
   $(kind + '-chip').textContent = short;
 }
@@ -175,21 +232,25 @@ export function forgetDanger(): void {
 }
 
 /**
- * NS4-07: oturumun geçici HUD durumlarını temizler (×2 / Rebound rozetleri, tehlike vinyeti, toast, popup)
+ * NS4-07: oturumun geçici HUD durumlarını temizler (×2 rozeti, tehlike vinyeti, toast, popup)
  * ve önbelleği sıfırlar; sonraki updateHud her şeyi yeniden yazar. Ana menüye dönüşte ve yeni oyunda çağrılır.
  */
 export function clearSessionHud(): void {
   $('badge-mult').style.display = 'none';
-  $('badge-rebound').style.display = 'none';
   // güçlendirici butonları menünün arkasında eski oyunun durumunu göstermez (yeni oyun başlangıç durumu)
-  for (const id of ['btn-cyc', 'btn-syn'] as const) {
+  for (const id of ['btn-cyc', 'btn-sneeze'] as const) {
     const b = $(id, HTMLButtonElement);
     b.disabled = true;
     b.classList.remove('ready');
   }
   renderPowerup('cyc', 'locked');
-  renderPowerup('syn', 'locked');
+  renderPowerup('sneeze', 'locked');
+  $('sneeze-fill').style.transform = 'scaleX(1)';
   hideDanger();
+  $('breath').dataset['state'] = 'ferah';
+  $('pressure').style.opacity = '0';
+  $('room-hud').style.display = 'none';
+  $('board-bg').dataset['room'] = '';
   clearNotifications();
   resetHud();
 }
@@ -210,7 +271,9 @@ export function hudScale(L: Pick<Layout, 'portrait' | 'cell'>): number {
 export function applyHudLayout(L: Layout): void {
   $('stage').style.setProperty('--hud-scale', hudScale(L).toFixed(3));
   place($('board-bg'), L.board);
-  $('board-bg').style.backgroundSize = L.cell + 'px ' + L.cell + 'px';
+  // NS4-21: iki ızgara katmanı hücre boyutunda döşenir, derinlik katmanı (en alttaki) tahtayı kaplar
+  const grid = `${L.cell}px ${L.cell}px`;
+  $('board-bg').style.backgroundSize = `${grid}, ${grid}, 100% 100%`;
   place($('meter'), L.meter);
   const ml = $('meter-lbl');
   ml.style.left = L.meter.x - 18 + 'px';
@@ -228,15 +291,20 @@ export function applyHudLayout(L: Layout): void {
   $('stats').classList.toggle('compact', !!L.compactStats);
   place($('btn-hold'), L.btnHold);
   place($('btn-cyc'), L.btnCyc);
-  place($('btn-syn'), L.btnSyn);
+  place($('btn-sneeze'), L.btnSneeze);
   place($('btn-pause'), L.btnPause);
-  ['btn-hold', 'btn-cyc', 'btn-syn'].forEach((id) => $(id).classList.toggle('compact-btn', L.compactBtns));
+  ['btn-hold', 'btn-cyc', 'btn-sneeze'].forEach((id) => $(id).classList.toggle('compact-btn', L.compactBtns));
+  // NS4-27: oda etiketleri tahtanın üst kenarına oturur (ortadaki hava çıkışının iki yanında)
+  const rh = $('room-hud');
+  rh.style.left = L.board.x + 8 + 'px';
+  rh.style.width = L.board.w - 16 + 'px';
+  rh.style.top = L.board.y - 11 + 'px';
   const pop = $('popups');
   place(pop, { x: L.board.x, y: L.board.y + L.board.h * 0.22, w: L.board.w, h: L.board.h * 0.4 });
   $('toast').style.top = L.board.y + 8 + 'px';
   $('toast').style.left = L.board.x + L.board.w / 2 + 'px';
   $('toast').style.maxWidth = Math.max(180, L.board.w - 16) + 'px';
-  // NS4-10: ×2 / Rebound rozetleri tahta genişliğinde bir sütunda, tahtanın alt kenarına hizalı; dar tahtada
+  // NS4-10: ×2 rozeti tahta genişliğinde bir sütunda, tahtanın alt kenarına hizalı; dar tahtada
   // metin satır kırar ve tahtanın dışına taşmaz (önceki konum: alt kenardan 40 / 74 px yukarıda, ortalı).
   const fx = $('fx-badges');
   fx.style.left = L.board.x + 8 + 'px';

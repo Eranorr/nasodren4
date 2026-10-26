@@ -26,7 +26,7 @@ interface LayoutBase {
   readonly stats: Rect;
   readonly btnHold: Rect;
   readonly btnCyc: Rect;
-  readonly btnSyn: Rect;
+  readonly btnSneeze: Rect;
   readonly btnPause: Rect;
   readonly holdSlot: Pt;
   /** Portrede 2, yatayda 5 slot; okuyan kod indeks dışını `undefined` olarak ele almalıdır. */

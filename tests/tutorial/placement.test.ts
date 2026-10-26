@@ -46,7 +46,7 @@ describe.each(VIEWPORTS)('%i×%i', (W, H, place) => {
       stats: L.stats,
       btnHold: L.btnHold,
       btnCyc: L.btnCyc,
-      btnSyn: L.btnSyn,
+      btnSneeze: L.btnSneeze,
       btnPause: L.btnPause,
       meter: L.meter,
     }))

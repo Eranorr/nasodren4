@@ -32,6 +32,8 @@ export interface LifecycleDeps {
   tutorial?: Pick<Tutorial, 'onGameStart' | 'onPause' | 'onResume' | 'onSessionEnd'>;
   /** NS4-18: oyun sonu ekranı açılmadan hemen önce (global gönderim paneli bu oyun için hazırlanır). */
   onGameRecorded?: (entry: LocalScore) => void;
+  /** NS4-27: Sinüs Odaları akışı (varsayılan açık; eski davranışı sınayan testler kapatır). */
+  rooms?: boolean;
 }
 
 export interface Lifecycle {
@@ -53,6 +55,7 @@ export function createLifecycle({
   resetInput,
   tutorial,
   onGameRecorded,
+  rooms = true,
 }: LifecycleDeps): Lifecycle {
   let appState: AppState = 'menu';
   /** NS4-18: oyun başına kimlik (yerel kayıt tekrarını ve global tekrar gönderimi engeller). */
@@ -61,10 +64,12 @@ export function createLifecycle({
 
   function start() {
     sound.unlock();
-    game.reset();
-    gameId = newGameId();
-    clearSessionHud(); // NS4-07: önceki oturumdan kalan rozet/toast/popup temizlenir (önceden yalnızca resetHud)
+    // NS4-07: önceki oturumdan kalan rozet/toast/popup temizlenir (önceden yalnızca resetHud).
+    // NS4-27: reset'ten önce: yeni oyunun ilk oda popup'ı (roomstart) silinmesin.
+    clearSessionHud();
     resetNewBadges();
+    game.reset({ rooms }); // NS4-27: Sinüs Odaları
+    gameId = newGameId();
     view.resetFx(); // NS4-15: overT, anim, dalga ve flaşlar ile yeni efekt katmanları ve parçacıklar
     view.syncAll();
     resetInput();
@@ -155,7 +160,8 @@ export function createLifecycle({
       lines: game.lines,
       dur_s: Math.round(game.elapsed / 1000),
       cyc_used: game.cycUsed,
-      syn_uses: game.synUses,
+      sneeze_uses: game.sneezeUses,
+      rooms_cleared: game.roomsCleared,
       tetrises: game.tetrises,
     });
     setTimeout(() => showOver(isBest, entry), 950);

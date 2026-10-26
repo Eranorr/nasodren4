@@ -159,24 +159,31 @@ class FakeOther {}
 
 /** index.html'deki ekran kimlikleri (class="screen"). */
 export const SCREEN_IDS = ['scr-start', 'scr-how', 'scr-pause', 'scr-over', 'scr-set', 'scr-scores'] as const;
-const BUTTON_IDS = ['btn-hold', 'btn-cyc', 'btn-syn', 'btn-pause'];
+const BUTTON_IDS = ['btn-hold', 'btn-cyc', 'btn-sneeze', 'btn-pause'];
 const ELEMENT_IDS = [
   'hud-score',
   'hud-level',
   'hud-lines',
   'meter-cover',
   'danger',
+  'pressure',
+  'breath',
+  'board-bg',
+  'room-hud',
+  'room-name',
+  'room-gray',
+  'room-gray-n',
   'cyc-sub',
-  'syn-sub',
+  'sneeze-sub',
+  'sneeze-fill',
   'badge-mult',
-  'badge-rebound',
   'toast',
   'popups',
   'tip-start',
   'tip-pause',
   'tip-over',
   'cyc-chip',
-  'syn-chip',
+  'sneeze-chip',
   'fx-badges',
   // oyun sonu ekranı (renderGameOver)
   'o-score',

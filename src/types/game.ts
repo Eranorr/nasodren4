@@ -3,7 +3,7 @@
 
 /** Tetrominolar: 1 I, 2 O, 3 T, 4 S, 5 Z, 6 J, 7 L. */
 export type TetrominoType = 1 | 2 | 3 | 4 | 5 | 6 | 7;
-/** Çöp (inflamasyon) hücresi. */
+/** Tıkanıklık (inflamasyon) hücresi: oyun sonu griye dönen yığın ve testler. NS4-24: rebound çöpü kaldırıldı. */
 export type GarbageCell = 8;
 /** Dokusu ve rengi olan her hücre değeri. */
 export type BlockId = TetrominoType | GarbageCell;
@@ -27,9 +27,9 @@ export type KickTable = Readonly<Record<RotationTransition, readonly Offset[]>>;
 
 /** Game.state: 'idle' yalnızca sayfa açılışında, ilk start() öncesindedir. */
 export type GameState = 'idle' | 'play' | 'clearing' | 'draining' | 'over';
-export type GameOverReason = 'blockout' | 'lockout' | 'overlap' | 'garbage';
-/** 'lines' satır temizleme, 'cyc' sıklamen özütü, 'syn' sentetik açıcı. */
-export type PendingClearKind = 'lines' | 'cyc' | 'syn';
-export type PowerupKind = Exclude<PendingClearKind, 'lines'>;
+export type GameOverReason = 'blockout' | 'lockout' | 'overlap';
+/** 'lines' satır temizleme, 'cyc' sıklamen özütü, 'sneeze' hapşırık (NS4-24: 'syn' sentetik açıcı yerine). */
+export type PendingClearKind = 'lines' | 'cyc' | 'sneeze' | 'room';
+export type PowerupKind = Exclude<PendingClearKind, 'lines' | 'room'>;
 /** 0 yok, 1 mini, 2 tam T-spin. */
 export type TSpinKind = 0 | 1 | 2;

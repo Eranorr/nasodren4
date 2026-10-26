@@ -27,6 +27,12 @@
   /* Oyun alanı ve ızgara */
   --color-board: #0f3d47;
   --color-board-grid: rgba(255, 255, 255, 0.055);
+  /* NS4-21: sinüs boşluğu derinliği (açık merkez → koyu kenar) ve yumuşak sinüs duvarı (pastel turkuaz, pembe hale) */
+  --color-board-light: #17586a;
+  --color-board-deep: #0a2c35;
+  --color-rim: #bfe9e4;
+  --color-rim-inner: #f4fbfa;
+  --color-rim-glow: rgba(255, 179, 214, 0.45);
 
   /* Sıklamen vurgusu */
   --color-cyclamen: #d6337f;
@@ -37,13 +43,23 @@
   --color-fresh: #0f9e93;
   --color-fresh-strong: #0b7f77;
 
-  /* Durumlar: başarı, uyarı, rebound/tehlike */
+  /* Durumlar: başarı, uyarı, tehlike */
   --color-success: #2fd08a;
   --color-warning: #ffd166;
   --color-danger: #cf3f2b;
   --color-danger-strong: #ad2e22;
   --color-danger-soft: #ffb1b8;
   --color-danger-bright: #ff5d68;
+
+  /* NS4-24: hapşırık (sıcak, neşeli turuncu; tehlike kırmızısından ve sıklamenden ayrı) */
+  --color-sneeze: #e8a317;
+  --color-sneeze-strong: #a85f08;
+  --color-sneeze-soft: #ffd9a3;
+
+  /* NS4-20: tıkanıklık basıncı (iğrenç olmayan, buğulu leylak; tehlike kırmızısından ayrı) */
+  --color-pressure: #6a5a8e;
+  --color-pressure-soft: #c9bfe0;
+  --color-fresh-soft: #bff0ea;
 
   /* Doğa: sıklamen gövdesi ve yaprakları (NS4-09 başlangıç ekranı) */
   --color-leaf: #1d9a6c;
@@ -64,7 +80,7 @@
   --shadow-text: 0 2px 0 rgba(0, 0, 0, 0.25), 0 0 18px rgba(0, 0, 0, 0.35);
 
   /* Köşe yuvarlaklıkları */
-  --radius-board: 10px;
+  --radius-board: 14px;
   --radius-control: 14px;
   --radius-button: 16px;
   --radius-panel: 18px;
@@ -188,15 +204,44 @@ body {
   -webkit-backdrop-filter: blur(var(--blur-surface)) saturate(1.15);
   backdrop-filter: blur(var(--blur-surface)) saturate(1.15);
 }
+/* NS4-21: sinüs boşluğu: derinlikli zemin, yumuşak çok katmanlı duvar ve üstte hava çıkışı (ostium).
+   Izgara aynı; arka plan boyutu hud.ts'ten (ızgara: hücre, derinlik: %100). */
 #board-bg {
   background-color: var(--color-board);
   border-radius: var(--radius-board);
   box-shadow:
-    0 0 0 4px var(--color-border),
+    0 0 0 3px var(--color-rim-inner),
+    0 0 0 8px var(--color-rim),
+    0 0 26px 10px var(--color-rim-glow),
+    inset 0 0 28px 4px color-mix(in srgb, var(--color-board-deep) 70%, transparent),
     var(--shadow-board);
   background-image:
     linear-gradient(to right, var(--color-board-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-board-grid) 1px, transparent 1px);
+    linear-gradient(to bottom, var(--color-board-grid) 1px, transparent 1px),
+    radial-gradient(
+      ellipse 115% 85% at 50% 32%,
+      var(--color-board-light) 0%,
+      var(--color-board) 55%,
+      var(--color-board-deep) 100%
+    );
+}
+/* sinüs ağzı: tahtanın üst kenarının ortasında, havanın çıktığı yumuşak açıklık */
+#board-bg::after {
+  content: '';
+  position: absolute;
+  left: 32%;
+  right: 32%;
+  top: -11px;
+  height: 14px;
+  border-radius: 0 0 var(--radius-pill) var(--radius-pill);
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    var(--color-bg-glow) 0%,
+    var(--color-rim) 55%,
+    var(--color-rim-inner) 100%
+  );
+  box-shadow: 0 -6px 14px 2px color-mix(in srgb, var(--color-fresh) 25%, transparent);
+  pointer-events: none;
 }
 #meter {
   border-radius: var(--radius-pill);
@@ -339,7 +384,7 @@ input:focus-visible {
 .gbtn[disabled] .t small {
   color: var(--color-btn-locked-text);
 }
-/* NS4-07 durumları (data-state): sıklamen kullanıldı / ×2 etkin, sentetik rebound riski / rebound */
+/* NS4-07 durumları (data-state): sıklamen kullanıldı / ×2 etkin; NS4-24: hapşırık doluyor */
 #btn-cyc[data-state='used'] {
   border-color: color-mix(in srgb, var(--color-cyclamen) 35%, transparent);
 }
@@ -356,17 +401,29 @@ input:focus-visible {
   filter: none;
   opacity: 1;
 }
-#btn-syn[data-state='risk'] {
-  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+#btn-sneeze[data-state='charging'] {
+  border-color: color-mix(in srgb, var(--color-sneeze) 40%, transparent);
 }
-#btn-syn[data-state='risk'] .t small,
-#btn-syn[data-state='rebound'] .t small {
-  color: var(--color-danger-strong);
+#btn-sneeze[data-state='charging'] .t small {
+  color: var(--color-sneeze-strong);
 }
-#btn-syn[data-state='rebound'] {
-  color: var(--color-btn-text);
-  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-btn-bg));
-  border-color: var(--color-danger);
+/* NS4-24: hapşırık şarj çubuğu (butonun alt kenarı; dolum hud.ts'ten scaleX) */
+.gbtn .charge {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-sneeze) 18%, transparent);
+}
+.gbtn .charge i {
+  display: block;
+  height: 100%;
+  background: var(--color-sneeze);
+  transform-origin: left;
+  transition: transform var(--dur-meter) ease-out;
 }
 .gbtn.ready {
   animation: readyPulse 1.6s ease-in-out infinite;
@@ -374,8 +431,8 @@ input:focus-visible {
 #btn-cyc.ready {
   border-color: var(--color-cyclamen);
 }
-#btn-syn.ready {
-  border-color: var(--color-danger);
+#btn-sneeze.ready {
+  border-color: var(--color-sneeze);
 }
 @keyframes readyPulse {
   0%,
@@ -386,16 +443,16 @@ input:focus-visible {
     box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-cyclamen) 22%, transparent);
   }
 }
-#btn-syn.ready {
-  animation-name: readyPulseR;
+#btn-sneeze.ready {
+  animation-name: readyPulseS;
 }
-@keyframes readyPulseR {
+@keyframes readyPulseS {
   0%,
   100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 0%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-sneeze) 0%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-danger) 20%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-sneeze) 24%, transparent);
   }
 }
 #btn-pause {
@@ -457,17 +514,12 @@ input:focus-visible {
   color: var(--color-on-accent);
   box-shadow: inset 0 0 0 1px var(--color-cyclamen-strong);
 }
-.gbtn[data-state='risk'] .chip {
+.gbtn[data-state='charging'] .chip {
   background: var(--color-btn-bg);
-  color: var(--color-danger-strong);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-danger) 55%, transparent);
+  color: var(--color-sneeze-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-sneeze) 55%, transparent);
 }
-.gbtn[data-state='rebound'] .chip {
-  background: var(--color-danger-strong);
-  color: var(--color-on-accent);
-  box-shadow: inset 0 0 0 1px var(--color-danger-strong);
-}
-/* NS4-10: ×2 / Rebound rozetleri tahta genişliğinde, alta hizalı bir sütun (hud.ts yerleştirir) */
+/* NS4-10: ×2 rozeti tahta genişliğinde, alta hizalı bir sütun (hud.ts yerleştirir) */
 #fx-badges {
   position: absolute;
   display: flex;
@@ -496,13 +548,55 @@ input:focus-visible {
   transform: translateX(-50%);
   display: none;
 }
-#badge-rebound {
-  background: var(--color-danger);
-  color: var(--color-on-accent);
-}
 #badge-mult {
   background: var(--color-cyclamen);
   color: var(--color-on-accent);
+}
+/* NS4-27: Sinüs Odaları etiketleri (tahta üst kenarı; sol: oda, sağ: kalan bulutçuk) */
+#room-hud {
+  display: none;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 1;
+}
+.room-pill {
+  max-width: 34%;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(11px * var(--hud-scale));
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text);
+  background: var(--color-rim-inner);
+  box-shadow: 0 0 0 1px var(--color-rim);
+}
+.room-pill b {
+  font-variant-numeric: tabular-nums;
+}
+/* NS4-27: her odanın kendi sinüs tonu (yalnızca derinlik ve duvar; ızgara ve bloklar aynı) */
+#board-bg[data-room='1'] {
+  --color-board-light: #2a4f74;
+  --color-rim: #d3d6f5;
+  --color-rim-glow: rgba(196, 180, 255, 0.5);
+}
+#board-bg[data-room='2'] {
+  --color-board-light: #1c5f5a;
+  --color-rim: #c6f0dc;
+  --color-rim-glow: rgba(150, 236, 196, 0.5);
+}
+#board-bg[data-room='3'] {
+  --color-board-light: #4a4f6e;
+  --color-rim: #ffe1cf;
+  --color-rim-glow: rgba(255, 196, 160, 0.5);
+}
+#board-bg[data-room='4'] {
+  --color-board-light: #5a2e55;
+  --color-rim: #ffd3e6;
+  --color-rim-glow: rgba(255, 140, 200, 0.55);
 }
 #popups {
   position: absolute;
@@ -536,8 +630,8 @@ input:focus-visible {
 .pop.cyc .big {
   color: var(--color-cyclamen-soft);
 }
-.pop.warn .big {
-  color: var(--color-danger-soft);
+.pop.sneeze .big {
+  color: var(--color-sneeze-soft);
 }
 @keyframes pop {
   0% {
@@ -580,6 +674,72 @@ input:focus-visible {
 #toast.show {
   opacity: 1;
   transform: translate(-50%, 6px);
+}
+/* NS4-20: basınç vinyeti; opaklık HUD'dan (0..1, 0,05 adım), yumuşak geçişle */
+#pressure {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.6s ease-out;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 42%,
+    color-mix(in srgb, var(--color-pressure) 28%, transparent) 70%,
+    color-mix(in srgb, var(--color-pressure) 62%, transparent) 100%
+  );
+}
+/* NS4-20: nefes halkası: ferah → derin ve yavaş, orta → kısalır, tıkalı → sığ ve hızlı */
+.breath {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.35em;
+  vertical-align: -0.2em;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--color-fresh-soft), var(--color-fresh) 70%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-fresh) 25%, transparent);
+  animation: breathDeep 4.2s ease-in-out infinite;
+  transition:
+    background var(--dur-meter),
+    box-shadow var(--dur-meter);
+}
+.breath[data-state='orta'] {
+  background: radial-gradient(circle at 35% 35%, var(--color-pressure-soft), var(--color-fresh) 80%);
+  animation: breathMid 2.6s ease-in-out infinite;
+}
+.breath[data-state='tikali'] {
+  background: radial-gradient(circle at 35% 35%, var(--color-pressure-soft), var(--color-pressure) 70%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-pressure) 30%, transparent);
+  animation: breathShallow 1.3s ease-in-out infinite;
+}
+@keyframes breathDeep {
+  0%,
+  100% {
+    transform: scale(0.7);
+  }
+  45% {
+    transform: scale(1.15);
+  }
+}
+@keyframes breathMid {
+  0%,
+  100% {
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+@keyframes breathShallow {
+  0%,
+  100% {
+    transform: scale(0.9);
+  }
+  50% {
+    transform: scale(1);
+  }
 }
 #danger {
   position: absolute;
@@ -1662,8 +1822,12 @@ input:focus-visible {
     animation-duration: 0.01s;
   }
   .gbtn.ready,
-  #danger.on {
+  #danger.on,
+  .breath {
     animation: none;
+  }
+  #pressure {
+    transition: none;
   }
   /* NS4-12: öğretici kartı giriş hareketi */
   .tutorial {

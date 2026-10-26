@@ -1,6 +1,6 @@
 // NS4-18: ortak doğrulama kuralları (istemci + Edge Function aynı modülü kullanır).
 import { describe, expect, it } from 'vitest';
-import { CFG } from '../../src/config/gameConfig';
+import { CFG, ROOMS } from '../../src/config/gameConfig';
 import {
   GAME_RULES,
   NICKNAME_MAX,
@@ -30,6 +30,9 @@ describe('kurallar oyun sabitleriyle tutarlı', () => {
     expect(GAME_RULES.linesPerLevel).toBe(CFG.linesPerLevel);
     expect(GAME_RULES.lineClearSeconds * 1000).toBe(CFG.lineClearMs);
     expect(GAME_RULES.cycMult).toBe(CFG.cycMult);
+    // NS4-27: oda bonusu ve oda sayısı oyunla aynı
+    expect(GAME_RULES.roomBonus).toBe(CFG.roomBonus);
+    expect(GAME_RULES.rooms).toBe(ROOMS.length);
   });
   it('seviye satırdan belirlenir (Game.scoreClear ile aynı formül)', () => {
     expect([0, 9, 10, 23, 99, 190, 191, 5000].map(expectedLevel)).toEqual([1, 1, 2, 3, 10, 20, 20, 20]);
@@ -114,5 +117,9 @@ describe('skor gövdesi doğrulama', () => {
     expect(minDurationForLines(4)).toBeCloseTo(0.3);
     expect(minDurationForLines(5)).toBeCloseTo(0.6);
     expect(maxPlausibleScore(5000, 20, 21600)).toBe(SCORE_LIMITS.maxScore);
+  });
+  it('NS4-27: hızlı geçilen dört oda (az satır, kısa süre) sınırın içinde kalır', () => {
+    // 4 oda × en az 1 satır, seviye 1, 60 sn: yalnızca oda bonusu 1000 × (1+2+3+4) = 10 000
+    expect(maxPlausibleScore(4, 1, 60)).toBeGreaterThan(10_000 + 4 * 800);
   });
 });

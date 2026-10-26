@@ -1,15 +1,16 @@
 /* =====================================================================
    GÜÇLENDİRİCİ BUTON DURUMLARI (NS4-07)
-   Sıklamen ve sentetik açıcı butonlarının durumu Game'den türetilir; kural
+   Sıklamen ve hapşırık butonlarının durumu Game'den türetilir; kural
    hesaplamaz, yalnızca okur. Durum `data-state` ve alt metin olarak gösterilir.
-   Açılma eşiği, süreler ve rebound kuralları Game/CFG'dedir; burada değişmez.
+   Açılma eşiği, süreler ve şarj kuralları Game/CFG'dedir; burada değişmez.
+   NS4-24: sentetik açıcı (rebound riski) yerine hapşırık (yeniden dolar).
    ===================================================================== */
 import type { Game } from '../game/Game';
 
 /** locked: eşik altı · ready: kullanılabilir · used: kullanıldı · active: ×2 etkisi sürüyor */
 export type CycState = 'locked' | 'ready' | 'used' | 'active';
-/** locked/ready: ilk kullanım öncesi · risk: tekrar kullanım rebound yapar · rebound: rebound sürüyor */
-export type SynState = 'locked' | 'ready' | 'risk' | 'rebound';
+/** locked: eşik altı (şarj dolu) · ready: kullanılabilir · charging: kullanıldı, yeniden doluyor */
+export type SneezeState = 'locked' | 'ready' | 'charging';
 
 /** Kısa buton yardımcı metinleri (oyun durumu; sağlık içeriği değildir). */
 export const CYC_TEXT: Readonly<Record<CycState, string>> = {
@@ -18,11 +19,10 @@ export const CYC_TEXT: Readonly<Record<CycState, string>> = {
   used: 'Bu oyunda kullanıldı',
   active: 'Kullanıldı · ×2 etkin',
 };
-export const SYN_TEXT: Readonly<Record<SynState, string>> = {
-  locked: 'Hızlı rahatlama',
-  ready: 'Hazır · hızlı rahatlama',
-  risk: 'Tekrarı rebound yapar',
-  rebound: 'Rebound sürüyor',
+export const SNEEZE_TEXT: Readonly<Record<SneezeState, string>> = {
+  locked: 'Tıkanıklık %35’te açılır',
+  ready: 'Hazır · üstü savurur',
+  charging: 'Burun kaşınıyor…',
 };
 
 /** NS4-10: dar (compact) düzende alt metin yerine gösterilen kısa durum etiketleri. */
@@ -32,15 +32,14 @@ export const CYC_SHORT: Readonly<Record<CycState, string>> = {
   used: 'Kullanıldı',
   active: '×2 etkin',
 };
-export const SYN_SHORT: Readonly<Record<SynState, string>> = {
+export const SNEEZE_SHORT: Readonly<Record<SneezeState, string>> = {
   locked: 'Kilitli',
   ready: 'Hazır',
-  risk: 'Rebound riski',
-  rebound: 'Rebound sürüyor',
+  charging: 'Doluyor',
 };
 /** Erişilebilir ad öneki (buton adı; durum metni eklenir). */
 export const CYC_NAME = 'Sıklamen özütü';
-export const SYN_NAME = 'Sentetik açıcı';
+export const SNEEZE_NAME = 'Hapşırık';
 
 /** `playing` değilse (oyun sonu) süren etkiler gösterilmez; HUD rozetleriyle aynı kural. */
 export function cycState(g: Game, playing: boolean): CycState {
@@ -48,8 +47,12 @@ export function cycState(g: Game, playing: boolean): CycState {
   return g.canCyc() ? 'ready' : 'locked';
 }
 
-export function synState(g: Game, playing: boolean): SynState {
-  if (playing && g.reboundT > 0) return 'rebound';
-  if (g.synUses > 0) return 'risk';
-  return g.canSyn() ? 'ready' : 'locked';
+export function sneezeState(g: Game): SneezeState {
+  if (g.sneezeCharge() < 1) return 'charging';
+  return g.canSneeze() ? 'ready' : 'locked';
+}
+
+/** Şarj yüzdesi (0..100, 5'lik adım): "Doluyor" durumunda butonun dolum çubuğu. */
+export function sneezePercent(g: Game): number {
+  return Math.round(g.sneezeCharge() * 20) * 5;
 }

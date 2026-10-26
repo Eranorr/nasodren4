@@ -30,7 +30,9 @@
           <div id="stats" class="abs">
             <div class="score" id="hud-score">0</div>
             <div class="row">
-              <span>Nefes sv. <b id="hud-level">1</b></span
+              <span
+                ><i id="breath" class="breath" data-state="ferah" aria-hidden="true"></i>Nefes sv.
+                <b id="hud-level">1</b></span
               ><span>Drenaj <b id="hud-lines">0</b></span>
             </div>
           </div>
@@ -38,7 +40,11 @@
         <div id="over-hud">
           <div id="fx-badges" class="abs">
             <div id="badge-mult" class="badge">Ferah nefes ×2</div>
-            <div id="badge-rebound" class="badge">Rebound</div>
+          </div>
+          <!-- NS4-27: Sinüs Odaları: tahtanın üst kenarında oda ve kalan bulutçuk etiketleri -->
+          <div id="room-hud" class="abs">
+            <span id="room-name" class="room-pill">1/4 · Yanak</span>
+            <span id="room-gray" class="room-pill">Bulutçuk <b id="room-gray-n">0</b></span>
           </div>
           <div id="popups" class="abs"></div>
           <div id="toast"></div>
@@ -77,22 +83,25 @@
               ><span class="chip" id="cyc-chip" aria-hidden="true">Kilitli</span></span
             >
           </button>
-          <button id="btn-syn" class="gbtn" disabled aria-label="Sentetik açıcı kullan">
+          <button id="btn-sneeze" class="gbtn" disabled aria-label="Hapşırık kullan">
+            <!-- NS4-24: rüzgâr esintisi (hapşırık) -->
             <svg
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#d93a48"
+              stroke="#e8a317"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
             >
-              <rect x="7" y="9" width="8" height="12" rx="2.5" />
-              <path d="M9 9V6h4v3M13 6h3l1.5-1.5M18 3.5l1.5-.8M18.4 6.2h1.8M17.8 8.4l1.4.9" />
+              <path d="M3 8h10a3 3 0 1 0-3-3" />
+              <path d="M3 12h15a3 3 0 1 1-3 3" />
+              <path d="M3 16h6" />
             </svg>
             <span class="t"
-              >Sentetik açıcı<small id="syn-sub">Hızlı ama geri tepebilir</small
-              ><span class="chip" id="syn-chip" aria-hidden="true">Kilitli</span></span
+              >Hapşırık<small id="sneeze-sub">Tıkanıklık %35’te açılır</small
+              ><span class="chip" id="sneeze-chip" aria-hidden="true">Kilitli</span></span
             >
+            <span class="charge" aria-hidden="true"><i id="sneeze-fill"></i></span>
           </button>
           <button id="btn-pause" class="gbtn" aria-label="Duraklat">
             <svg viewBox="0 0 24 24" fill="currentColor">
@@ -114,6 +123,8 @@
           </div>
         </div>
       </div>
+      <!-- NS4-20: tıkanıklıkla kademeli artan basınç vinyeti (tehlike vinyetinin altında) -->
+      <div id="pressure" aria-hidden="true"></div>
       <div id="danger"></div>
       <div id="fps">-- fps</div>
 
@@ -254,7 +265,7 @@
                   <dt><kbd>C</kbd> / <kbd>Shift</kbd></dt>
                   <dd>Beklet</dd>
                   <dt><kbd>1</kbd> · <kbd>2</kbd></dt>
-                  <dd>Sıklamen özütü · sentetik açıcı</dd>
+                  <dd>Sıklamen özütü · hapşırık</dd>
                   <dt><kbd>Esc</kbd> / <kbd>P</kbd></dt>
                   <dd>Duraklat</dd>
                 </dl>
@@ -263,15 +274,16 @@
             <h3>Oyun alanı bir sinüs boşluğu</h3>
             <ul class="map">
               <li>Düşen bloklar biriken mukus; alan dolarsa sinüs tamamen tıkanır.</li>
+              <li>
+                Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla
+                başlar; hepsini temizleyince sinüs açılır. Sonra serbest nefes.
+              </li>
               <li>Tam satır = drenaj. Dört satır birden: ozmotik etki. T-spin: nörorefleks etki.</li>
               <li>
                 Tıkanıklık yükselince iki destek açılır. <b>Sıklamen özütü</b> oyunda bir kez kullanılır, alt yarıyı
                 yavaşça boşaltır ve 30 sn puanları ikiye katlar.
               </li>
-              <li>
-                <b>Sentetik açıcı</b> anında 3 satır açar. Tekrarlarsan tıkanıklık geri teper: bloklar hızlanır, alttan
-                yeni tıkanıklık yükselir.
-              </li>
+              <li><b>Hapşırık</b> tıkanıklığın en üstteki 3 sırasını savurur. 20 blok yerleştirince yeniden dolar.</li>
             </ul>
           </div>
           <!-- geri dönüş (Tamam) ve oyun başlatan eylem (Öğreticiyle oyna) ayrı ağırlıkta -->

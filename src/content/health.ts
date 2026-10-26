@@ -101,15 +101,6 @@ export const HEALTH_TIPS = [
 
 /** Çalışma anında kullanılan toast metinleri. */
 export const HEALTH_TOASTS = {
-  /** İkinci sentetik kullanımda (rebound başlangıcı) oyunda bir kez. */
-  rebound: {
-    id: 'toast.rebound',
-    placement: 'toast',
-    location: 'src/app/events.ts (powerdone, rebound)',
-    text: 'Dekonjestanların uzun süreli kullanımı tıkanıklığın geri dönmesine yol açabilir.',
-    approval: R,
-    source: null,
-  },
   /** Sıklamen ilk kez kullanılabilir olduğunda (oyun başına bir kez). */
   cyclamenReady: {
     id: 'toast.cyclamen_ready',
@@ -151,6 +142,14 @@ export const HEALTH_STATIC = [
     source: null,
   },
   {
+    id: 'how.rooms',
+    placement: 'how_to',
+    location: 'index.html #scr-how .map li',
+    text: 'Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla başlar; hepsini temizleyince sinüs açılır. Sonra serbest nefes.',
+    approval: R,
+    source: null,
+  },
+  {
     id: 'how.drain',
     placement: 'how_to',
     location: 'index.html #scr-how .map li',
@@ -166,11 +165,12 @@ export const HEALTH_STATIC = [
     approval: R,
     source: null,
   },
+  // NS4-24: 'how.synthetic' (sentetik açıcı / rebound) ve ilgili toast, buton, popup ve rozet metinleri kaldırıldı.
   {
-    id: 'how.synthetic',
+    id: 'how.sneeze',
     placement: 'how_to',
     location: 'index.html #scr-how .map li',
-    text: 'Sentetik açıcı anında 3 satır açar. Tekrarlarsan tıkanıklık geri teper: bloklar hızlanır, alttan yeni tıkanıklık yükselir.',
+    text: 'Hapşırık tıkanıklığın en üstteki 3 sırasını savurur. 20 blok yerleştirince yeniden dolar.',
     approval: R,
     source: null,
   },
@@ -207,22 +207,6 @@ export const HEALTH_STATIC = [
     source: null,
   },
   {
-    id: 'powerup.syn_sub',
-    placement: 'powerup',
-    location: 'index.html #syn-sub',
-    text: 'Hızlı ama geri tepebilir',
-    approval: R,
-    source: null,
-  },
-  {
-    id: 'powerup.syn_relief',
-    placement: 'powerup',
-    location: 'src/ui/powerups.ts SYN_TEXT',
-    text: 'Hızlı rahatlama',
-    approval: R,
-    source: null,
-  },
-  {
     id: 'popup.cyc_start',
     placement: 'popup',
     location: 'src/app/events.ts (clearstart cyc)',
@@ -239,22 +223,6 @@ export const HEALTH_STATIC = [
     source: null,
   },
   {
-    id: 'popup.rebound',
-    placement: 'popup',
-    location: 'src/app/events.ts (powerdone rebound)',
-    text: 'Sık kullanım tıkanıklığı geri getirdi',
-    approval: R,
-    source: null,
-  },
-  {
-    id: 'popup.syn_first',
-    placement: 'popup',
-    location: 'src/app/events.ts (powerdone syn)',
-    text: 'Tekrarlarsan geri tepebilir',
-    approval: R,
-    source: null,
-  },
-  {
     id: 'popup.tetris',
     placement: 'popup',
     location: 'src/app/events.ts (scored)',
@@ -267,15 +235,6 @@ export const HEALTH_STATIC = [
     placement: 'popup',
     location: 'src/app/events.ts (scored)',
     text: 'Nörorefleks etki',
-    approval: R,
-    source: null,
-  },
-  {
-    id: 'badge.natural',
-    placement: 'badge',
-    location: 'src/content/badges.ts dogal',
-    title: 'Doğal yol',
-    text: 'Sentetik açıcısız 5. seviye',
     approval: R,
     source: null,
   },

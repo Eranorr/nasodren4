@@ -22,26 +22,12 @@ export const DEMO_SOUNDS = [
   'tspin',
   'tspin0',
   'cyc',
-  'syn',
-  'rebound',
-  'garbage',
+  'sneeze',
   'level',
   'over',
 ] as const;
 export type DemoSound = (typeof DEMO_SOUNDS)[number];
-export const DEMO_HAPTICS = [
-  'lock',
-  'hard',
-  'drain1',
-  'drain2',
-  'drain3',
-  'tetris',
-  'cyc',
-  'syn',
-  'rebound',
-  'garbage',
-  'over',
-] as const;
+export const DEMO_HAPTICS = ['lock', 'hard', 'drain1', 'drain2', 'drain3', 'tetris', 'cyc', 'sneeze', 'over'] as const;
 export type DemoHaptic = (typeof DEMO_HAPTICS)[number];
 
 export interface AudioDemoState {
@@ -78,9 +64,7 @@ export function createAudioDemo(sound: Sound, buzz: Buzz): AudioDemo {
     tspin: () => sound.clear(2, 2),
     tspin0: () => sound.clear(0, 2),
     cyc: () => sound.cyc(),
-    syn: () => sound.syn(),
-    rebound: () => sound.warn(),
-    garbage: () => sound.garbage(),
+    sneeze: () => sound.sneeze(),
     level: () => sound.level(),
     over: () => sound.over(),
   };
@@ -92,9 +76,7 @@ export function createAudioDemo(sound: Sound, buzz: Buzz): AudioDemo {
     drain3: HAPTIC.clear(3),
     tetris: HAPTIC.clear(4),
     cyc: HAPTIC.cyc,
-    syn: HAPTIC.syn,
-    rebound: HAPTIC.rebound,
-    garbage: HAPTIC.garbage,
+    sneeze: HAPTIC.sneeze,
     over: HAPTIC.over,
   };
   const ready = () => sound.unlocked && sound.contextState === 'running';

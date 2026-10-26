@@ -35,9 +35,9 @@ describe('tahta başlangıç durumu ve reset', () => {
     expect(g.hold).toBe(0);
     expect(g.canHold).toBe(true);
     expect(g.cycUsed).toBe(false);
-    expect(g.synUses).toBe(0);
+    expect(g.sneezeUses).toBe(0);
+    expect(g.sneezeCharge()).toBe(1);
     expect(g.multT).toBe(0);
-    expect(g.reboundT).toBe(0);
     expect(g.queue).toHaveLength(8);
     expect(g.board.every((v) => v === 0)).toBe(true);
   });

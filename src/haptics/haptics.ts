@@ -2,9 +2,9 @@
    HAPTICS (navigator.vibrate: Android Chrome. iOS Safari desteklemez.)
    NS4-03: main.ts'ten taşındı. Ayar durumu dışarıdan verilir (DOM/ayar
    nesnesine doğrudan erişim yok).
-   NS4-17: desenler yorgunluk oluşturmayacak biçimde kısaltıldı; rebound ve
-   garbage için ayrı desen. Sürekli hareketler (kaydırma, döndürme, yumuşak
-   indirme) titreşim üretmez. Titreşim yalnızca kendi ayarına bağlıdır
+   NS4-17: desenler yorgunluk oluşturmayacak biçimde kısaltıldı. Sürekli
+   hareketler (kaydırma, döndürme, yumuşak indirme) titreşim üretmez.
+   NS4-24: sentetik/rebound/garbage desenleri yerine hapşırık (ha… ha… HAPŞU). Titreşim yalnızca kendi ayarına bağlıdır
    (reduced motion tercihi onu kapatmaz). navigator yoksa veya vibrate
    desteklenmiyorsa hiçbir çağrı yapılmaz.
    ===================================================================== */
@@ -23,10 +23,11 @@ export interface HapticPatterns {
   /** Satır temizleme: 1 / 2 / 3 / 4 (Tetris) satır. */
   readonly clear: (n: number) => number[];
   readonly over: number[];
-  readonly syn: number[];
+  /** İki kısa "ha…" ve bir güçlü "HAPŞU". */
+  readonly sneeze: number[];
   readonly cyc: number[];
-  readonly rebound: number[];
-  readonly garbage: number;
+  /** NS4-27: oda açıldı (uzun, yumuşak "ahh" dalgası). */
+  readonly room: number[];
 }
 
 export const HAPTIC: HapticPatterns = {
@@ -34,10 +35,9 @@ export const HAPTIC: HapticPatterns = {
   hard: 22,
   clear: (n: number) => (n >= 4 ? [14, 36, 20, 36, 34] : n === 3 ? [12, 36, 22] : n === 2 ? [12, 40, 16] : [16]),
   over: [60, 60, 120, 80, 200],
-  syn: [28, 24, 28],
+  sneeze: [8, 140, 10, 200, 40],
   cyc: [8, 50, 10, 50, 14, 50, 20],
-  rebound: [24, 60, 24],
-  garbage: 18,
+  room: [10, 60, 16, 60, 30],
 };
 
 /** Desenin toplam süresi (ms; titreşim + aralar). */

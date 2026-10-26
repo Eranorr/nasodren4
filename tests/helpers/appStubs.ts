@@ -23,7 +23,8 @@ function recorder<T extends object>(name: string, base: T, calls: string[]): T {
   });
 }
 
-export function createAppStubs(game: Game): AppStubs {
+/** `rooms`: NS4-27 oda akışı. Varsayılan kapalı: NS4-27 öncesi testler boş tahtayla başlar. */
+export function createAppStubs(game: Game, rooms = false): AppStubs {
   const calls: string[] = [];
   const view = recorder('view', { overT: -1, anim: null, wave: null, flashes: [], shake: 0 }, calls);
   const sound = recorder('sound', {}, calls);
@@ -41,6 +42,7 @@ export function createAppStubs(game: Game): AppStubs {
       resetInput: () => {
         calls.push('resetInput');
       },
+      rooms,
     },
   };
 }
