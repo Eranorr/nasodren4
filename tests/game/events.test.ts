@@ -19,6 +19,7 @@ describe('olaylar', () => {
   it('olay adları sabittir', () => {
     expect([...ALL_EVENTS].sort()).toEqual(
       [
+        'allclear',
         'clearend',
         'clearstart',
         'gameover',
@@ -73,7 +74,7 @@ describe('olaylar', () => {
     g.move(1);
     g.rotate(1);
     g.doHold();
-    setupWell(g, 1); // gri bulutçuklar silinir: bu temizlemeyle oda açılır
+    setupWell(g, 4); // gri bulutçuklar silinir: bu temizlemeyle tahta boşalır (allclear) ve oda açılır
     g.lines = 9;
     dropVerticalI(g);
     finishClear(g); // satırlar → roomclear

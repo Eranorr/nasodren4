@@ -28,7 +28,9 @@ describe('mekanik sabitler', () => {
       sneezeMs: 650,
       // NS4-27: Sinüs Odaları
       roomBonus: 1000,
-      roomClearMs: 1400,
+      roomClearMs: 2400, // NS4-31: harita kartı
+      // NS4-22: Tam Ferahlık (satır sayısına göre × seviye)
+      allClearBonus: [0, 800, 1200, 1800, 2000],
     });
   });
 });

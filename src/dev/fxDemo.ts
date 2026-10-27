@@ -9,6 +9,8 @@ import { CFG, COLS, ROWS } from '../config/gameConfig';
 import type { Game } from '../game/Game';
 import type { View } from '../rendering/GameView';
 import type { PendingClearKind } from '../types/game';
+import type { ReliefKind } from '../rendering/effects';
+import { reliefFlash } from '../ui/hud';
 
 export interface FxDemo {
   drain(n?: 1 | 2 | 3): void;
@@ -16,6 +18,8 @@ export interface FxDemo {
   tspin(n?: 0 | 1 | 2 | 3): void;
   cyc(): void;
   sneeze(): void;
+  /** NS4-22: büyük açılma anı (Tetris / Tam Ferahlık: dört satır temizlemesiyle; oda: "Sinüs açıldı" kutlamasıyla). */
+  relief(kind?: ReliefKind): void;
   /** Reduced motion önizlemesi (yalnızca bu oturum; işletim sistemi tercihine dönmek için sayfayı yenileyin). */
   reduced(on?: boolean): boolean;
   /** Bütün efektleri sırayla gösterir. */
@@ -69,6 +73,13 @@ export function createFxDemo(view: View, game: Game): FxDemo {
     },
     cyc: () => run('cyc', rowsFrom(10)),
     sneeze: () => run('sneeze', rowsFrom(3)),
+    relief: (kind = 'allclear') => {
+      if (busy()) return;
+      if (kind === 'room') view.onRoomClear();
+      else run('lines', rowsFrom(4), () => view.onScored({ n: 4, tspin: 0 }));
+      view.relief(kind);
+      reliefFlash(kind);
+    },
     reduced: (on) => {
       if (on !== undefined) view.reducedMotion = on;
       return view.reducedMotion;
@@ -82,6 +93,9 @@ export function createFxDemo(view: View, game: Game): FxDemo {
         () => demo.tspin(2),
         () => demo.sneeze(),
         () => demo.cyc(),
+        () => demo.relief('tetris'),
+        () => demo.relief('room'),
+        () => demo.relief('allclear'),
       ];
       seq.forEach((f, i) => setTimeout(f, i * 1400));
     },

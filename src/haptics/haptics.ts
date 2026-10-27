@@ -28,6 +28,8 @@ export interface HapticPatterns {
   readonly cyc: number[];
   /** NS4-27: oda açıldı (uzun, yumuşak "ahh" dalgası). */
   readonly room: number[];
+  /** NS4-22: Tam Ferahlık (yükselen üç dalga ve uzun bir rahatlama). */
+  readonly allClear: number[];
 }
 
 export const HAPTIC: HapticPatterns = {
@@ -38,6 +40,7 @@ export const HAPTIC: HapticPatterns = {
   sneeze: [8, 140, 10, 200, 40],
   cyc: [8, 50, 10, 50, 14, 50, 20],
   room: [10, 60, 16, 60, 30],
+  allClear: [12, 50, 18, 50, 26, 70, 44],
 };
 
 /** Desenin toplam süresi (ms; titreşim + aralar). */

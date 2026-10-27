@@ -7,9 +7,12 @@
    yerine yeniden dolan Hapşırık: yığının en üstteki sıralarını savurur.
    NS4-27: Sinüs Odaları (reset({ rooms: true })): her oda alttan delikli gri
    bulutçuklarla başlar; hepsi temizlenince oda açılır, sonra Serbest nefes.
+   NS4-22: Tam Ferahlık: satır temizlemesi tahtayı tamamen boşaltırsa bonus.
+   NS4-30: oda boşlukları hava kanalları hâlinde hizalanır; açıklık oranı.
    ===================================================================== */
 import { COLS, ROWS, HIDDEN, VIS, CFG, ROOMS } from '../config/gameConfig';
 import { PIECE, SHAPES, KICK_JLSTZ, KICK_I, kickKey, nextRotation } from './pieces';
+import { LINK, PLANTS } from './plants';
 import type { GameEventArgs, GameEventListener, GameEventName, PendingClear } from '../types/events';
 import type {
   GameOverReason,
@@ -26,6 +29,8 @@ export class Game {
   private readonly handlers: { [K in GameEventName]?: GameEventListener<K>[] };
   /** Hücre değerleri: CellValue (0 boş, 1-7 tetromino, 8 çöp). */
   readonly board: Uint8Array;
+  /** NS4-34: hücrenin bitki baytı (sap bağlantıları + rol, bkz. plants.ts); tahtayla aynı dizinler. */
+  readonly plant: Uint8Array;
   // reset() içinde atanan alanlar (reset() constructor'dan çağrılır)
   state!: GameState;
   type!: PieceSlot;
@@ -62,7 +67,11 @@ export class Game {
   rooms!: boolean;
   room!: number;
   roomGray!: number;
+  /** NS4-30: odaya girerkenki gri bulutçuk sayısı (açıklık oranının paydası). */
+  roomGray0!: number;
   roomsCleared!: number;
+  /** NS4-22: bu oyundaki Tam Ferahlık sayısı. */
+  allClears!: number;
   elapsed!: number;
   pieceVer!: number;
   boardVer!: number;
@@ -72,6 +81,7 @@ export class Game {
   constructor() {
     this.handlers = {};
     this.board = new Uint8Array(COLS * ROWS);
+    this.plant = new Uint8Array(COLS * ROWS);
     this.reset();
     this.state = 'idle';
     this.type = 0;
@@ -104,6 +114,7 @@ export class Game {
   /** Yeni oyun. `rooms`: Sinüs Odaları akışı (uygulama açar); verilmezse tahta boş başlar (testler ve eski davranış). */
   reset(opts?: { readonly rooms?: boolean }) {
     this.board.fill(0);
+    this.plant.fill(0);
     this.bag = [];
     this.queue = [];
     this.fillQueue();
@@ -134,7 +145,9 @@ export class Game {
     this.rooms = opts?.rooms === true;
     this.room = 0;
     this.roomGray = 0;
+    this.roomGray0 = 0;
     this.roomsCleared = 0;
+    this.allClears = 0;
     this.elapsed = 0;
     this.pieceVer = 0;
     this.boardVer = 0;
@@ -151,19 +164,28 @@ export class Game {
   }
 
   /**
-   * NS4-27: odaya girer: tahta temizlenir; oda ise alttan `rows` sıra gri bulutçuk dizilir (her sırada 1..maxHoles
-   * rastgele boşluk; hiçbir sıra dolu değildir). ROOMS.length: Serbest nefes (boş tahta).
+   * NS4-27: odaya girer: tahta temizlenir; oda ise alttan `rows` sıra gri bulutçuk dizilir (hiçbir sıra dolu değildir).
+   * NS4-30: her sırada hava kanalının boşluğu (kanallar `channels` parçada, her parça ayrı sütunda, alttan yukarı)
+   * ve 0..extraHoles ek boşluk. ROOMS.length: Serbest nefes (boş tahta).
    */
   enterRoom(i: number) {
     this.room = i;
     this.board.fill(0);
+    this.plant.fill(0);
     const def = ROOMS[i];
-    if (def)
+    if (def) {
+      const seg = Math.ceil(def.rows / def.channels);
+      let channel = -1;
       for (let k = 0; k < def.rows; k++) {
+        if (k % seg === 0) {
+          let c = channel;
+          while (c === channel) c = (Math.random() * COLS) | 0;
+          channel = c;
+        }
         const y = ROWS - 1 - k,
-          holes = 1 + ((Math.random() * def.maxHoles) | 0);
-        for (let x = 0; x < COLS; x++) this.board[y * COLS + x] = PIECE.GARBAGE;
-        for (let h = 0; h < holes;) {
+          extra = (Math.random() * (def.extraHoles + 1)) | 0;
+        for (let x = 0; x < COLS; x++) this.board[y * COLS + x] = x === channel ? 0 : PIECE.GARBAGE;
+        for (let h = 0; h < extra;) {
           const x = (Math.random() * COLS) | 0;
           if (this.board[y * COLS + x]) {
             this.board[y * COLS + x] = 0;
@@ -171,9 +193,15 @@ export class Game {
           }
         }
       }
-    this.roomGray = this.grayCount();
+    }
+    this.roomGray = this.roomGray0 = this.grayCount();
     this.boardVer++;
     this.emit('roomstart', { room: i, gray: this.roomGray });
+  }
+
+  /** NS4-30: odanın açıklık oranı (0..1; temizlenen gri bulutçuk / başlangıç). Serbest nefeste ve akış kapalıyken 1. */
+  roomOpenness() {
+    return this.roomGray0 > 0 ? 1 - this.roomGray / this.roomGray0 : 1;
   }
 
   /** NS4-27: odadaki son gri bulutçuk temizlendi mi (Serbest nefeste ve oda akışı kapalıyken hep false). */
@@ -367,7 +395,8 @@ export class Game {
   }
 
   lock() {
-    const s = SHAPES[this.piece][this.rot];
+    const s = SHAPES[this.piece][this.rot],
+      plant = PLANTS[this.piece][this.rot];
     const tspin = this.tspinKind();
     let allHidden = true;
     const cells: number[] = [];
@@ -375,6 +404,7 @@ export class Game {
       const cx = this.x + s[i][0],
         cy = this.y + s[i][1];
       this.board[cy * COLS + cx] = this.type;
+      this.plant[cy * COLS + cx] = plant[i];
       cells.push(cy * COLS + cx);
       if (cy >= HIDDEN) allHidden = false;
     }
@@ -395,6 +425,7 @@ export class Game {
       if (f) full.push(y);
     }
     this.scoreClear(full.length, tspin);
+    if (full.length && this.emptyExcept(full)) this.scoreAllClear(full.length);
     if (full.length) {
       this.state = 'clearing';
       this.stateT = CFG.lineClearMs;
@@ -439,17 +470,51 @@ export class Game {
     }
   }
 
+  /** NS4-22: `rows` dışındaki bütün hücreler boş mu (temizlemeden sonra tahta tamamen boşalacak mı). */
+  emptyExcept(rows: readonly number[]) {
+    for (let y = 0; y < ROWS; y++) {
+      if (rows.includes(y)) continue;
+      for (let x = 0; x < COLS; x++) if (this.board[y * COLS + x]) return false;
+    }
+    return true;
+  }
+
+  /**
+   * NS4-22: Tam Ferahlık bonusu (CFG.allClearBonus[n] × seviye; sıklamen ×2 uygulanmaz). Yalnızca satır temizlemesinde:
+   * güçlerin (sıklamen, hapşırık) boşalttığı tahta sayılmaz. Seviye, scoreClear'ın yükselttiği yeni seviyedir.
+   */
+  scoreAllClear(n: number) {
+    const bonus = CFG.allClearBonus[Math.min(4, n) as 1 | 2 | 3 | 4] * this.level;
+    this.score += bonus;
+    this.allClears++;
+    this.emit('allclear', { lines: n, bonus });
+  }
+
   removeRows(rows: readonly number[]) {
     // rows sıralı (küçükten büyüğe); alttan yukarı sıkıştır
     const rm = new Uint8Array(ROWS);
     for (let i = 0; i < rows.length; i++) rm[rows[i]] = 1;
+    // NS4-34: silinen sıraya uzanan saplar kopar (kayınca yeni komşuyla yanlış bağlanmasın)
+    for (let r = 0; r < ROWS; r++) {
+      if (!rm[r]) continue;
+      for (let x = 0; x < COLS; x++) {
+        if (r > 0) this.plant[(r - 1) * COLS + x] &= ~LINK.down;
+        if (r < ROWS - 1) this.plant[(r + 1) * COLS + x] &= ~LINK.up;
+      }
+    }
     let w = ROWS - 1;
     for (let r = ROWS - 1; r >= 0; r--) {
       if (rm[r]) continue;
-      if (w !== r) this.board.copyWithin(w * COLS, r * COLS, r * COLS + COLS);
+      if (w !== r) {
+        this.board.copyWithin(w * COLS, r * COLS, r * COLS + COLS);
+        this.plant.copyWithin(w * COLS, r * COLS, r * COLS + COLS);
+      }
       w--;
     }
-    for (; w >= 0; w--) this.board.fill(0, w * COLS, w * COLS + COLS);
+    for (; w >= 0; w--) {
+      this.board.fill(0, w * COLS, w * COLS + COLS);
+      this.plant.fill(0, w * COLS, w * COLS + COLS);
+    }
     this.boardVer++;
   }
 

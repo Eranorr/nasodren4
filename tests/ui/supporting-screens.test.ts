@@ -24,7 +24,7 @@ const section = (id: string) => {
 const text = (s: string) =>
   s
     .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<svg[\s\S]*?<\/svg>/g, '')
+    .replace(/<svg[\s\S]*?<\/svg\s*>/g, '') // Prettier kapanışı satıra bölebilir
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -66,7 +66,7 @@ describe('görünür metinler değişmedi (a67fe7f)', () => {
     [
       'scr-how',
       how,
-      'Nasıl oynanır Dokunmatik Sağa-sola sürükle Bloğu kaydır Dokun Döndür (tahtanın sol üçte biri: ters yön) Aşağı sürükle Yavaşça indir Aşağı fırlat Anında bırak Yukarı fırlat Beklet Klavye ← → Kaydır ↑ / X · Z Döndür · ters döndür ↓ · Boşluk Yavaş indir · anında bırak C / Shift Beklet 1 · 2 Sıklamen özütü · hapşırık Esc / P Duraklat Oyun alanı bir sinüs boşluğu Düşen bloklar biriken mukus; alan dolarsa sinüs tamamen tıkanır. Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla başlar; hepsini temizleyince sinüs açılır. Sonra serbest nefes. Tam satır = drenaj. Dört satır birden: ozmotik etki. T-spin: nörorefleks etki. Tıkanıklık yükselince iki destek açılır. Sıklamen özütü oyunda bir kez kullanılır, alt yarıyı yavaşça boşaltır ve 30 sn puanları ikiye katlar. Hapşırık tıkanıklığın en üstteki 3 sırasını savurur. 20 blok yerleştirince yeniden dolar. Tamam Öğreticiyle oyna',
+      'Nasıl oynanır Dokunmatik Sağa-sola sürükle Bloğu kaydır Dokun Döndür (tahtanın sol üçte biri: ters yön) Aşağı sürükle Yavaşça indir Aşağı fırlat Anında bırak Yukarı fırlat Beklet Klavye ← → Kaydır ↑ / X · Z Döndür · ters döndür ↓ · Boşluk Yavaş indir · anında bırak C / Shift Beklet 1 · 2 Sıklamen özütü · hapşırık Esc / P Duraklat Oyun alanı bir sinüs boşluğu Düşen bloklar biriken mukus; alan dolarsa sinüs tamamen tıkanır. Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla başlar; parlayan boşlukları doldurup hepsini uçurunca sinüs açılır. Dördü de açılınca ister serbest nefese devam et, ister bitir. Tam satır = drenaj. Dört satır birden: ozmotik etki. T-spin: nörorefleks etki. Tahtayı tamamen boşaltırsan Tam Ferahlık bonusu. Tıkanıklık yükselince iki destek açılır. Sıklamen özütü oyunda bir kez kullanılır, alt yarıyı yavaşça boşaltır ve 30 sn puanları ikiye katlar. Hapşırık tıkanıklığın en üstteki 3 sırasını savurur. 20 blok yerleştirince yeniden dolar. Tamam Öğreticiyle oyna',
     ],
   ])('%s', (_id, sec, expected) => {
     // NS4-18: oyun sonundaki global gönderim formu ayrı testte sabitlenir; mevcut metinler aynı kalmalı

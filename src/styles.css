@@ -205,8 +205,10 @@ body {
   backdrop-filter: blur(var(--blur-surface)) saturate(1.15);
 }
 /* NS4-21: sinüs boşluğu: derinlikli zemin, yumuşak çok katmanlı duvar ve üstte hava çıkışı (ostium).
-   Izgara aynı; arka plan boyutu hud.ts'ten (ızgara: hücre, derinlik: %100). */
+   NS4-33: ızgara ::before katmanında, organik duvarların (SVG) üstünde: duvar kenar hücreye taşsa da hücre
+   çizgileri görünür kalır. Hücre boyutu hud.ts'ten (--cell). isolation: katmanlar Pixi tuvalinin altında kalır. */
 #board-bg {
+  isolation: isolate;
   background-color: var(--color-board);
   border-radius: var(--radius-board);
   box-shadow:
@@ -215,20 +217,30 @@ body {
     0 0 26px 10px var(--color-rim-glow),
     inset 0 0 28px 4px color-mix(in srgb, var(--color-board-deep) 70%, transparent),
     var(--shadow-board);
+  background-image: radial-gradient(
+    ellipse 115% 85% at 50% 32%,
+    var(--color-board-light) 0%,
+    var(--color-board) 55%,
+    var(--color-board-deep) 100%
+  );
+}
+#board-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
   background-image:
     linear-gradient(to right, var(--color-board-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-board-grid) 1px, transparent 1px),
-    radial-gradient(
-      ellipse 115% 85% at 50% 32%,
-      var(--color-board-light) 0%,
-      var(--color-board) 55%,
-      var(--color-board-deep) 100%
-    );
+    linear-gradient(to bottom, var(--color-board-grid) 1px, transparent 1px);
+  background-size: var(--cell) var(--cell);
+  pointer-events: none;
 }
 /* sinüs ağzı: tahtanın üst kenarının ortasında, havanın çıktığı yumuşak açıklık */
 #board-bg::after {
   content: '';
   position: absolute;
+  z-index: 2;
   left: 32%;
   right: 32%;
   top: -11px;
@@ -577,6 +589,21 @@ input:focus-visible {
 .room-pill b {
   font-variant-numeric: tabular-nums;
 }
+/* NS4-30: açıklık çubuğu: sinüs açıldıkça soldan serin turkuazla dolar (metin üstte kalır) */
+.room-open {
+  position: relative;
+  isolation: isolate;
+}
+.room-open-fill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--color-fresh) 45%, var(--color-fresh-soft));
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur-meter) ease-out;
+}
 /* NS4-27: her odanın kendi sinüs tonu (yalnızca derinlik ve duvar; ızgara ve bloklar aynı) */
 #board-bg[data-room='1'] {
   --color-board-light: #2a4f74;
@@ -597,6 +624,163 @@ input:focus-visible {
   --color-board-light: #5a2e55;
   --color-rim: #ffd3e6;
   --color-rim-glow: rgba(255, 140, 200, 0.55);
+}
+/* NS4-33: organik sinüs duvarları. Arka katman derin kıvrım, ön katman açık duvar; renkler odanın tonundan
+   (--color-rim, data-room) türetilir. Blokların arkasındadır; şekli ui/sinusWalls.ts yazar. */
+.sinus-walls {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--color-rim) 50%, transparent));
+}
+.wall-back {
+  fill: color-mix(in srgb, var(--color-rim) 32%, var(--color-board-deep));
+  opacity: 0.7;
+}
+.wall-front {
+  fill: color-mix(in srgb, var(--color-rim) 60%, var(--color-board));
+  opacity: 0.72;
+}
+/* NS4-31: oda açılınca sinüs haritası kartı (hud.ts tahtanın alt yarısına yerleştirir; dokunmayı engellemez) */
+.room-map {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 12px 12px;
+  pointer-events: none;
+  z-index: 2;
+  text-align: center;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface-strong) 90%, transparent);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-float);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px) scale(0.96);
+  transition:
+    opacity 0.25s ease-out,
+    transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2),
+    visibility 0s linear 0.25s;
+}
+.room-map.on {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 0.25s ease-out,
+    transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.room-map p {
+  margin: 0;
+}
+.rm-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--fs-pop) * 0.8 * var(--hud-scale));
+  line-height: 1.1;
+  color: var(--color-fresh-strong);
+}
+.rm-sub,
+.rm-next {
+  font-weight: 600;
+  font-size: calc(var(--fs-pop-sub) * 0.9 * var(--hud-scale));
+}
+.rm-next {
+  color: var(--color-text-muted);
+}
+/* NS4-31: sinüs haritası (yüz silüeti; durum kapsayıcının data-<oda> niteliğinde, sinusMap.ts) */
+.sinus-map {
+  width: calc(92px * var(--hud-scale));
+  margin: 4px 0;
+}
+.sinus-map svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.sinus-map-lg {
+  width: min(150px, 36vw);
+  margin: 0 auto 8px;
+}
+.sinus-svg .face {
+  fill: var(--color-surface-strong);
+  stroke: var(--color-border-strong);
+  stroke-width: 2;
+}
+.sinus-svg .line {
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sinus-svg .eye {
+  fill: var(--color-text-muted);
+}
+.sinus {
+  fill: var(--color-pressure-soft);
+  stroke: var(--color-pressure);
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    fill 0.4s,
+    stroke 0.4s;
+}
+.s-sfenoid {
+  stroke-dasharray: 2 2;
+}
+[data-yanak='open'] .s-yanak,
+[data-etmoid='open'] .s-etmoid,
+[data-alin='open'] .s-alin,
+[data-sfenoid='open'] .s-sfenoid {
+  fill: var(--color-fresh-soft);
+  stroke: var(--color-fresh);
+}
+[data-yanak='opening'] .s-yanak,
+[data-etmoid='opening'] .s-etmoid,
+[data-alin='opening'] .s-alin,
+[data-sfenoid='opening'] .s-sfenoid {
+  fill: var(--color-fresh-soft);
+  stroke: var(--color-fresh);
+  stroke-width: 2.5;
+  animation: sinusOpen 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.25s both;
+}
+[data-yanak='next'] .s-yanak,
+[data-etmoid='next'] .s-etmoid,
+[data-alin='next'] .s-alin,
+[data-sfenoid='next'] .s-sfenoid {
+  stroke: var(--color-cyclamen);
+  stroke-width: 2.5;
+  animation: sinusNext 1.2s ease-in-out infinite;
+}
+@keyframes sinusOpen {
+  0% {
+    fill: var(--color-pressure-soft);
+    stroke: var(--color-pressure);
+    transform: scale(0.75);
+  }
+  60% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes sinusNext {
+  0%,
+  100% {
+    stroke-opacity: 0.35;
+  }
+  50% {
+    stroke-opacity: 1;
+  }
 }
 #popups {
   position: absolute;
@@ -689,6 +873,63 @@ input:focus-visible {
     color-mix(in srgb, var(--color-pressure) 28%, transparent) 70%,
     color-mix(in srgb, var(--color-pressure) 62%, transparent) 100%
   );
+}
+/* NS4-22: büyük açılma anı: ekran ortadan serin bir ışıkla açılır (Tam Ferahlık'ta sıklamen halkasıyla); ışık
+   sürdükçe basınç ve tehlike vinyeti kalkar, sonra HUD değerine yumuşakça döner. Süreler hud.ts RELIEF_MS ile aynı. */
+#relief {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--color-fresh-soft) 55%, transparent) 0%,
+    color-mix(in srgb, var(--color-fresh-soft) 22%, transparent) 40%,
+    transparent 72%
+  );
+}
+#relief[data-kind='allclear'] {
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--color-fresh-soft) 65%, transparent) 0%,
+    color-mix(in srgb, var(--color-cyclamen-soft) 32%, transparent) 45%,
+    transparent 78%
+  );
+}
+#relief.on {
+  animation: relief 0.9s ease-out forwards;
+}
+#relief.on[data-kind='room'] {
+  animation-duration: 1.4s;
+}
+#relief.on[data-kind='allclear'] {
+  animation-duration: 1.6s;
+}
+@keyframes relief {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes reliefSoft {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.45;
+  }
+}
+#relief.on ~ #pressure,
+#relief.on ~ #danger {
+  opacity: 0 !important;
+  transition: opacity 0.15s ease-out;
 }
 /* NS4-20: nefes halkası: ferah → derin ve yavaş, orta → kısalır, tıkalı → sığ ve hızlı */
 .breath {
@@ -1230,6 +1471,23 @@ input:focus-visible {
 }
 .sheet-over .tip {
   margin-top: 16px;
+}
+
+/* ---- NS4-31: final (dört sinüs açık): harita → başlık → puan/drenaj → Serbest nefese devam / Bitir ---- */
+.sheet-final {
+  text-align: center;
+}
+.stat-grid.stat-final {
+  grid-template-columns: repeat(2, 1fr);
+}
+.final-lead {
+  margin: 8px 0 0;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+.over-actions #b-free,
+.over-actions #b-finish {
+  min-height: calc(56px * var(--ui-scale));
 }
 
 /* ---- Nasıl oynanır (NS4-16) ---- */
@@ -1828,6 +2086,22 @@ input:focus-visible {
   }
   #pressure {
     transition: none;
+  }
+  .room-open-fill {
+    transition: none;
+  }
+  /* NS4-31: harita kartı yerinde belirir; sinüsler zıplamadan renk değiştirir */
+  .room-map,
+  .room-map.on {
+    transform: none;
+    transition: none;
+  }
+  .sinus-map .sinus {
+    animation: none;
+  }
+  /* NS4-22: açılma ışığı tek, yumuşak ve kısık */
+  #relief.on {
+    animation-name: reliefSoft;
   }
   /* NS4-12: öğretici kartı giriş hareketi */
   .tutorial {

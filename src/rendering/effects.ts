@@ -113,6 +113,57 @@ export function airflowSpeed(congestion: number): number {
  */
 export const ROOM_FX = { glow: 0x7ff0e0, peak: 0.3, dur: 900, bubbles: 40, shake: 0.2 } as const;
 
+/**
+ * NS4-22: büyük açılma anı: Tetris, Tam Ferahlık ve oda açılışı. Tahta kenarıyla birlikte parlar (edge: kenar/zemin
+ * oranı), serin turkuaz parıltılar yukarı saçılır, sıklamen yaprakları hava akışıyla sinüs ağzına (yukarı, ortaya)
+ * süzülür. Parıltı ve yaprak sayıları an başınadır (reduced motion bütçesiyle azalır).
+ */
+export type ReliefKind = 'tetris' | 'allclear' | 'room';
+export interface ReliefRecipe {
+  readonly glow: number;
+  readonly peak: number;
+  readonly dur: number;
+  readonly edge: number;
+  readonly sparkles: number;
+  readonly petals: number;
+  readonly shake: number;
+}
+export const RELIEF_FX: Readonly<Record<ReliefKind, ReliefRecipe>> = {
+  tetris: { glow: 0x7ff0e0, peak: 0.24, dur: 620, edge: 2.4, sparkles: 22, petals: 8, shake: 0 },
+  room: { glow: ROOM_FX.glow, peak: 0.32, dur: 1000, edge: 2.6, sparkles: 34, petals: 16, shake: 0 },
+  allclear: { glow: 0xe8fffc, peak: 0.4, dur: 1200, edge: 2.8, sparkles: 48, petals: 26, shake: 0.25 },
+};
+/** Parıltı renkleri (serin turkuaz / beyaz) ve sıklamen yaprak tonları (yaprak dokusu beyazdır, renk tint ile). */
+export const SPARKLE_TINTS = [0x7ff0e0, 0x5fe6d6, 0xe8fffc, 0xffffff] as const;
+export const PETAL_TINTS = [0xff79bd, 0xff9ccc, 0xffd3e6, 0xe64d97] as const;
+/**
+ * Yaprak havuzu ve hareketi: ömür ms; boyut hücre oranı; lift hücre/sn² (yukarı itiş); pull ortaya çekiş (1/sn);
+ * spin rad/sn; flip: dönerek kanat çırpma (Hz).
+ */
+export const PETALS = {
+  count: 48,
+  life: [1700, 2600],
+  size: [0.42, 0.62],
+  lift: 2.2,
+  pull: 0.5,
+  drag: 1.3,
+  spin: [1, 3],
+  flip: [1.4, 2.6],
+} as const;
+
+/**
+ * NS4-30: bulutçuk sıralarındaki boşluklar (hava kanalı) yumuşakça parlar: "buraya parça koy". Blokların arkasında,
+ * ADD karışımı; `period` ms'lik nefes ritmiyle alpha `alpha × (1 − depth … 1)` arasında gidip gelir (reduced motion:
+ * sabit). `max`: aynı anda en çok işaret (oda en çok 10 sıra × 2 boşluk).
+ */
+export const HOLE_FX = { max: 24, tint: 0x8ff7ea, alpha: 0.7, depth: 0.5, size: 1.05, period: 1600 } as const;
+/** Boşluk işaretinin o anki alpha'sı (t ms). */
+export function holeAlpha(t: number, reduced: boolean): number {
+  if (reduced) return HOLE_FX.alpha * (1 - HOLE_FX.depth / 2);
+  const k = 0.5 - 0.5 * Math.cos((t / HOLE_FX.period) * Math.PI * 2);
+  return HOLE_FX.alpha * (1 - HOLE_FX.depth + HOLE_FX.depth * k);
+}
+
 /** Vuruşlu ışıma eğrisi: p ∈ [0,1], `beats` kez yükselip söner, sona doğru zayıflar. p ≥ 1 → 0. */
 export function glowAlpha(p: number, peak: number, beats: number): number {
   if (p >= 1 || p < 0) return 0;
@@ -132,3 +183,22 @@ export class Budget {
     this.acc = 0;
   }
 }
+
+/**
+ * NS4-37: sıklamen özütü sıvısı. Yüzey iki dalganın toplamı (genlik hücre oranı, tahta boyunca dalga sayısı, faz
+ * hızı rad/ms); arkada daha yüksekte ikinci, koyu katman. Bitince recedeMs içinde söner (temizleme animasyonundan
+ * bağımsız: oda açılışı ya da satır temizlemesi araya girse de söner). Hareketi azalt: genlik ve hız düşer.
+ */
+export const LIQUID_FX = {
+  amp: 0.14,
+  amp2: 0.06,
+  waves: 1.4,
+  speed: 0.0024,
+  backLift: 0.22,
+  backTint: 0xc0508f,
+  backAlpha: 0.55,
+  line: 0.07,
+  lineAlpha: 0.8,
+  recedeMs: 520,
+  reducedScale: 0.35,
+} as const;

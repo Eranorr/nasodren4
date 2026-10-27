@@ -27,7 +27,8 @@ export type KickTable = Readonly<Record<RotationTransition, readonly Offset[]>>;
 
 /** Game.state: 'idle' yalnızca sayfa açılışında, ilk start() öncesindedir. */
 export type GameState = 'idle' | 'play' | 'clearing' | 'draining' | 'over';
-export type GameOverReason = 'blockout' | 'lockout' | 'overlap';
+/** NS4-31: 'complete': dört sinüs açıldıktan sonra final ekranında "Bitir" (yenilgi değil). */
+export type GameOverReason = 'blockout' | 'lockout' | 'overlap' | 'complete';
 /** 'lines' satır temizleme, 'cyc' sıklamen özütü, 'sneeze' hapşırık (NS4-24: 'syn' sentetik açıcı yerine). */
 export type PendingClearKind = 'lines' | 'cyc' | 'sneeze' | 'room';
 export type PowerupKind = Exclude<PendingClearKind, 'lines' | 'room'>;

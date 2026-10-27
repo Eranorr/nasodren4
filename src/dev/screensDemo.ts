@@ -7,6 +7,8 @@
    ===================================================================== */
 import { BADGE_IDS } from '../content/badges';
 import { openSub, renderGameOver } from '../ui/screens';
+import { hideRoomMap, showRoomMap } from '../ui/sinusMap';
+import { CFG, ROOMS } from '../config/gameConfig';
 import type { Lifecycle } from '../app/lifecycle';
 import type { Game } from '../game/Game';
 import type { BadgeId } from '../types/content';
@@ -27,6 +29,10 @@ export interface ScreensDemo {
   how(): void;
   /** Oyun sonu örneği (storage'a yazmadan). */
   over(opts?: OverDemoOptions): void;
+  /** NS4-31: oda açılış kartı (0 tabanlı oda; geçiş süresi kadar görünür, oyun durumuna dokunmaz). */
+  roomMap(room?: number): void;
+  /** NS4-31: final ekranı (oyun Serbest nefese geçer; menüdeyse önce oyun başlatılır). */
+  final(): void;
 }
 
 export function createScreensDemo(lifecycle: Pick<Lifecycle, 'getState' | 'start' | 'pause'>, game: Game): ScreensDemo {
@@ -36,6 +42,14 @@ export function createScreensDemo(lifecycle: Pick<Lifecycle, 'getState' | 'start
   };
   return {
     pause,
+    roomMap: (room = 0) => {
+      showRoomMap(room, 1000 * (room + 1));
+      setTimeout(hideRoomMap, CFG.roomClearMs);
+    },
+    final: () => {
+      if (lifecycle.getState() === 'menu') lifecycle.start();
+      if (lifecycle.getState() === 'playing') game.enterRoom(ROOMS.length); // roomstart → final ekranı
+    },
     settings: () => openSub('scr-set'),
     how: () => openSub('scr-how'),
     over: ({ best = true, badges = 'mixed' } = {}) => {

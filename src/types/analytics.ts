@@ -37,6 +37,8 @@ export interface AnalyticsPayloads {
     sneeze_uses: number;
     rooms_cleared: number;
     tetrises: number;
+    /** NS4-22: Tam Ferahlık sayısı. */
+    all_clears: number;
   };
   cta_click:
     | { placement: 'game_over'; score: number; state: AppState }
@@ -59,6 +61,10 @@ export interface AnalyticsPayloads {
   /** NS4-27: odaya girildi (room: 0 tabanlı; ROOMS.length = Serbest nefes) ve oda açıldı. */
   room_start: { room: number; gray: number };
   room_clear: { room: number; level: number; dur_s: number; bonus: number };
+  /** NS4-31: dört sinüs açıldı; final ekranında seçim (Serbest nefese devam / bitir). */
+  final_choice: { choice: 'continue' | 'finish'; dur_s: number };
+  /** NS4-22: Tam Ferahlık: satır temizlemesi tahtayı tamamen boşalttı. */
+  all_clear: { lines: number; level: number; bonus: number };
   /** Oyun sonu "Tekrar oyna". */
   replay_clicked: NoPayload;
   leaderboard_opened: NoPayload;

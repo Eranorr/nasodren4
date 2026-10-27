@@ -5,22 +5,68 @@
    texture'ları yok etme sırası View.buildTextures() içinde kalır.
    NS4-21: yalnızca gri tıkanıklık bloğuna (8) somurtkan, sevimli bir yüz
    eklendi; renkli tetromino blokları (1-7) ve hayaletler değişmedi.
+   NS4-32: renkli bloklar (1-7) kullanıcının sıklamen karo görselleriyle
+   çizilir (kullanıcı onayı 2026-10-27). Görseller yüklenene kadar eski
+   jöle çizimi yedek olarak kalır. Gri blok ve hayaletler değişmedi.
    ===================================================================== */
-import type { BlockId } from '../types/game';
+import type { BlockId, TetrominoType } from '../types/game';
 
 /** Atlas sütun sırası (Object.keys(COLORS) ile aynı: 1..8 artan). */
 export const BLOCK_IDS = [1, 2, 3, 4, 5, 6, 7, 8] as const satisfies readonly BlockId[];
 
+/** NS4-32: 1-7 sıklamen karolarının kenar rengine yakın (hayalet çerçevesi, sıçrayan damla tint'i). */
 export const COLORS: Readonly<Record<BlockId, string>> = {
-  1: '#3fd2de',
+  1: '#5cc9c4',
   2: '#ffcf5a',
   3: '#e44d97',
-  4: '#55d08a',
-  5: '#ff7868',
-  6: '#5d8bff',
-  7: '#ffa14a',
+  4: '#7cc47e',
+  5: '#f4869f',
+  6: '#b45cf2',
+  7: '#f9a184',
   8: '#8e93a6',
 };
+
+/**
+ * NS4-32: sıklamen blok görselleri, `public/images/bloklar/<ad>.webp`. Kaynak `art/bloklar/`; kırpma, küçültme ve
+ * "göz yormasın" ayarı (doygunluk, kontrast, parlaklık) `tools/blocks/prepare_blocks.py` ile yapılır. I için görsel
+ * yoktu: turkuaz karo yeşil karodan üretilir. NS4-34: karolar çiçeksizdir (düz jöle); parça başına tek sıklamen
+ * üstlerine ayrı katmanda çizilir (rendering/plants.ts).
+ */
+export const BLOCK_ART: Readonly<Record<TetrominoType, string>> = {
+  1: 'turkuaz',
+  2: 'sari',
+  3: 'fusya',
+  4: 'yesil',
+  5: 'pembe',
+  6: 'mor',
+  7: 'seftali',
+};
+export type BlockArt = Readonly<Record<TetrominoType, CanvasImageSource>>;
+const TETROMINO_IDS = [1, 2, 3, 4, 5, 6, 7] as const satisfies readonly TetrominoType[];
+/** Görsel karonun hücre içindeki payı (px oranı): komşu karolar arasında ince bir aralık kalır. */
+const ART_INSET = 0.03;
+
+export function blockArtUrl(id: TetrominoType): string {
+  return `${import.meta.env.BASE_URL}images/bloklar/${BLOCK_ART[id]}.webp`;
+}
+
+export function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = url;
+  });
+}
+
+/** Yedi görseli yükler. Biri bile yüklenemezse (veya ortamda Image yoksa) null: jöle çizimi kalır. */
+export function loadBlockArt(): Promise<BlockArt | null> {
+  if (typeof Image === 'undefined') return Promise.resolve(null);
+  return Promise.all(TETROMINO_IDS.map((id) => loadImage(blockArtUrl(id)))).then(
+    ([i, o, t, s, z, j, l]) => ({ 1: i, 2: o, 3: t, 4: s, 5: z, 6: j, 7: l }),
+    () => null,
+  );
+}
 
 function hexToRgb(h: string) {
   const n = parseInt(h.slice(1), 16);
@@ -143,8 +189,50 @@ export function createHappyCloudCanvas(px: number): HTMLCanvasElement {
   return cv;
 }
 
-/** Tek atlas: 8 blok + 8 hayalet karo -> tahtanın tamamı tek draw call. `P` karo adımıdır. */
-export function createBlockAtlas(px: number): { atlas: HTMLCanvasElement; P: number } {
+/**
+ * NS4-22: sıklamen yaprağı (beyaz; renk tint ile). Uzun, ucu yuvarlak; dar tabanı daha koyu (sıklamenin "gözü"),
+ * ortasında ince açık damar. Boyut: yükseklik px, genişlik px / 2.
+ */
+export function createPetalCanvas(px: number): HTMLCanvasElement {
+  const cv = document.createElement('canvas');
+  const h = Math.max(12, Math.round(px)),
+    w = Math.max(6, Math.round(h / 2));
+  cv.width = w;
+  cv.height = h;
+  const x = context2d(cv);
+  const g = x.createLinearGradient(0, h, 0, 0);
+  g.addColorStop(0, 'rgba(150,150,150,1)');
+  g.addColorStop(0.3, 'rgba(255,255,255,1)');
+  g.addColorStop(1, 'rgba(255,255,255,.9)');
+  x.fillStyle = g;
+  x.beginPath();
+  x.moveTo(w / 2, h);
+  x.bezierCurveTo(w * 0.05, h * 0.7, -w * 0.05, h * 0.2, w * 0.38, h * 0.04);
+  x.quadraticCurveTo(w / 2, 0, w * 0.62, h * 0.04);
+  x.bezierCurveTo(w * 1.05, h * 0.2, w * 0.95, h * 0.7, w / 2, h);
+  x.fill();
+  x.strokeStyle = 'rgba(255,255,255,.6)';
+  x.lineWidth = Math.max(1, w * 0.06);
+  x.beginPath();
+  x.moveTo(w / 2, h * 0.9);
+  x.quadraticCurveTo(w * 0.46, h * 0.5, w / 2, h * 0.15);
+  x.stroke();
+  return cv;
+}
+
+/** NS4-32: görsel karo, küçültmede yumuşak örnekleme ile. */
+function drawArt(x: CanvasRenderingContext2D, img: CanvasImageSource, px: number) {
+  const ins = px * ART_INSET;
+  x.imageSmoothingEnabled = true;
+  x.imageSmoothingQuality = 'high';
+  x.drawImage(img, ins, ins, px - ins * 2, px - ins * 2);
+}
+
+/**
+ * Tek atlas: 8 blok + 8 hayalet karo -> tahtanın tamamı tek draw call. `P` karo adımıdır.
+ * NS4-32: `art` verilirse 1-7 görsel karodur; yoksa jöle çizimi.
+ */
+export function createBlockAtlas(px: number, art: BlockArt | null = null): { atlas: HTMLCanvasElement; P: number } {
   const P = px + 4,
     keys = BLOCK_IDS;
   const atlas = document.createElement('canvas');
@@ -156,7 +244,8 @@ export function createBlockAtlas(px: number): { atlas: HTMLCanvasElement; P: num
       ox = i * P + 2;
     x.save();
     x.translate(ox, 2);
-    drawBlock(x, c, px);
+    if (k !== FACE_ID && art) drawArt(x, art[k], px);
+    else drawBlock(x, c, px);
     if (k === FACE_ID) drawFace(x, px);
     x.restore();
     x.save();
@@ -189,31 +278,22 @@ export function createDropCanvas(cell: number, res: number): HTMLCanvasElement {
   return cv;
 }
 
-/** sıvı dalga dokusu (yatay döşenir) */
-export function createWaveCanvas(): HTMLCanvasElement {
+/**
+ * NS4-37: sıklamen özütü sıvısının renk geçişi (dikey; yatayda esnetilir, yüzey dalgası GameView'de maskeyle çizilir).
+ * Üstte açık sıklamen pembesi, ortada sıklamen, dipte turkuaz. Eski 256×128 döşenen dalga dokusu esnetilince
+ * testere dişi gibi görünüyordu.
+ */
+export function createLiquidCanvas(): HTMLCanvasElement {
   const cv = document.createElement('canvas');
-  cv.width = 256;
-  cv.height = 128;
+  cv.width = 4;
+  cv.height = 256;
   const x = context2d(cv);
-  const g = x.createLinearGradient(0, 0, 0, 128);
-  g.addColorStop(0, 'rgba(255,170,210,.95)');
-  g.addColorStop(0.25, 'rgba(230,77,151,.75)');
-  g.addColorStop(1, 'rgba(53,216,200,.55)');
+  const g = x.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, 'rgba(255,196,224,.96)');
+  g.addColorStop(0.08, 'rgba(250,130,186,.9)');
+  g.addColorStop(0.45, 'rgba(222,78,152,.78)');
+  g.addColorStop(1, 'rgba(70,196,198,.62)');
   x.fillStyle = g;
-  x.beginPath();
-  x.moveTo(0, 128);
-  for (let i = 0; i <= 256; i += 4) x.lineTo(i, 6 + Math.sin((i / 256) * Math.PI * 4) * 3);
-  x.lineTo(256, 128);
-  x.closePath();
-  x.fill();
-  x.strokeStyle = 'rgba(255,255,255,.8)';
-  x.lineWidth = 1.5;
-  x.beginPath();
-  for (let i = 0; i <= 256; i += 4) {
-    const yy = 6 + Math.sin((i / 256) * Math.PI * 4) * 3;
-    if (i) x.lineTo(i, yy);
-    else x.moveTo(i, yy);
-  }
-  x.stroke();
+  x.fillRect(0, 0, 4, 256);
   return cv;
 }

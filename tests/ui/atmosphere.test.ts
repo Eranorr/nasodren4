@@ -107,8 +107,9 @@ describe('sinüs boşluğu', () => {
     expect(o).toContain('pointer-events: none');
     expect(o).toContain('var(--color-rim)');
   });
-  it('arka plan boyutu: iki ızgara katmanı hücre boyutunda, derinlik tahtayı kaplar', () => {
-    expect(hudSrc).toContain("$('board-bg').style.backgroundSize = `${grid}, ${grid}, 100% 100%`;");
-    expect(hudSrc).toContain('const grid = `${L.cell}px ${L.cell}px`;');
+  it('ızgara hücre boyutunda (NS4-33: ::before katmanında, --cell), derinlik tahtayı kaplar', () => {
+    expect(hudSrc).toContain("$('board-bg').style.setProperty('--cell', `${L.cell}px`);");
+    expect(rule('#board-bg::before')).toContain('background-size: var(--cell) var(--cell)');
+    expect(rule('#board-bg')).not.toContain('var(--color-board-grid)'); // ızgara artık duvarların üstünde
   });
 });

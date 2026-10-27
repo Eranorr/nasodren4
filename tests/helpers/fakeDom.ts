@@ -156,9 +156,19 @@ export class FakeInput extends FakeElement {
   value = '';
 }
 class FakeOther {}
+/** NS4-33: SVG öğeleri (organik duvar yolları): öznitelik yazımı FakeElement'ten. */
+export class FakeSvg extends FakeElement {}
 
 /** index.html'deki ekran kimlikleri (class="screen"). */
-export const SCREEN_IDS = ['scr-start', 'scr-how', 'scr-pause', 'scr-over', 'scr-set', 'scr-scores'] as const;
+export const SCREEN_IDS = [
+  'scr-start',
+  'scr-how',
+  'scr-pause',
+  'scr-over',
+  'scr-final',
+  'scr-set',
+  'scr-scores',
+] as const;
 const BUTTON_IDS = ['btn-hold', 'btn-cyc', 'btn-sneeze', 'btn-pause'];
 const ELEMENT_IDS = [
   'hud-score',
@@ -167,12 +177,23 @@ const ELEMENT_IDS = [
   'meter-cover',
   'danger',
   'pressure',
+  'relief',
   'breath',
   'board-bg',
   'room-hud',
   'room-name',
-  'room-gray',
-  'room-gray-n',
+  'room-open',
+  'room-open-n',
+  'room-open-fill',
+  // NS4-31: oda açılış kartı (harita) ve final ekranı
+  'room-map',
+  'rm-sub',
+  'rm-next',
+  'rmap',
+  'fmap',
+  'f-score',
+  'f-lines',
+  'o-title',
   'cyc-sub',
   'sneeze-sub',
   'sneeze-fill',
@@ -207,6 +228,7 @@ const SCREEN_BUTTONS: Record<string, readonly string[]> = {
   'scr-start': ['b-play', 'b-how', 'b-set1', 'b-scores'],
   'scr-pause': ['b-resume', 'b-set2', 'b-quit'],
   'scr-over': ['b-again', 'b-menu'],
+  'scr-final': ['b-free', 'b-finish'],
 };
 
 export interface FakeDom {
@@ -238,12 +260,13 @@ export function installFakeDom(): FakeDom {
   const tutDone = byId.get('tut-done');
   if (tutDone) tutDone.hidden = true;
   for (const id of ELEMENT_IDS) byId.set(id, new FakeElement(id));
+  for (const id of ['walls-back', 'walls-front']) byId.set(id, new FakeSvg(id)); // NS4-33
   for (const id of SCREEN_IDS) {
     const s = new FakeElement(id);
     s.classList.add('screen');
     byId.set(id, s);
-    if (id === 'scr-over') {
-      const sheet = new FakeElement('scr-over-sheet');
+    if (id === 'scr-over' || id === 'scr-final') {
+      const sheet = new FakeElement(id + '-sheet');
       sheet.dataset['focus'] = '';
       s.appendChild(sheet);
     }
@@ -308,7 +331,7 @@ export function installFakeDom(): FakeDom {
   vi.stubGlobal('HTMLButtonElement', FakeButton);
   vi.stubGlobal('HTMLAnchorElement', FakeOther);
   vi.stubGlobal('HTMLInputElement', FakeInput);
-  vi.stubGlobal('SVGElement', FakeOther);
+  vi.stubGlobal('SVGElement', FakeSvg);
   vi.stubGlobal('requestAnimationFrame', (fn: () => void) => {
     fn();
     return 0;

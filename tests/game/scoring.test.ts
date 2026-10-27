@@ -24,6 +24,7 @@ describe('satır temizleme', () => {
   ])('%i satır: seviye 1 taban puanı %i', (n, pts) => {
     const g = createGame(1);
     setupWell(g, n);
+    setCell(g, 0, 21 - n, PIECE.Z); // NS4-22: tahta tamamen boşalmasın (Tam Ferahlık bonusu tests/game/allclear.test.ts)
     const log = recordEvents(g, ['scored', 'clearstart']);
     dropVerticalI(g);
     const rows = Array.from({ length: n }, (_, k) => 22 - n + k);
@@ -325,6 +326,7 @@ describe('NS4-01 referans skor dizisi (tek oyun)', () => {
     step(() => {
       clearBoard(g);
       fillRow(g, 21, PIECE.S, [3, 4, 5, 6]);
+      setCell(g, 0, 20, PIECE.Z); // NS4-22: tahta tamamen boşalmasın (Tam Ferahlık bonusu tests/game/allclear.test.ts)
       g.lines = 9;
       g.spawn(PIECE.I);
       g.hardDrop();
@@ -334,6 +336,7 @@ describe('NS4-01 referans skor dizisi (tek oyun)', () => {
     step(() => {
       clearBoard(g);
       for (let y = 18; y < 22; y++) fillRow(g, y, PIECE.J, [0]);
+      setCell(g, 9, 17, PIECE.Z);
       g.spawn(PIECE.I);
       placePiece(g, PIECE.I, 1, -2, 2);
       g.hardDrop();
@@ -352,6 +355,7 @@ describe('NS4-01 referans skor dizisi (tek oyun)', () => {
       step(() => {
         clearBoard(g);
         fillRow(g, 21, PIECE.S, [3, 4, 5, 6]);
+        setCell(g, 0, 20, PIECE.Z);
         g.spawn(PIECE.I);
         g.hardDrop();
       });

@@ -93,6 +93,7 @@ describe('olay → ses ve haptik (her önemli olay bir kez)', () => {
     const { g, lc, rec, buzz } = await wire();
     lc.start();
     setupWell(g, n);
+    setCell(g, 0, 21 - n, PIECE.Z); // NS4-22: tahta boşalmasın (Tam Ferahlık deseni ayrı testte)
     rec.log.length = 0;
     buzz.mockClear();
     dropVerticalI(g);
@@ -212,6 +213,7 @@ describe('reduced motion ses ve haptikten bağımsız', () => {
     (deps.view as unknown as { reducedMotion: boolean }).reducedMotion = true;
     lc.start();
     setupWell(g, 4);
+    setCell(g, 0, 17, PIECE.Z); // NS4-22: tahta boşalmasın
     buzz.mockClear();
     dropVerticalI(g);
     expect(rec.args('clear')).toEqual([[4, 0]]);

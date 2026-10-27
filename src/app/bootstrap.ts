@@ -35,6 +35,7 @@ import { bindSettingsPanel } from '../ui/settingsPanel';
 import { createLifecycle } from './lifecycle';
 import { wireGameEvents } from './events';
 import { watchReducedMotion } from './motion';
+import { setWallsReducedMotion } from '../ui/sinusWalls';
 
 export function bootstrap(): void {
   const stageEl = $('stage');
@@ -61,6 +62,7 @@ export function bootstrap(): void {
   // NS4-15: hareketi azalt tercihi Pixi efektlerine de uygulanır (sarsıntı/parçacık azalır, süreler aynı)
   watchReducedMotion((reduced) => {
     view.reducedMotion = reduced;
+    setWallsReducedMotion(reduced); // NS4-33
   });
   let L: Layout | null = null;
 
@@ -145,6 +147,9 @@ export function bootstrap(): void {
   $('b-menu').addEventListener('click', lifecycle.toMenu);
   $('b-quit').addEventListener('click', lifecycle.toMenu);
   $('b-resume').addEventListener('click', lifecycle.resume);
+  // NS4-31: final ekranı
+  $('b-free').addEventListener('click', lifecycle.continueFree);
+  $('b-finish').addEventListener('click', lifecycle.finish);
   $('b-how').addEventListener('click', () => openSub('scr-how'));
   // "Nasıl oynanır" → öğreticiyi baştan göstererek yeni oyun başlatır
   $('b-tutorial').addEventListener('click', () => {

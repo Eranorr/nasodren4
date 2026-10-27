@@ -1,6 +1,6 @@
 # Ferah Nefes · Yol haritası ve devam notu
 
-Son güncelleme: 2026-10-26. Bu dosya, bir sonraki oturumda kaldığımız yerden devam etmek içindir. Yeni oturumda önce bu dosya, sonra aşağıda adı geçen `docs/NS4-*.md` raporları okunmalı.
+Son güncelleme: 2026-10-26 (NS4-22, NS4-30, NS4-31 sonrası). Bu dosya, bir sonraki oturumda kaldığımız yerden devam etmek içindir. Yeni oturumda önce bu dosya, sonra aşağıda adı geçen `docs/NS4-*.md` raporları okunmalı.
 
 ## 1. Vizyon (kısa)
 
@@ -9,55 +9,70 @@ Son güncelleme: 2026-10-26. Bu dosya, bir sonraki oturumda kaldığımız yerde
 - **Ana deneyim:** "sinüs açıyoruz". Temizledikçe ses berraklaşır, hava akar, bulutçuklar gülümseyip uçar.
 - **Kitle ve yapı:** her yaşa uygun, kısa oturumlu, skor tablolu bir reklam oyunu (Tetris tabanlı).
 
-## 2. Şu ana kadar yapılanlar (commit edilmedi)
+## 2. Şu ana kadar yapılanlar
 
-| Görev  | Özet                                                                                                                                                                                      | Rapor                                    |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| NS4-20 | Tıkanıklıkla boğuklaşan müzik, nefes halkası, leylak basınç vinyeti                                                                                                                       | `docs/NS4-20-CONGESTION-ATMOSPHERE.md`   |
-| NS4-24 | Sentetik açıcı ve rebound kaldırıldı. Yerine "Hapşırık!": %35 tıkanıklıkta açılır, üst 3 sırayı savurur, 20 blokta yeniden dolar, cezası yok                                              | `docs/NS4-24-SNEEZE-POWER.md`            |
-| NS4-21 | Sinüs boşluğu görünümü: derin zemin, yumuşak duvar, hava ağzı, hava kabarcıkları, gri bloklara yüz. **Renkli bloklar değişmedi**                                                          | `docs/NS4-21-SINUS-CAVITY-ATMOSPHERE.md` |
-| NS4-27 | Sinüs Odaları: 4 oda (Yanak %20 → Gözler arası %30 → Alın %40 → Kafa tabanı %50), geçme şartı bütün gri bulutçukları temizlemek, oda bonusu, odaya özgü ton, sonra sonsuz "Serbest nefes" | `docs/NS4-27-SINUS-ROOMS.md`             |
+Commit edildi (2026-10-26, push yok): `b2f84f8` (`dev:mobile`), `2d559e2` (NS4-20, NS4-24, NS4-21, NS4-27).
 
-Durum: `npm run check` temiz (typecheck, lint, format, 695 test, build). Değişiklikler çalışma ağacında; hiçbiri commit edilmedi. `package.json` içindeki `dev:mobile` satırı da commit bekliyor.
+| Görev  | Özet                                                                                                                                                                                                                              | Rapor                                    | Durum          |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | -------------- |
+| NS4-20 | Tıkanıklıkla boğuklaşan müzik, nefes halkası, leylak basınç vinyeti                                                                                                                                                               | `docs/NS4-20-CONGESTION-ATMOSPHERE.md`   | commit edildi  |
+| NS4-24 | Sentetik açıcı ve rebound kaldırıldı. Yerine "Hapşırık!": %35 tıkanıklıkta açılır, üst 3 sırayı savurur, 20 blokta yeniden dolar, cezası yok                                                                                      | `docs/NS4-24-SNEEZE-POWER.md`            | commit edildi  |
+| NS4-21 | Sinüs boşluğu görünümü: derin zemin, yumuşak duvar, hava ağzı, hava kabarcıkları, gri bloklara yüz. **Renkli bloklar değişmedi**                                                                                                  | `docs/NS4-21-SINUS-CAVITY-ATMOSPHERE.md` | commit edildi  |
+| NS4-27 | Sinüs Odaları: 4 oda (Yanak %20 → Gözler arası %30 → Alın %40 → Kafa tabanı %50), geçme şartı bütün gri bulutçukları temizlemek, oda bonusu, odaya özgü ton, sonra sonsuz "Serbest nefes"                                         | `docs/NS4-27-SINUS-ROOMS.md`             | commit edildi  |
+| NS4-22 | Büyük açılma anı (Tetris / oda / Tam Ferahlık): süzgeç bir anda açılır, sentez "ahh", ekran ışığı, turkuaz parıltı, sıklamen yaprakları. Yeni kural: Tam Ferahlık bonusu (800–2000 × seviye)                                      | `docs/NS4-22-BIG-RELIEF-MOMENT.md`       | **commit yok** |
+| NS4-30 | Bulutçukları sadeleştirme: boşluklar hizalı "hava kanalı" (1. oda tek I ile açılır), boşluklar parlar, "%55 açık" çubuğu, hedef metni, ilk bulutçuk ipucu                                                                         | `docs/NS4-30-CLOUD-CLARITY.md`           | **commit yok** |
+| NS4-31 | Sinüs haritası ve final: oda açılınca yüz silüetli harita kartı (geçiş 2,4 sn), 4. odadan sonra "Bütün sinüsler açık!" final ekranı (Serbest nefese devam / Bitir)                                                                | `docs/NS4-31-SINUS-MAP-AND-FINAL.md`     | **commit yok** |
+| NS4-32 | Sıklamen blok görselleri: 1–7 kullanıcının karolarıyla çizilir (I için turkuaz üretildi), "göz yormasın" ayarı (doygunluk 0,88, kontrast 0,86, parlaklık 0,95), 8,6 MB → ~100 KB WebP                                             | `docs/NS4-32-CYCLAMEN-BLOCK-ART.md`      | **commit yok** |
+| NS4-33 | Organik sinüs duvarları: her odanın kendi duvar şekli (yanak mağara, gözler arası petek, alın kubbe/huni, kafa tabanı sırt), oda açıldıkça geri çekilir; ızgara duvarların üstünde                                                | `docs/NS4-33-ORGANIC-SINUS-WALLS.md`     | **commit yok** |
+| NS4-34 | Parça başına tek sıklamen (yılan oyunu parçalarıyla): sap 4 bloğu dolaşır, uçta parça renginde çiçek, yaprak, tomurcuk/sivri uç; karolar çiçeksiz düz jöle; satır silinince sap kopar                                             | `docs/NS4-34-ONE-CYCLAMEN-PER-PIECE.md`  | **commit yok** |
+| NS4-35 | ~~Dik sıklamen çiçeği~~ (NS4-36 ile değişti): yılanın yayvan çiçeği yerine çizimle üretilen, yukarı kalkık 5 taç yapraklı çiçek (dipte koyu göz, yeşil çanak) ve sarmal çizgili tomurcuk; parça renginde, hücreyi boydan doldurur | `docs/NS4-35-UPRIGHT-CYCLAMEN-FLOWER.md` | **commit yok** |
+| NS4-36 | Karo çiçeğiyle bitki: her parçanın çiçeği kendi renk karosundaki çiçek, tomurcuk onun kapalı hâli, karodaki kalp yapraklar (çok karolu matlama), ince bordo sap ve sivri uç                                                       | `docs/NS4-36-TILE-FLOWER-PLANT.md`       | **commit yok** |
+| NS4-37 | Sıklamen özütü sıvısı: bitişte ekranda kalma hatası düzeltildi (sönme anim yuvasından ayrıldı; oda açılışı araya girse de söner); sıvı yeniden çizildi (pürüzsüz renk geçişi, iki katmanlı dalgalı yüzey, parlak yüzey çizgisi)   | `docs/NS4-37-CYCLAMEN-LIQUID-FIX.md`     | **commit yok** |
+
+Durum: `npm run check` temiz (typecheck, lint, format, 741 test, build). NS4-22, NS4-30 ve NS4-31 çalışma ağacında; kullanıcı onayıyla commit edilecek.
+
+Kullanıcı geri bildirimi (2026-10-26): "Bulut mantığını herkes anlayabilir mi? Oynanış hep düz ilerliyor." Seçilenler: bulutçukları sadeleştir (NS4-30) ve sinüs haritası + final (NS4-31). Seçilmeyenler (ileride yeniden sorulabilir): odaya özgü kurallar; süre/parça sınırı + yıldız; sıklamen tohumunu öne çekmek (zaten sıradaki görev).
 
 ## 3. Şimdi yapılacaklar (sırayla)
 
-1. **Commit:** Kullanıcı onayıyla, görev başına ayrı commit:
-   - `feat(ns4-20)`, `feat(ns4-24)`, `feat(ns4-21)`, `feat(ns4-27)`;
-   - `dev:mobile` satırı için `chore`.
-
-   Dosyalar iç içe geçtiği için (`hud.ts`, `styles.css`, `GameView.ts`, testler) ayırmak zorsa tek commit ve her göreve bir mesaj paragrafı.
+1. **Commit:** kullanıcı onayıyla `feat(ns4-22)`, `feat(ns4-30)`, `feat(ns4-31)`. Dosyalar iç içe (events.ts, hud.ts, styles.css, index.html, testler): ayırmak zorsa tek commit, her göreve bir paragraf. Önceki dört görev commit edildi (bkz. 2. bölüm).
 
 2. **Cihaz testi (kullanıcı):** telefonda kulaklık/hoparlörle bir oyun.
    - Boğukluğun dozu (`MUFFLE_CLOSED_HZ`, `src/audio/SoundManager.ts`).
    - Hapşırık ve "Sinüs açıldı" sesleri.
    - Android'de titreşimler.
-   - Odaların zorluğu (`ROOMS` sıra/boşluk, `src/config/gameConfig.ts`).
+   - Odaların zorluğu (`ROOMS` sıra / kanal / ek boşluk, `src/config/gameConfig.ts`). NS4-30 sonrası 1. oda kasıtlı olarak kolay.
+   - NS4-31: harita kartı okunuyor mu (geçiş 2,4 sn, `CFG.roomClearMs`)? Final ekranı: `__fn.ui.final()`; kart: `__fn.ui.roomMap(0)`.
+   - NS4-22 açılma anı: "ahh" sesi ve süzgecin açık kalma süresi (`OPEN_HOLD`, `SoundManager.ts`), yaprak sayısı ve boyutu (`RELIEF_FX`, `PETALS`, `effects.ts`). Geliştirmede `__fn.fx.relief('allclear')` ve `__fn.sfx.play('allclear')` ile denenebilir.
 3. **Yayın öncesi teknik:**
-   - Supabase `submit-score` Edge Function yeniden dağıtılmalı (`scoreRules.ts`: hapşırık adları ve oda bonusu sınırı).
+   - Supabase `submit-score` Edge Function yeniden dağıtılmalı (`scoreRules.ts`: hapşırık adları, oda bonusu ve Tam Ferahlık bonusu sınırı).
    - Etiket yöneticisi (GTM vb.) olay adları güncellenmeli:
-     - yeni: `sneeze_available`, `room_start`, `room_clear`;
+     - yeni: `sneeze_available`, `room_start`, `room_clear`, `all_clear`, `final_choice`;
      - kaldırılan: `synthetic_available`, `rebound_started`;
-     - değişen: `powerup_use.kind` `'hapsirik'`; `game_over` alanlarına `sneeze_uses`, `rooms_cleared`; rozet kimliği `'dogal'` yerine `'hapsu'`.
+     - değişen: `powerup_use.kind` `'hapsirik'`; `game_over` alanlarına `sneeze_uses`, `rooms_cleared`, `all_clears`; `game_over.reason` yeni değer `'complete'`; rozet kimliği `'dogal'` yerine `'hapsu'`.
 4. **Medikal/hukuki inceleme listesine eklenecek yeni metinler:**
    - "Sinüs açıldı! / … ferahladı";
    - oda adları (anatomi);
    - "Hapşırık", "HAPŞUU! / Çok yaşa!", "Burnun yine kaşınıyor…";
-   - Nasıl oynanır'daki oda ve hapşırık maddeleri.
+   - Nasıl oynanır'daki oda, hapşırık ve Tam Ferahlık maddeleri;
+   - "Tam Ferahlık! / Tahta tertemiz" (NS4-22);
+   - "Parlayan boşlukları doldur, bulutçukları uçur", "Bulutçuk uçtu! Hepsini uçur, sinüs açılsın.", "%… açık" (NS4-30);
+   - harita kartı ("Sıradaki: …", "Sırada: final"), final ekranı ve "Bitir" sonrası oyun sonu başlığı "Bütün sinüsler açık!" (NS4-31).
 
    Kayıt: `src/content/health.ts`; denetim: `docs/NS4-19-CONTENT-SAFETY-AUDIT.md`.
 
 ## 4. Bekleyen kararlar (kullanıcıya sorulacak)
 
-- **Odalar:** süre veya parça sınırı ve yıldız sistemi. Kullanıcı "sonra düşünürüz" dedi; varsayılan olarak yok.
+- **Odalar:** süre veya parça sınırı ve yıldız sistemi. Kullanıcı "sonra düşünürüz" dedi; NS4-31 tartışmasında da seçmedi. Varsayılan olarak yok.
+- **Odaya özgü kurallar** (ör. basınç dalgası, buğulu üst kısım, son nefes sayacı): NS4-31 tartışmasında seçilmedi; cihaz testinden sonra tempo hâlâ düz gelirse yeniden önerilebilir.
 - **Oyun sonu:** ulaşılan oda, oyun sonu ekranında ve skor tablosunda gösterilsin mi (yerel kayıt ve Supabase şeması etkilenir)?
-- **Odalar arası:** oda geçişinde oyuncunun kendi renkli blokları da siliniyor (temiz tahta). Bu böyle mi kalsın?
+- ~~**Odalar arası:**~~ karar verildi (2026-10-26): oda geçişinde tahta tamamen temizlenir ("ferahlama patlar").
 
 ## 5. İleriki plan
 
-### Faz A, "His" (devam)
+### Faz A, "His" (tamamlandı)
 
-- **NS4-22 · Büyük açılma anı:** 4 satır, tahtanın tamamen boşalması ("Tam Ferahlık" + bonus) ve oda açılışında daha güçlü bir an. Müzik süzgeci bir anda açılır, sentez "ahh" nefesi, ekran parlar, serin turkuaz parıltılar ve sıklamen yaprakları. Mevcut `onRoomClear`/`Sound.roomClear` bunun temeli.
+- ~~**NS4-22 · Büyük açılma anı**~~: yapıldı (`docs/NS4-22-BIG-RELIEF-MOMENT.md`). Yaprak havuzu (`GameView.petals`, `spawnPetal`) NS4-23'teki Çiçeklenme'de yeniden kullanılabilir.
 
 ### Faz B, Sıklamen (oyunun kimliği)
 
@@ -90,7 +105,7 @@ Durum: `npm run check` temiz (typecheck, lint, format, 695 test, build). Değiş
 
 ## 6. Çalışma kuralları (devam ederken uyulacak)
 
-- **Renkli tetromino bloklarının çizimi değiştirilmez.** NS4-14 değişikliği beğenilmemiş ve NS4-15'te geri alınmıştı. `tests/rendering/textures.test.ts` 1–7. sütunların parmak izini sabitler. His; çerçeve, zemin, efekt ve ses ile verilir.
+- **Renkli tetromino blokları kullanıcının onayı olmadan değiştirilmez.** NS4-14'teki değişiklik beğenilmemiş, NS4-15'te geri alınmıştı. NS4-32'de (2026-10-27) kullanıcının isteği ve kendi sıklamen görselleriyle değişti (`docs/NS4-32-CYCLAMEN-BLOCK-ART.md`). NS4-34'te karolar çiçeksiz oldu ve her parça tek bir sıklamen bitkisi taşıyor (`docs/NS4-34-ONE-CYCLAMEN-PER-PIECE.md`). Görsel ayarları `tools/blocks/` içinde. `tests/rendering/textures.test.ts` hem görsel karoları hem yedek jöle çizimini sabitler.
 - **Her görev:** `NS4-xx` numarası, `docs/NS4-xx-*.md` raporu ve testleri; bitişte `npm run check`.
 - **Renkler** yalnızca `src/styles.css` `:root` tokenı olarak tanımlanır (tema testi). Görünür metin değişirse `tests/helpers/inventory.ts` ve içerik güvenliği testi bilinçli olarak güncellenir.
 - **Motor ve testler:**
@@ -105,5 +120,5 @@ Durum: `npm run check` temiz (typecheck, lint, format, 695 test, build). Değiş
 ## 7. Yeni oturumda başlangıç
 
 1. Bu dosyayı ve `git status` çıktısını oku.
-2. Kullanıcıya sor: önce commit mi (bkz. 3.1), yoksa sıradaki görev mi (önerilen sıra NS4-22 → NS4-23)? Bekleyen kararları (4. bölüm) hatırlat.
+2. Kullanıcıya sor: NS4-22 commit edilsin mi (bkz. 3.1), sıradaki görev NS4-23 (Sıklamen tohumu ve Çiçek Ölçeri) mi? Bekleyen kararları (4. bölüm) hatırlat.
 3. Cihaz testinden gelen geri bildirim varsa (ses dozu, zorluk) önce onları uygula.

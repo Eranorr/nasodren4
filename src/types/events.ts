@@ -30,6 +30,12 @@ export interface RoomClearEvent {
   readonly bonus: number;
 }
 
+/** NS4-22: Tam Ferahlık: satır temizlemesi tahtayı tamamen boşalttı (scored'dan sonra, clearstart'tan önce yayılır). */
+export interface AllClearEvent {
+  readonly lines: number;
+  readonly bonus: number;
+}
+
 export interface GameEvents {
   spawn: void;
   move: void;
@@ -47,6 +53,7 @@ export interface GameEvents {
   powerdone: PowerDoneEvent;
   roomstart: RoomStartEvent;
   roomclear: RoomClearEvent;
+  allclear: AllClearEvent;
 }
 
 export type GameEventName = keyof GameEvents;

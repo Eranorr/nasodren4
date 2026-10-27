@@ -41,6 +41,7 @@ export function rowCells(g: Game, y: number): number[] {
 /** Tahta değişikliklerinde boardVer artırılır (congestion() önbelleği buna bağlıdır). */
 export function clearBoard(g: Game): void {
   g.board.fill(0);
+  g.plant.fill(0); // NS4-34: elle yazılan hücrelere eski parçaların sapı kalmasın
   g.boardVer++;
 }
 
@@ -109,6 +110,7 @@ const EVENT_FLAGS: Record<GameEventName, true> = {
   powerdone: true,
   roomstart: true,
   roomclear: true,
+  allclear: true,
 };
 /** GameEvents içindeki tüm olay adları (Record tipi eksik/fazla adı derleme hatası yapar). */
 export const ALL_EVENTS = Object.keys(EVENT_FLAGS) as GameEventName[];

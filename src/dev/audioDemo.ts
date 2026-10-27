@@ -23,11 +23,25 @@ export const DEMO_SOUNDS = [
   'tspin0',
   'cyc',
   'sneeze',
+  'room',
+  'allclear',
   'level',
   'over',
 ] as const;
 export type DemoSound = (typeof DEMO_SOUNDS)[number];
-export const DEMO_HAPTICS = ['lock', 'hard', 'drain1', 'drain2', 'drain3', 'tetris', 'cyc', 'sneeze', 'over'] as const;
+export const DEMO_HAPTICS = [
+  'lock',
+  'hard',
+  'drain1',
+  'drain2',
+  'drain3',
+  'tetris',
+  'cyc',
+  'sneeze',
+  'room',
+  'allclear',
+  'over',
+] as const;
 export type DemoHaptic = (typeof DEMO_HAPTICS)[number];
 
 export interface AudioDemoState {
@@ -60,11 +74,20 @@ export function createAudioDemo(sound: Sound, buzz: Buzz): AudioDemo {
     drain1: () => sound.clear(1, 0),
     drain2: () => sound.clear(2, 0),
     drain3: () => sound.clear(3, 0),
-    tetris: () => sound.clear(4, 0),
+    // NS4-22: oyundaki gibi açılma anıyla (müzik süzgeci bir anda açılır; müzik çalarken duyulur)
+    tetris: () => {
+      sound.clear(4, 0);
+      sound.relief('tetris');
+    },
     tspin: () => sound.clear(2, 2),
     tspin0: () => sound.clear(0, 2),
     cyc: () => sound.cyc(),
     sneeze: () => sound.sneeze(),
+    room: () => sound.roomClear(),
+    allclear: () => {
+      sound.clear(4, 0);
+      sound.relief('allclear');
+    },
     level: () => sound.level(),
     over: () => sound.over(),
   };
@@ -77,6 +100,8 @@ export function createAudioDemo(sound: Sound, buzz: Buzz): AudioDemo {
     tetris: HAPTIC.clear(4),
     cyc: HAPTIC.cyc,
     sneeze: HAPTIC.sneeze,
+    room: HAPTIC.room,
+    allclear: HAPTIC.allClear,
     over: HAPTIC.over,
   };
   const ready = () => sound.unlocked && sound.contextState === 'running';

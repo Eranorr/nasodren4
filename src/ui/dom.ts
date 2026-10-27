@@ -16,6 +16,14 @@ export function $(id: string, type: ElementType<HTMLElement> = HTMLElement): HTM
   return el;
 }
 
+/** NS4-33: SVG öğeleri için $ karşılığı (SVG öğeleri HTMLElement değildir). */
+export function svg(id: string): SVGElement {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`#${id} bulunamadı`);
+  if (!(el instanceof SVGElement)) throw new Error(`#${id} beklenen türde değil (SVGElement)`);
+  return el;
+}
+
 /** Mutlak konumlu bir DOM elemanını layout dikdörtgenine yerleştirir. */
 export function place(el: HTMLElement, r: Rect): void {
   el.style.left = r.x + 'px';

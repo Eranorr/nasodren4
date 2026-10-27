@@ -13,30 +13,52 @@ import {
   createBlockAtlas,
   createDropCanvas,
   createHappyCloudCanvas,
-  createWaveCanvas,
+  createPetalCanvas,
+  createLiquidCanvas,
+  loadBlockArt,
+  type BlockArt,
 } from './textures';
+import {
+  bloomIndex,
+  bloomRotation,
+  createPlantAtlas,
+  loadPlantArt,
+  stemIndex,
+  PLANT_COLS,
+  PLANT_TILES,
+} from './plants';
+import type { PlantArt } from './plants';
+import { PLANTS } from '../game/plants';
 import {
   Budget,
   CYC_DONE,
   AIRFLOW,
   CYC_TINTS,
+  HOLE_FX,
   LINE_FX,
+  LIQUID_FX,
   NEURO_BURST,
   NEURO_TINTS,
   OSMOTIC_TINT,
+  PETALS,
+  PETAL_TINTS,
+  RELIEF_FX,
   ROOM_FX,
   SNEEZE_FX,
+  SPARKLE_TINTS,
   airflowRate,
   airflowSpeed,
   flavorOf,
   glowAlpha,
+  holeAlpha,
   motionScale,
   type ClearFlavor,
   type MotionScale,
+  type ReliefKind,
 } from './effects';
 import type { Game } from '../game/Game';
 import type { PendingClear, ScoredEvent } from '../types/events';
-import type { BlockId, PendingClearKind, PieceSlot } from '../types/game';
+import type { BlockId, PendingClearKind, PieceSlot, TetrominoType } from '../types/game';
 import type { Layout, Pt } from '../types/layout';
 import type { Settings } from '../types/settings';
 
@@ -59,7 +81,6 @@ interface ClearAnim {
   readonly rows: number[];
   t: number;
   readonly dur: number;
-  recede?: number;
   /** NS4-15: satır temizlemenin görsel dili ('lines' dışında 'drain'). */
   readonly flavor: ClearFlavor;
   /** Sıklamen: çözünme parçacığı salınmış hücreler (görünür hücre indeksi). */
@@ -88,6 +109,18 @@ interface AirMote {
   x0: number;
   phase: number;
 }
+/** NS4-22: sıklamen yaprağı (kendi havuzu; dönerek ve kanat çırparak yukarı süzülür). */
+interface Petal {
+  readonly s: PIXI.Sprite;
+  vx: number;
+  vy: number;
+  life: number;
+  max: number;
+  base: number;
+  spin: number;
+  flip: number;
+  phase: number;
+}
 interface BounceState {
   readonly s: PIXI.Sprite;
   t: number;
@@ -103,6 +136,17 @@ interface SeenVersions {
 /** Tahta hücresi → BlockId. Tahtaya yalnızca Game yazar ve yalnızca 0..8 saklar; buraya 0 olmayan değerler gelir. */
 const asBlock = (v: number): BlockId => v as BlockId;
 
+/** NS4-34: iki boş bitki katmanı (sap, çiçek) ekler; merkezde, hücreyle aynı boyutta (bkz. View.setPlant). */
+function withPlant(s: PIXI.Sprite): PIXI.Sprite {
+  for (let i = 0; i < 2; i++) {
+    const c = new PIXI.Sprite();
+    c.anchor.set(0.5);
+    c.visible = false;
+    s.addChild(c);
+  }
+  return s;
+}
+
 export class View {
   readonly app: PIXI.Application<HTMLCanvasElement>;
   readonly game: Game;
@@ -117,15 +161,45 @@ export class View {
   readonly airLayer: PIXI.Container;
   readonly air: AirMote[];
   airAcc: number;
+  /** NS4-30: bulutçuk sıralarındaki boşluk işaretleri (hava kanalı; blokların arkasında). */
+  readonly holeLayer: PIXI.Container;
+  readonly holes: PIXI.Sprite[];
+  holeT: number;
+  /** NS4-22: sıklamen yaprakları katmanı (en üstte). */
+  readonly petalLayer: PIXI.Container;
+  readonly petals: Petal[];
   // buildTextures() içinde atanır; ilk çağrıya kadar tanımsızdır (bkz. NS4-02-VITE-MIGRATION.md)
   tex!: TextureMap;
   ghostTex!: TextureMap;
   dropTex!: PIXI.Texture;
-  waveTex!: PIXI.Texture;
+  /** NS4-37: sıklamen sıvısının renk geçişi. */
+  liquidTex!: PIXI.Texture;
   /** NS4-27: temizlenirken gülümseyen gri bulutçuk. */
   happyTex!: PIXI.Texture;
+  /** NS4-22: sıklamen yaprağı. */
+  petalTex!: PIXI.Texture;
   atlasBase?: PIXI.BaseTexture;
-  wave!: PIXI.TilingSprite;
+  /** NS4-32: sıklamen blok görselleri; yüklenene kadar null (atlas jöle çizimiyle kurulur). */
+  art: BlockArt | null = null;
+  /** NS4-34: parça başına tek sıklamen: parçalar, atlas ve karoları (yüklenene kadar bitki çizilmez). */
+  plantArt: PlantArt | null = null;
+  plantBase?: PIXI.BaseTexture;
+  plantTex: readonly PIXI.Texture[] = [];
+  /**
+   * NS4-37: sıklamen özütü sıvısı: arka ve ön katman (renk geçişi + dalgalı yüzey maskesi) ve yüzey çizgisi.
+   * `top`: yüzeyin hücre cinsinden yüksekliği (tahtanın üstünden); `out`: sönme süresi (ms, sönmüyorsa null).
+   */
+  readonly liquid: {
+    readonly c: PIXI.Container;
+    readonly back: PIXI.Sprite;
+    readonly front: PIXI.Sprite;
+    readonly backMask: PIXI.Graphics;
+    readonly frontMask: PIXI.Graphics;
+    readonly line: PIXI.Graphics;
+    top: number;
+    phase: number;
+    out: number | null;
+  };
   readonly cells: PIXI.Sprite[];
   readonly active: PIXI.Sprite[];
   readonly ghost: PIXI.Sprite[];
@@ -166,7 +240,26 @@ export class View {
     this.activeLayer = new PIXI.Container();
     this.fxLayer = new PIXI.Container();
     this.airLayer = new PIXI.Container();
-    this.boardC.addChild(this.airLayer, this.ghostLayer, this.cellLayer, this.activeLayer, this.fxLayer);
+    this.holeLayer = new PIXI.Container();
+    this.boardC.addChild(
+      this.airLayer,
+      this.holeLayer,
+      this.ghostLayer,
+      this.cellLayer,
+      this.activeLayer,
+      this.fxLayer,
+    );
+    this.holes = [];
+    for (let i = 0; i < HOLE_FX.max; i++) {
+      const s = new PIXI.Sprite();
+      s.anchor.set(0.5);
+      s.blendMode = PIXI.BLEND_MODES.ADD;
+      s.tint = HOLE_FX.tint;
+      s.visible = false;
+      this.holeLayer.addChild(s);
+      this.holes.push(s);
+    }
+    this.holeT = 0;
     this.air = [];
     for (let i = 0; i < AIRFLOW.count; i++) {
       const s = new PIXI.Sprite();
@@ -183,7 +276,7 @@ export class View {
     // 200 görünür hücre sprite'ı (havuz) — her karede yeniden oluşturma yok
     this.cells = [];
     for (let i = 0; i < COLS * VIS; i++) {
-      const s = new PIXI.Sprite();
+      const s = withPlant(new PIXI.Sprite());
       s.anchor.set(0.5);
       s.visible = false;
       this.cellLayer.addChild(s);
@@ -192,7 +285,7 @@ export class View {
     this.active = [];
     this.ghost = [];
     for (let i = 0; i < 4; i++) {
-      const a = new PIXI.Sprite();
+      const a = withPlant(new PIXI.Sprite());
       a.anchor.set(0.5);
       this.activeLayer.addChild(a);
       this.active.push(a);
@@ -218,7 +311,23 @@ export class View {
       this.fxLayer.addChild(f);
       this.flashes.push(f);
     }
-    // sıvı dalga (sıklamen): buildTextures() içinde oluşturulur (NS4-02: "this.wave = null" ataması kaldırıldı, bkz. yukarı)
+    // NS4-37: sıklamen sıvısı (dokusu buildTextures() içinde); en altta, blok parçacıklarının arkasında
+    {
+      const c = new PIXI.Container();
+      const back = new PIXI.Sprite(),
+        front = new PIXI.Sprite(),
+        backMask = new PIXI.Graphics(),
+        frontMask = new PIXI.Graphics(),
+        line = new PIXI.Graphics();
+      back.tint = LIQUID_FX.backTint;
+      back.alpha = LIQUID_FX.backAlpha;
+      back.mask = backMask;
+      front.mask = frontMask;
+      c.addChild(back, backMask, front, frontMask, line);
+      c.visible = false;
+      this.fxLayer.addChildAt(c, 0);
+      this.liquid = { c, back, front, backMask, frontMask, line, top: VIS, phase: 0, out: null };
+    }
     // NS4-15: dalga tepesi, tahta ışıması ve satır bandı (Texture.WHITE; yeni doku yok)
     const white = () => {
       const s = new PIXI.Sprite(PIXI.Texture.WHITE);
@@ -234,6 +343,17 @@ export class View {
     // parçacıklar
     this.pc = new PIXI.ParticleContainer(420, { vertices: true, position: true, tint: true });
     this.fxLayer.addChild(this.pc);
+    // NS4-22: yapraklar dönüp kanat çırpar (ParticleContainer döndürme/ölçek taşımadığı için ayrı, küçük havuz)
+    this.petalLayer = new PIXI.Container();
+    this.fxLayer.addChild(this.petalLayer);
+    this.petals = [];
+    for (let i = 0; i < PETALS.count; i++) {
+      const s = new PIXI.Sprite();
+      s.anchor.set(0.5);
+      s.visible = false;
+      this.petalLayer.addChild(s);
+      this.petals.push({ s, vx: 0, vy: 0, life: 0, max: 1, base: 0, spin: 0, flip: 0, phase: 0 });
+    }
     this.parts = [];
     for (let i = 0; i < 420; i++) {
       const s = new PIXI.Sprite();
@@ -254,12 +374,42 @@ export class View {
     this.flavor = 'drain';
     this.lastLock = [];
     this.budget = new Budget();
+    // NS4-32: görseller gelince atlas yeniden kurulur (layout henüz yoksa ilk layout() zaten kurar)
+    // NS4-34: bitki parçaları da (karolar ve bitki ayrı ayrı yedeğe düşebilir)
+    void Promise.all([loadBlockArt(), loadPlantArt()]).then(([art, plant]) => {
+      if (!art && !plant) return;
+      this.art = art;
+      this.plantArt = plant;
+      if (this.L) this.buildTextures(this.L.cell);
+    });
+  }
+
+  /**
+   * NS4-34: hücre sprite'ının bitki katmanları (sap, çiçek). Tip 1-7 ve bitki baytı varken; gri, hayalet ve bitki
+   * yüklenmeden gizli. Çocuk sprite'lar hücrenin konum, ölçek, döndürme ve saydamlığını izler.
+   */
+  setPlant(s: PIXI.Sprite, type: number, code: number) {
+    const [stem, bloom] = s.children as PIXI.Sprite[];
+    if (!stem || !bloom) return;
+    if (!this.plantTex.length || !code || type < 1 || type > 7) {
+      stem.visible = bloom.visible = false;
+      return;
+    }
+    const t = type as TetrominoType;
+    stem.texture = this.plantTex[stemIndex(code)] ?? PIXI.Texture.EMPTY;
+    stem.visible = true;
+    const bi = bloomIndex(t, code);
+    bloom.visible = bi >= 0;
+    if (bi >= 0) {
+      bloom.texture = this.plantTex[bi] ?? PIXI.Texture.EMPTY;
+      bloom.rotation = bloomRotation(code);
+    }
   }
 
   mkMini(parent: PIXI.Container): PIXI.Sprite[] {
     const arr: PIXI.Sprite[] = [];
     for (let i = 0; i < 4; i++) {
-      const s = new PIXI.Sprite();
+      const s = withPlant(new PIXI.Sprite());
       s.anchor.set(0.5);
       parent.addChild(s);
       arr.push(s);
@@ -271,41 +421,59 @@ export class View {
     const res = this.app.renderer.resolution;
     const px = Math.max(8, Math.round(cell * res));
     const oldBase = this.atlasBase,
-      oldTex = [this.tex, this.ghostTex];
+      oldTex = [this.tex, this.ghostTex],
+      oldPlantBase = this.plantBase,
+      oldPlantTex = this.plantTex;
     const oldDrop = this.dropTex,
-      oldWave = this.waveTex,
-      oldHappy = this.happyTex;
-    const { atlas, P } = createBlockAtlas(px); // NS4-03: çizim rendering/textures.ts içinde
+      oldLiquid = this.liquidTex,
+      oldHappy = this.happyTex,
+      oldPetal = this.petalTex;
+    const { atlas, P } = createBlockAtlas(px, this.art); // NS4-03: çizim rendering/textures.ts içinde
     const base = (this.atlasBase = PIXI.BaseTexture.from(atlas));
     // i: atlas sütunu (BLOCK_IDS sırası). NS4-04: önce bütün blok, sonra bütün hayalet karoları oluşturulur.
     this.tex = blockRecord((_id, i) => new PIXI.Texture(base, new PIXI.Rectangle(i * P + 2, 2, px, px)));
     this.ghostTex = blockRecord((_id, i) => new PIXI.Texture(base, new PIXI.Rectangle(i * P + 2, P + 2, px, px)));
+    // NS4-34: bitki atlası (blok karosuyla aynı px: hücre sprite'ının çocuğu olarak ölçeği 1)
+    if (this.plantArt) {
+      const pa = createPlantAtlas(px, this.plantArt);
+      const pb = (this.plantBase = PIXI.BaseTexture.from(pa.atlas));
+      this.plantTex = Array.from(
+        { length: PLANT_TILES },
+        (_, i) =>
+          new PIXI.Texture(
+            pb,
+            new PIXI.Rectangle((i % PLANT_COLS) * pa.P + 2, Math.floor(i / PLANT_COLS) * pa.P + 2, px, px),
+          ),
+      );
+    }
     // blok karolarıyla aynı çerçeve (2 px kenar boşluğu dışarıda): aynı boyutta görünür
     this.happyTex = new PIXI.Texture(
       PIXI.BaseTexture.from(createHappyCloudCanvas(px)),
       new PIXI.Rectangle(2, 2, px, px),
     );
+    this.petalTex = PIXI.Texture.from(createPetalCanvas(cell * res * 0.6));
+    for (const p of this.petals) p.s.texture = this.petalTex;
     // damlacık
     this.dropTex = PIXI.Texture.from(createDropCanvas(cell, res));
-    // sıvı dalga dokusu (yatay döşenir)
-    this.waveTex = PIXI.Texture.from(createWaveCanvas());
-    if (this.wave) {
-      this.wave.texture = this.waveTex;
-    } else {
-      this.wave = new PIXI.TilingSprite(this.waveTex, 10, 10);
-      this.wave.visible = false;
-      this.fxLayer.addChildAt(this.wave, 0);
-    }
+    // NS4-37: sıvı renk geçişi (iki katman aynı dokuyu kullanır)
+    this.liquidTex = PIXI.Texture.from(createLiquidCanvas());
+    this.liquid.back.texture = this.liquid.front.texture = this.liquidTex;
     for (const p of this.parts) p.s.texture = this.dropTex;
     for (const m of this.air) m.s.texture = this.dropTex;
+    for (const h of this.holes) h.texture = this.dropTex;
     // eski dokuları güvenle serbest bırak (sprite'lar sync ile yenisine geçer)
     this.seen.piece = this.seen.board = this.seen.queue = -1;
     this.syncAll();
     for (const o of oldTex) if (o) for (const t of Object.values(o)) t.destroy(false);
     if (oldBase) oldBase.destroy();
+    if (oldPlantBase !== this.plantBase) {
+      for (const t of oldPlantTex) t.destroy(false);
+      if (oldPlantBase) oldPlantBase.destroy();
+    }
     if (oldDrop) oldDrop.destroy(true);
-    if (oldWave) oldWave.destroy(true);
+    if (oldLiquid) oldLiquid.destroy(true);
     if (oldHappy) oldHappy.destroy(true);
+    if (oldPetal) oldPetal.destroy(true);
   }
 
   layout(L: Layout) {
@@ -321,6 +489,7 @@ export class View {
     // NS4-15: süren efekt yeni ölçüye uyar; eski ölçüdeki parçacıklar bırakılır (konumları eski hücre boyutunda)
     this.killParticles();
     this.killAir();
+    this.killPetals();
     this.glow.s.width = this.band.s.width = this.crest.width = COLS * c;
     this.glow.s.height = VIS * c;
     this.band.s.height = c;
@@ -363,6 +532,7 @@ export class View {
           s = this.cells[r * COLS + col];
         if (v) {
           s.texture = this.tex[asBlock(v)];
+          this.setPlant(s, v, g.plant[(r + HIDDEN) * COLS + col]);
           s.visible = true;
           s.alpha = 1;
           s.tint = 0xffffff;
@@ -371,7 +541,29 @@ export class View {
           s.position.set(col * c + c / 2, r * c + c / 2);
         } else s.visible = false;
       }
+    this.syncHoles();
     this.seen.board = g.boardVer;
+  }
+
+  /** NS4-30: gri bulutçuk içeren görünür sıralardaki boş hücrelere işaret koyar (havuz kadar; fazlası gösterilmez). */
+  syncHoles() {
+    const b = this.game.board,
+      c = this.L.cell;
+    let n = 0;
+    for (let r = 0; r < VIS && n < this.holes.length; r++) {
+      const row = (r + HIDDEN) * COLS;
+      let gray = false;
+      for (let col = 0; col < COLS; col++) if (b[row + col] === PIECE.GARBAGE) gray = true;
+      if (!gray) continue;
+      for (let col = 0; col < COLS && n < this.holes.length; col++) {
+        if (b[row + col]) continue;
+        const h = this.holes[n++];
+        h.position.set(col * c + c / 2, r * c + c / 2);
+        h.scale.set((HOLE_FX.size * c) / this.dropTex.orig.width);
+        h.visible = true;
+      }
+    }
+    for (; n < this.holes.length; n++) this.holes[n].visible = false;
   }
 
   syncPiece() {
@@ -391,6 +583,7 @@ export class View {
       const cx = g.x + sh[i][0],
         cy = g.y + sh[i][1] - HIDDEN;
       a.texture = this.tex[type];
+      this.setPlant(a, type, PLANTS[type][g.rot][i]);
       this.setSize(a, c);
       a.position.set(cx * c + c / 2, cy * c + c / 2);
       a.visible = cy >= 0;
@@ -428,6 +621,7 @@ export class View {
     for (let i = 0; i < 4; i++) {
       const s = sprites[i];
       s.texture = this.tex[type];
+      this.setPlant(s, type, PLANTS[type][0][i]);
       this.setSize(s, mc);
       s.position.set(ox + (sh[i][0] - minx) * mc + mc / 2, oy + (sh[i][1] - miny) * mc + mc / 2);
       s.visible = true;
@@ -513,6 +707,61 @@ export class View {
       m.s.visible = false;
     }
     this.airAcc = 0;
+  }
+
+  /** NS4-22: bütün yaprakları söndürür (havuz boyutu değişmez). */
+  killPetals() {
+    for (const p of this.petals) {
+      p.life = 0;
+      p.s.visible = false;
+    }
+  }
+
+  /** NS4-22: (x, y)'den (vx, vy) hızıyla bir yaprak doğurur (havuz doluysa en eskisinin yerine geçmez; doğmaz). */
+  spawnPetal(x: number, y: number, vx: number, vy: number) {
+    const p = this.petals.find((q) => q.life <= 0);
+    if (!p) return;
+    const c = this.L.cell,
+      r = (a: readonly [number, number]) => a[0] + Math.random() * (a[1] - a[0]);
+    p.max = p.life = r(PETALS.life);
+    p.vx = vx;
+    p.vy = vy;
+    p.base = (r(PETALS.size) * c) / this.petalTex.orig.height;
+    p.spin = r(PETALS.spin) * (Math.random() < 0.5 ? -1 : 1);
+    p.flip = r(PETALS.flip) * Math.PI * 2;
+    p.phase = Math.random() * Math.PI * 2;
+    p.s.position.set(x, y);
+    p.s.rotation = Math.random() * Math.PI * 2;
+    p.s.tint = PETAL_TINTS[(Math.random() * PETAL_TINTS.length) | 0];
+    p.s.scale.set(p.base);
+    p.s.alpha = 0;
+    p.s.visible = true;
+  }
+
+  /** NS4-22: yapraklar dönerek, kanat çırparak yukarı ve sinüs ağzına (tahta ortası) doğru süzülür. */
+  updatePetals(dt: number) {
+    const sec = dt / 1000,
+      c = this.L.cell,
+      mid = (COLS * c) / 2,
+      d = Math.exp(-PETALS.drag * sec);
+    for (const p of this.petals) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      if (p.life <= 0 || p.s.y < -c * 2) {
+        p.life = 0;
+        p.s.visible = false;
+        continue;
+      }
+      const f = 1 - p.life / p.max;
+      p.vx = (p.vx + (mid - p.s.x) * PETALS.pull * sec) * d;
+      p.vy = (p.vy - PETALS.lift * c * sec) * d;
+      p.phase += p.flip * sec;
+      p.s.x += p.vx * sec + Math.sin(p.phase * 0.5) * c * 0.6 * sec;
+      p.s.y += p.vy * sec;
+      p.s.rotation += p.spin * sec;
+      p.s.scale.set(p.base * Math.max(0.25, Math.abs(Math.cos(p.phase))), p.base);
+      p.s.alpha = Math.min(1, f / 0.1, (1 - f) / 0.4);
+    }
   }
 
   /** NS4-21: boş bir sütunda, yığın yüzeyinin biraz üstünde bir zerrecik doğurur (yer yoksa doğmaz). */
@@ -607,17 +856,14 @@ export class View {
     this.overT = -1;
     this.anim = null;
     this.flavor = 'drain';
-    if (this.wave) {
-      this.wave.visible = false;
-      this.wave.alpha = 1;
-    }
-    this.crest.visible = false;
+    this.hideLiquid();
     for (const f of this.flashes) f.visible = false;
     if (this.L) for (const f of this.flashes) f.height = this.L.cell;
     this.stopGlow(this.glow);
     this.stopGlow(this.band);
     this.killParticles();
     this.killAir();
+    this.killPetals();
     this.budget.reset();
     this.shake = 0;
     if (this.L) this.boardC.position.set(this.L.board.x, this.L.board.y);
@@ -768,13 +1014,12 @@ export class View {
       if (R.shake) this.kick(R.shake);
       if (R.glow) this.startGlow(this.glow, R.glow, R.glowPeak, flavor === 'osmotic' ? 380 : 300, 1);
     } else {
-      this.wave.visible = true;
-      this.wave.alpha = 1;
-      this.wave.width = COLS * c;
-      this.wave.height = 1;
-      this.wave.y = VIS * c;
-      this.wave.tileScale.set((c * 2.6) / 256, (VIS * 0.6 * c) / 128);
-      this.wave.tilePosition.y = 0;
+      const lq = this.liquid;
+      lq.out = null;
+      lq.top = VIS;
+      lq.c.alpha = 1;
+      lq.c.visible = true;
+      this.drawLiquid();
       this.crest.tint = 0xffd6ea;
       this.crest.alpha = 0;
       this.crest.visible = true;
@@ -784,10 +1029,73 @@ export class View {
   onClearEnd() {
     for (const f of this.flashes) f.visible = false;
     if (this.L) for (const f of this.flashes) f.height = this.L.cell;
-    const cycDone = this.anim?.kind === 'cyc' && this.anim.recede == null;
-    this.anim = this.anim && this.anim.kind === 'cyc' ? Object.assign(this.anim, { recede: 0 }) : null;
+    const cycDone = this.anim?.kind === 'cyc';
+    this.anim = null;
+    // NS4-37: sıvı kendi zamanlayıcısıyla söner (anim yuvasında değil: sonraki temizleme onu yarıda bırakmasın)
+    if (cycDone) this.liquid.out = 0;
     this.syncAll();
     if (cycDone) this.cycBoost();
+  }
+
+  /**
+   * NS4-37: sıvının yüzeyi: iki dalganın toplamı, faz zamanla ilerler. Arka katman biraz daha yüksekte ve ters fazda
+   * (derinlik); ön yüzeyde ince parlak çizgi. Maske ve çizgi her karede yeniden çizilir (yerleşim değişse de doğru).
+   */
+  drawLiquid() {
+    const lq = this.liquid,
+      c = this.L.cell,
+      W = COLS * c,
+      H = VIS * c,
+      k = this.reducedMotion ? LIQUID_FX.reducedScale : 1;
+    const top = lq.top * c,
+      n = 48;
+    const surf = (x: number, phase: number, lift: number) =>
+      top -
+      lift * c +
+      Math.sin((x / W) * Math.PI * 2 * LIQUID_FX.waves + phase) * LIQUID_FX.amp * c * k +
+      Math.sin((x / W) * Math.PI * 2 * LIQUID_FX.waves * 2.3 - phase * 1.7) * LIQUID_FX.amp2 * c * k;
+    const shape = (g: PIXI.Graphics, phase: number, lift: number) => {
+      g.clear();
+      g.beginFill(0xffffff);
+      g.moveTo(0, H);
+      for (let i = 0; i <= n; i++) g.lineTo((i / n) * W, surf((i / n) * W, phase, lift));
+      g.lineTo(W, H);
+      g.closePath();
+      g.endFill();
+    };
+    shape(lq.frontMask, lq.phase, 0);
+    shape(lq.backMask, -lq.phase * 0.8 + 1.3, LIQUID_FX.backLift);
+    // renk geçişi yüzeyin biraz üstünden tahtanın dibine
+    const y0 = top - (LIQUID_FX.backLift + LIQUID_FX.amp + LIQUID_FX.amp2) * c;
+    for (const s of [lq.back, lq.front]) {
+      s.position.set(0, y0);
+      s.width = W;
+      s.height = Math.max(1, H - y0);
+    }
+    const ln = lq.line;
+    ln.clear();
+    ln.lineStyle({
+      width: Math.max(1, LIQUID_FX.line * c),
+      color: 0xffffff,
+      alpha: LIQUID_FX.lineAlpha,
+      cap: PIXI.LINE_CAP.ROUND,
+    });
+    for (let i = 0; i <= n; i++) {
+      const x = (i / n) * W,
+        y = surf(x, lq.phase, 0);
+      if (i) ln.lineTo(x, y);
+      else ln.moveTo(x, y);
+    }
+  }
+
+  /** NS4-37: sıvıyı ve tepe ışığını gizler (sönme bitti ya da yeni oyun). */
+  hideLiquid() {
+    const lq = this.liquid;
+    lq.c.visible = false;
+    lq.c.alpha = 1;
+    lq.out = null;
+    lq.top = VIS;
+    this.crest.visible = false;
   }
 
   /** Sıklamen bitti, ×2 başladı: tek, yumuşak pembe vuruş ve alttan yükselen pembe/turkuaz kabarcıklar. */
@@ -857,6 +1165,41 @@ export class View {
       );
   }
 
+  /**
+   * NS4-22: büyük açılma anı (Tetris, Tam Ferahlık, oda açılışı): tahta kenarıyla birlikte parlar, serin turkuaz
+   * parıltılar yukarı saçılır, sıklamen yaprakları yukarı süzülür. Satır temizlemesinde (Tetris / Tam Ferahlık)
+   * temizlenen satırlardan, oda açılışında tahtanın altından doğar. Sürmekte olan ışımanın yerine geçer.
+   */
+  relief(kind: ReliefKind) {
+    if (!this.L) return;
+    const R = RELIEF_FX[kind],
+      c = this.L.cell,
+      dw = this.dropTex.orig.width;
+    const rows = this.anim?.kind === 'lines' && this.anim.rows.length ? this.anim.rows : null;
+    const y0 = rows ? (rows.reduce((a, b) => a + b, 0) / rows.length) * c + c / 2 : VIS * c - c * 0.5;
+    this.startGlow(this.glow, R.glow, R.peak, R.dur, 1, R.edge);
+    if (R.shake) this.kick(R.shake);
+    for (let i = 0, n = this.count(R.sparkles); i < n; i++)
+      this.emitDrop(
+        ((i + Math.random()) / n) * COLS * c,
+        y0 + (Math.random() - 0.5) * c,
+        SPARKLE_TINTS[i % SPARKLE_TINTS.length],
+        (Math.random() - 0.5) * c * 6,
+        -c * (6 + Math.random() * 7),
+        520 + Math.random() * 420,
+        c * 6,
+        ((0.16 + Math.random() * 0.14) * c) / dw,
+        2.2,
+      );
+    for (let i = 0, n = this.count(R.petals); i < n; i++)
+      this.spawnPetal(
+        ((i + Math.random()) / n) * COLS * c,
+        y0 + (Math.random() - 0.5) * c,
+        (Math.random() - 0.5) * c * 5,
+        -c * (4 + Math.random() * 5),
+      );
+  }
+
   onGameOver() {
     this.overT = 0;
     this.syncPiece();
@@ -886,45 +1229,44 @@ export class View {
       }
     }
 
+    // NS4-37: sıklamen sıvısı: yükselirken ve bitince sönerken dalgalanır; sönme anim yuvasından bağımsız
+    const lq = this.liquid;
+    if (lq.c.visible) {
+      lq.phase += dt * LIQUID_FX.speed * (this.reducedMotion ? LIQUID_FX.reducedScale : 1);
+      if (lq.out != null) {
+        lq.out += dt;
+        const q = Math.min(1, lq.out / LIQUID_FX.recedeMs);
+        lq.c.alpha = 1 - q;
+        this.crest.alpha = 0.4 * (1 - q) * this.motion.glow;
+        if (q >= 1) this.hideLiquid();
+      }
+      if (lq.c.visible) this.drawLiquid();
+    }
+
     // temizleme animasyonu
     const a = this.anim;
     const m = this.motion;
     if (a) {
       a.t += dt;
-      if (a.recede != null) {
-        a.recede += dt;
-        const p = Math.min(1, a.recede / 520);
-        this.wave.alpha = 1 - p;
-        this.crest.alpha = 0.5 * (1 - p) * m.glow;
-        this.wave.tilePosition.x -= dt * 0.12;
-        if (p >= 1) {
-          this.wave.visible = false;
-          this.wave.alpha = 1;
-          this.crest.visible = false;
-          this.anim = null;
-        }
-      } else if (a.kind === 'cyc') {
+      if (a.kind === 'cyc') {
         const p = Math.min(1, a.t / a.dur),
           e = 1 - Math.pow(1 - p, 3);
         const top = a.rows.length ? Math.min(...a.rows) : VIS;
         const h = (VIS - top) * c * e + c * 0.6;
-        // ölçüler her karede (yeniden yerleşim sırasında da doğru kalır)
-        this.wave.width = COLS * c;
-        this.wave.tileScale.set((c * 2.6) / 256, (VIS * 0.6 * c) / 128);
-        this.wave.height = h;
-        this.wave.y = VIS * c - h;
-        this.wave.tilePosition.x -= dt * 0.12;
-        // dalga tepesi: ince, parlak pembe şerit (yükselen sıvının yüzeyi)
+        // NS4-37: yüzey hücre cinsinden (yeniden yerleşimde doğru kalır); çizim aşağıda, sıvı adımında
+        this.liquid.top = VIS - h / c;
+        const surfaceY = this.liquid.top * c;
+        // dalga tepesi: yüzeyin üstünde yumuşak pembe ışık
         this.crest.height = c * 0.32;
-        this.crest.y = this.wave.y - c * 0.1;
-        this.crest.alpha = (0.55 - 0.25 * p) * m.glow;
+        this.crest.y = surfaceY - c * 0.2;
+        this.crest.alpha = (0.45 - 0.2 * p) * m.glow;
         const dw = this.dropTex.orig.width;
         for (const r of a.rows)
           for (let col = 0; col < COLS; col++) {
             const i = r * COLS + col,
               s = this.cells[i];
             if (!s.visible) continue;
-            if (s.y > this.wave.y) {
+            if (s.y > surfaceY) {
               // sıvıya giren hücre bir kez çözünme parçacığı salar, sonra pembeleşerek erir ve hafifçe yükselir
               if (a.done && !a.done[i]) {
                 a.done[i] = 1;
@@ -1031,8 +1373,13 @@ export class View {
       }
     }
 
-    // NS4-21: hava akışı
+    // NS4-30: boşluk işaretleri nefes ritmiyle parlar
+    this.holeT += dt;
+    const ha = holeAlpha(this.holeT, this.reducedMotion);
+    for (const h of this.holes) if (h.visible) h.alpha = this.overT >= 0 ? 0 : ha;
+    // NS4-21: hava akışı; NS4-22: sıklamen yaprakları
     this.updateAir(dt);
+    this.updatePetals(dt);
 
     // tahta ışıması ve satır bandı
     this.updateGlow(this.glow, dt);
@@ -1071,6 +1418,7 @@ export class View {
           const s = this.cells[r * COLS + col];
           if (s.visible && s.texture !== this.tex[PIECE.GARBAGE]) {
             s.texture = this.tex[PIECE.GARBAGE];
+            this.setPlant(s, 0, 0); // NS4-34: griye dönen yığında bitki yok
             s.alpha = 0.75;
           }
         }

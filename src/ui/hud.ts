@@ -4,6 +4,7 @@
    NS4-03: main.ts'ten taşındı; eşikler değişmedi. NS4-07: güçlendirici durum metinleri ui/powerups.ts'te.
    NS4-24: sentetik açıcı / Rebound rozeti yerine hapşırık butonu ve şarj çubuğu.
    NS4-20: nefes halkası (tıkanıklığa göre derin → sığ nefes) ve kademeli basınç vinyeti.
+   NS4-22: büyük açılma anında ekran ortadan serin bir ışıkla açılır; basınç ve tehlike vinyeti o an kalkar.
    ===================================================================== */
 import { $, place } from './dom';
 import { toast, clearNotifications } from './notifications';
@@ -24,7 +25,8 @@ import {
 } from './powerups';
 import type { Game } from '../game/Game';
 import { ROOMS } from '../config/gameConfig';
-import { roomLabel, roomText } from '../content/rooms';
+import { openPercent, roomLabel, roomText } from '../content/rooms';
+import { resetWalls, syncWalls } from './sinusWalls';
 import type { Layout } from '../types/layout';
 
 /** Son yazılan değerler: yalnızca değişen değerler DOM'a yazılır (-1 / null = henüz yazılmadı). */
@@ -39,9 +41,9 @@ interface HudCache {
   danger: boolean | null;
   breath: BreathState | null;
   pressure: number;
-  /** NS4-27: oda indeksi ve kalan gri bulutçuk (-1 = yazılmadı). */
+  /** NS4-27: oda indeksi; NS4-30: sinüsün açıklık yüzdesi (-1 = yazılmadı). */
   room: number;
-  gray: number;
+  open: number;
   cycState: CycState | null;
   sneezeState: SneezeState | null;
   /** Hapşırık şarj yüzdesi (dolum çubuğu ve erişilebilir ad). */
@@ -65,7 +67,7 @@ function initialHud(): HudCache {
     breath: null,
     pressure: -1,
     room: -1,
-    gray: -1,
+    open: -1,
     cycState: null,
     sneezeState: null,
     sneezePct: -1,
@@ -139,14 +141,19 @@ export function updateHud(g: Game, playing: boolean): void {
     if (on) {
       $('room-name').textContent = roomLabel(room);
       $('room-name').setAttribute('aria-label', `Oda: ${roomText(room).name}`);
-      $('room-gray').style.display = room < ROOMS.length ? '' : 'none';
+      $('room-open').style.display = room < ROOMS.length ? '' : 'none';
     }
   }
-  const gray = g.rooms && g.room < ROOMS.length ? g.roomGray : 0;
-  if (gray !== hud.gray) {
-    hud.gray = gray;
-    $('room-gray-n').textContent = String(gray);
+  // NS4-30: kalan bulutçuk sayısı yerine açıklık: "%60 açık" ve dolan çubuk
+  const open = g.rooms && g.room < ROOMS.length ? openPercent(g.roomOpenness()) : 100;
+  if (open !== hud.open) {
+    hud.open = open;
+    $('room-open-n').textContent = `%${open}`;
+    $('room-open-fill').style.transform = `scaleX(${open / 100})`;
+    $('room-open').setAttribute('aria-label', `Sinüs yüzde ${open} açık`);
   }
+  // NS4-33: organik duvarlar odanın şeklinde; oda açıldıkça geri çekilir (Serbest nefeste hep açık)
+  syncWalls(g.rooms ? g.room : ROOMS.length, g.rooms && g.room < ROOMS.length ? g.roomOpenness() : 1);
   const cyc = g.canCyc(),
     sneeze = g.canSneeze();
   if (cyc !== hud.cyc) {
@@ -200,6 +207,7 @@ export function updateHud(g: Game, playing: boolean): void {
  */
 export function resetHud(): void {
   Object.assign(hud, initialHud());
+  resetWalls();
 }
 
 /**
@@ -220,6 +228,27 @@ function renderPowerup(kind: 'cyc' | 'sneeze', state: CycState | SneezeState): v
   b.setAttribute('aria-label', `${name}: ${text}${pct}`);
   $(kind + '-sub').textContent = text;
   $(kind + '-chip').textContent = short;
+}
+
+/** NS4-22: açılma anı ışığının süresi (ms; CSS animasyonuyla aynı). */
+export const RELIEF_MS: Readonly<Record<'tetris' | 'allclear' | 'room', number>> = {
+  tetris: 900,
+  room: 1400,
+  allclear: 1600,
+};
+let reliefTimer: ReturnType<typeof setTimeout> | undefined;
+/**
+ * NS4-22: ekran ortadan serin bir ışıkla açılır (#relief, data-kind'e göre güç); ışık sürdükçe basınç ve tehlike
+ * vinyeti kalkar (CSS kardeş seçicisi), sonra HUD'un değerine yumuşakça döner. Art arda anlar animasyonu yeniden başlatır.
+ */
+export function reliefFlash(kind: 'tetris' | 'allclear' | 'room'): void {
+  const el = $('relief');
+  el.classList.remove('on');
+  void el.offsetWidth; // animasyonu yeniden başlat
+  el.dataset['kind'] = kind;
+  el.classList.add('on');
+  clearTimeout(reliefTimer);
+  reliefTimer = setTimeout(() => el.classList.remove('on'), RELIEF_MS[kind]);
 }
 
 /** Tehlike vinyetini gizler. */
@@ -249,6 +278,9 @@ export function clearSessionHud(): void {
   hideDanger();
   $('breath').dataset['state'] = 'ferah';
   $('pressure').style.opacity = '0';
+  clearTimeout(reliefTimer);
+  $('relief').classList.remove('on');
+  $('room-map').classList.remove('on'); // NS4-31
   $('room-hud').style.display = 'none';
   $('board-bg').dataset['room'] = '';
   clearNotifications();
@@ -271,9 +303,8 @@ export function hudScale(L: Pick<Layout, 'portrait' | 'cell'>): number {
 export function applyHudLayout(L: Layout): void {
   $('stage').style.setProperty('--hud-scale', hudScale(L).toFixed(3));
   place($('board-bg'), L.board);
-  // NS4-21: iki ızgara katmanı hücre boyutunda döşenir, derinlik katmanı (en alttaki) tahtayı kaplar
-  const grid = `${L.cell}px ${L.cell}px`;
-  $('board-bg').style.backgroundSize = `${grid}, ${grid}, 100% 100%`;
+  // NS4-33: ızgara ::before katmanında hücre boyutunda döşenir (--cell); derinlik katmanı tahtayı kaplar
+  $('board-bg').style.setProperty('--cell', `${L.cell}px`);
   place($('meter'), L.meter);
   const ml = $('meter-lbl');
   ml.style.left = L.meter.x - 18 + 'px';
@@ -299,6 +330,11 @@ export function applyHudLayout(L: Layout): void {
   rh.style.left = L.board.x + 8 + 'px';
   rh.style.width = L.board.w - 16 + 'px';
   rh.style.top = L.board.y - 11 + 'px';
+  // NS4-31: oda açılış kartı tahtanın alt yarısında (popup alanının altında)
+  const rm = $('room-map');
+  rm.style.left = L.board.x + L.board.w * 0.08 + 'px';
+  rm.style.width = L.board.w * 0.84 + 'px';
+  rm.style.top = L.board.y + L.board.h * 0.56 + 'px';
   const pop = $('popups');
   place(pop, { x: L.board.x, y: L.board.y + L.board.h * 0.22, w: L.board.w, h: L.board.h * 0.4 });
   $('toast').style.top = L.board.y + 8 + 'px';

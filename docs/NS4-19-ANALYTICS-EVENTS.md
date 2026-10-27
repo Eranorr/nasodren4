@@ -2,6 +2,10 @@
 
 > **NS4-24 notu:** sentetik açıcı ve rebound kaldırıldı. `synthetic_available` → `sneeze_available`; `rebound_started` kaldırıldı; `powerup_use.kind` `'sentetik'` → `'hapsirik'`; `game_over.syn_uses` → `sneeze_uses`; `game_over.reason` artık `'garbage'` içermez; `badge.id` `'dogal'` → `'hapsu'`. Ayrıntı: `docs/NS4-24-SNEEZE-POWER.md`.
 
+> **NS4-22 notu:** yeni `all_clear { lines, level, bonus }` (satır temizlemesi tahtayı tamamen boşalttı; her seferinde); `game_over` alanlarına `all_clears`. Ayrıntı: `docs/NS4-22-BIG-RELIEF-MOMENT.md`.
+
+> **NS4-31 notu:** yeni `final_choice { choice: 'continue' | 'finish', dur_s }` (dört sinüs açıldıktan sonra final ekranındaki seçim); `game_over.reason` yeni değer `'complete'` (finalde "Bitir"). Ayrıntı: `docs/NS4-31-SINUS-MAP-AND-FINAL.md`.
+
 Oyun hunisi kişisel veri toplamadan ölçülebilir hale getirildi.
 
 - Olaylar tiplidir (`src/types/analytics.ts`); gönderim `src/analytics/analytics.ts` üzerindendir.

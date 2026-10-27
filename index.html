@@ -20,7 +20,20 @@
       <!-- NS4-10: overlay açıkken inert (screens.ts); tabindex=-1: overlay kapanınca odak oyun alanına döner -->
       <div id="stage" inert tabindex="-1">
         <div id="under">
-          <div id="board-bg" class="abs"></div>
+          <div id="board-bg" class="abs">
+            <!-- NS4-33: organik sinüs duvarları (blokların arkasında; şekil ui/sinusWalls.ts, renk CSS'te) -->
+            <svg
+              id="sinus-walls"
+              class="sinus-walls"
+              viewBox="0 0 10 20"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path id="walls-back" class="wall-back" d="" />
+              <path id="walls-front" class="wall-front" d="" />
+            </svg>
+          </div>
           <div id="meter" class="abs"><div id="meter-cover"></div></div>
           <div id="meter-lbl" class="abs lbl">Tıkanıklık</div>
           <div id="hold-bg" class="abs panel"></div>
@@ -41,10 +54,32 @@
           <div id="fx-badges" class="abs">
             <div id="badge-mult" class="badge">Ferah nefes ×2</div>
           </div>
-          <!-- NS4-27: Sinüs Odaları: tahtanın üst kenarında oda ve kalan bulutçuk etiketleri -->
+          <!-- NS4-27: Sinüs Odaları: tahtanın üst kenarında oda etiketi; NS4-30: sinüsün açıklık oranı (dolan çubuk) -->
           <div id="room-hud" class="abs">
             <span id="room-name" class="room-pill">1/4 · Yanak</span>
-            <span id="room-gray" class="room-pill">Bulutçuk <b id="room-gray-n">0</b></span>
+            <span id="room-open" class="room-pill room-open"
+              ><i id="room-open-fill" class="room-open-fill" aria-hidden="true"></i
+              ><b id="room-open-n">%0</b> açık</span
+            >
+          </div>
+          <!-- NS4-31: oda açılınca sinüs haritası (geçiş boyunca; tahtanın alt yarısında, dokunmayı engellemez) -->
+          <div id="room-map" class="abs room-map" aria-live="polite">
+            <p class="rm-title">Sinüs açıldı!</p>
+            <p id="rm-sub" class="rm-sub"></p>
+            <div id="rmap" class="sinus-map">
+              <svg class="sinus-svg" viewBox="0 0 120 140" aria-hidden="true">
+                <path class="face" d="M60 6C90 6 106 30 106 62c0 38-20 70-46 72-26-2-46-34-46-72C14 30 30 6 60 6Z" />
+                <path class="line" d="M33 51q8-5 17 0M70 51q8-5 17 0M58 66q-5 17-1 21 4 2 7 0M48 108q12 9 24 0" />
+                <circle class="eye" cx="41" cy="60" r="3" />
+                <circle class="eye" cx="79" cy="60" r="3" />
+                <ellipse class="sinus s-alin" cx="60" cy="33" rx="17" ry="8" />
+                <circle class="sinus s-sfenoid" cx="60" cy="49" r="5" />
+                <ellipse class="sinus s-etmoid" cx="60" cy="65" rx="5" ry="8" />
+                <ellipse class="sinus s-yanak" cx="40" cy="84" rx="10" ry="9" />
+                <ellipse class="sinus s-yanak" cx="80" cy="84" rx="10" ry="9" />
+              </svg>
+            </div>
+            <p id="rm-next" class="rm-next"></p>
           </div>
           <div id="popups" class="abs"></div>
           <div id="toast"></div>
@@ -123,6 +158,8 @@
           </div>
         </div>
       </div>
+      <!-- NS4-22: büyük açılma anı ışığı (açıkken basınç ve tehlike vinyeti kalkar; kardeş seçicisi için önce gelir) -->
+      <div id="relief" aria-hidden="true"></div>
       <!-- NS4-20: tıkanıklıkla kademeli artan basınç vinyeti (tehlike vinyetinin altında) -->
       <div id="pressure" aria-hidden="true"></div>
       <div id="danger"></div>
@@ -276,9 +313,13 @@
               <li>Düşen bloklar biriken mukus; alan dolarsa sinüs tamamen tıkanır.</li>
               <li>
                 Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla
-                başlar; hepsini temizleyince sinüs açılır. Sonra serbest nefes.
+                başlar; parlayan boşlukları doldurup hepsini uçurunca sinüs açılır. Dördü de açılınca ister serbest
+                nefese devam et, ister bitir.
               </li>
-              <li>Tam satır = drenaj. Dört satır birden: ozmotik etki. T-spin: nörorefleks etki.</li>
+              <li>
+                Tam satır = drenaj. Dört satır birden: ozmotik etki. T-spin: nörorefleks etki. Tahtayı tamamen
+                boşaltırsan Tam Ferahlık bonusu.
+              </li>
               <li>
                 Tıkanıklık yükselince iki destek açılır. <b>Sıklamen özütü</b> oyunda bir kez kullanılır, alt yarıyı
                 yavaşça boşaltır ve 30 sn puanları ikiye katlar.
@@ -318,7 +359,7 @@
         <div class="sheet sheet-over" tabindex="-1" data-focus style="outline: none">
           <div class="over-summary">
             <div class="newbest" id="newbest">Yeni rekor</div>
-            <h2>Sinüslerin tamamen tıkandı</h2>
+            <h2 id="o-title">Sinüslerin tamamen tıkandı</h2>
             <div class="stat-grid">
               <div class="stat-main"><b id="o-score">0</b><span>Puan</span></div>
               <div><b id="o-lines">0</b><span>Drenaj</span></div>
@@ -361,6 +402,35 @@
               <p class="submit-status" id="submit-status" role="status" aria-live="polite"></p>
             </form>
             <div class="tip" id="tip-over"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- NS4-31: dört sinüs açıldı: final (Serbest nefese devam veya burada bitir) -->
+      <section id="scr-final" class="screen screen-dim" aria-label="Bütün sinüsler açık">
+        <div class="sheet sheet-final" tabindex="-1" data-focus style="outline: none">
+          <div id="fmap" class="sinus-map sinus-map-lg">
+            <svg class="sinus-svg" viewBox="0 0 120 140" aria-hidden="true">
+              <path class="face" d="M60 6C90 6 106 30 106 62c0 38-20 70-46 72-26-2-46-34-46-72C14 30 30 6 60 6Z" />
+              <path class="line" d="M33 51q8-5 17 0M70 51q8-5 17 0M58 66q-5 17-1 21 4 2 7 0M48 108q12 9 24 0" />
+              <circle class="eye" cx="41" cy="60" r="3" />
+              <circle class="eye" cx="79" cy="60" r="3" />
+              <ellipse class="sinus s-alin" cx="60" cy="33" rx="17" ry="8" />
+              <circle class="sinus s-sfenoid" cx="60" cy="49" r="5" />
+              <ellipse class="sinus s-etmoid" cx="60" cy="65" rx="5" ry="8" />
+              <ellipse class="sinus s-yanak" cx="40" cy="84" rx="10" ry="9" />
+              <ellipse class="sinus s-yanak" cx="80" cy="84" rx="10" ry="9" />
+            </svg>
+          </div>
+          <h2>Bütün sinüsler açık!</h2>
+          <div class="stat-grid stat-final">
+            <div class="stat-main"><b id="f-score">0</b><span>Puan</span></div>
+            <div><b id="f-lines">0</b><span>Drenaj</span></div>
+          </div>
+          <p class="final-lead">Serbest nefeste rekorunu büyütebilir ya da burada bitirebilirsin.</p>
+          <div class="over-actions">
+            <button class="btn primary" id="b-free">Serbest nefese devam</button>
+            <button class="btn ghost" id="b-finish">Bitir</button>
           </div>
         </div>
       </section>

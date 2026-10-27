@@ -16,6 +16,9 @@ import { track } from '../analytics/analytics';
 import { hideDanger, forgetDanger, clearSessionHud } from '../ui/hud';
 import { award, resetNewBadges } from '../ui/badges';
 import { setTip, show, renderGameOver } from '../ui/screens';
+import { renderFinal } from '../ui/sinusMap';
+import { popup } from '../ui/notifications';
+import { FREE_GOAL, FREE_NAME } from '../content/rooms';
 import type { Tutorial } from '../tutorial/Tutorial';
 import { addLocalScore, type LocalScore } from '../leaderboard/localScores';
 import { loadNickname, newGameId } from '../leaderboard/nickname';
@@ -44,6 +47,12 @@ export interface Lifecycle {
   readonly toMenu: () => void;
   readonly showOver: (isBest: boolean, entry?: LocalScore) => void;
   readonly handleGameOver: (reason: GameOverReason) => void;
+  /** NS4-31: dört sinüs açıldı: oyun durur, final ekranı. */
+  readonly showFinal: () => void;
+  /** NS4-31: final → Serbest nefes (oyun sürer). */
+  readonly continueFree: () => void;
+  /** NS4-31: final → oyunu burada bitir (oyun sonu, başlık "Bütün sinüsler açık!"). */
+  readonly finish: () => void;
 }
 
 export function createLifecycle({
@@ -61,6 +70,10 @@ export function createLifecycle({
   /** NS4-18: oyun başına kimlik (yerel kayıt tekrarını ve global tekrar gönderimi engeller). */
   let gameId = newGameId();
   let recordedId: string | null = null;
+  /** NS4-31: oyun final ekranında "Bitir" ile bitti (oyun sonu başlığı ve sesi). */
+  let completed = false;
+  /** NS4-31: final ekranı açık: yalnızca seçim (devam / bitir) kapatır; resume() dokunmaz. */
+  let finalOpen = false;
 
   function start() {
     sound.unlock();
@@ -68,6 +81,8 @@ export function createLifecycle({
     // NS4-27: reset'ten önce: yeni oyunun ilk oda popup'ı (roomstart) silinmesin.
     clearSessionHud();
     resetNewBadges();
+    completed = false;
+    finalOpen = false;
     game.reset({ rooms }); // NS4-27: Sinüs Odaları
     gameId = newGameId();
     view.resetFx(); // NS4-15: overT, anim, dalga ve flaşlar ile yeni efekt katmanları ve parçacıklar
@@ -94,7 +109,7 @@ export function createLifecycle({
     tutorial?.onPause(); // NS4-12: kart gizlenir, adım korunur
   }
   function resume() {
-    if (appState !== 'paused') return;
+    if (appState !== 'paused' || finalOpen) return;
     app.ticker.start();
     appState = 'playing';
     show(null);
@@ -102,6 +117,7 @@ export function createLifecycle({
     tutorial?.onResume();
   }
   function toMenu() {
+    finalOpen = false;
     app.ticker.start();
     appState = 'menu';
     setTip('tip-start');
@@ -113,7 +129,44 @@ export function createLifecycle({
   }
   function showOver(isBest: boolean, entry?: LocalScore) {
     if (entry) onGameRecorded?.(entry);
-    renderGameOver({ score: game.score, lines: game.lines, best: meta.best, isBest });
+    renderGameOver({ score: game.score, lines: game.lines, best: meta.best, isBest, complete: completed });
+  }
+  /**
+   * NS4-31: son oda açıldı (Serbest nefese girildi). Oyun pause gibi durur ama müzik sürer; final ekranı açılır.
+   * Escape/P final ekranını kapatmaz (seçim gerekir); sekme gizlenince pause() durumu değiştirmez.
+   */
+  function showFinal() {
+    if (appState !== 'playing') return;
+    appState = 'paused';
+    requestAnimationFrame(() => {
+      if (appState === 'paused') app.ticker.stop();
+    });
+    resetInput();
+    hideDanger();
+    forgetDanger();
+    renderFinal(game);
+    finalOpen = true;
+    show('scr-final');
+    tutorial?.onPause();
+  }
+  function leaveFinal(choice: 'continue' | 'finish') {
+    finalOpen = false;
+    app.ticker.start();
+    appState = 'playing';
+    show(null);
+    track('final_choice', { choice, dur_s: Math.round(game.elapsed / 1000) });
+  }
+  function continueFree() {
+    if (!finalOpen) return;
+    leaveFinal('continue');
+    tutorial?.onResume();
+    popup(FREE_NAME, FREE_GOAL, 'cyc');
+  }
+  function finish() {
+    if (!finalOpen) return;
+    leaveFinal('finish');
+    completed = true;
+    game.gameOver('complete'); // → handleGameOver
   }
   /** NS4-18: tamamlanan oyunu yerel skor listesine yazar (aynı oyun bir kez). Ağa hiçbir şey göndermez. */
   function recordLocal(): LocalScore {
@@ -140,9 +193,13 @@ export function createLifecycle({
    * Not: Ana menüye çıkılan yarım oyun için bu akış çalışmaz (NS4-01 Not E, bilerek korunur).
    */
   function handleGameOver(reason: GameOverReason) {
-    view.onGameOver();
-    sound.over();
-    buzz(HAPTIC.over);
+    // NS4-31: final ekranından bitiş yenilgi değildir: yığın griye dönmez, üzgün ses/titreşim yok
+    if (reason === 'complete') sound.level();
+    else {
+      view.onGameOver();
+      sound.over();
+      buzz(HAPTIC.over);
+    }
     sound.setMusic(false);
     resetInput();
     appState = 'over';
@@ -163,10 +220,22 @@ export function createLifecycle({
       sneeze_uses: game.sneezeUses,
       rooms_cleared: game.roomsCleared,
       tetrises: game.tetrises,
+      all_clears: game.allClears,
     });
     setTimeout(() => showOver(isBest, entry), 950);
     tutorial?.onSessionEnd();
   }
 
-  return { getState: () => appState, start, pause, resume, toMenu, showOver, handleGameOver };
+  return {
+    getState: () => appState,
+    start,
+    pause,
+    resume,
+    toMenu,
+    showOver,
+    handleGameOver,
+    showFinal,
+    continueFree,
+    finish,
+  };
 }

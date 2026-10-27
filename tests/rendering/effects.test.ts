@@ -7,15 +7,21 @@ import type { Game } from '../../src/game/Game';
 import {
   AIRFLOW,
   Budget,
+  HOLE_FX,
   LINE_FX,
+  PETALS,
+  PETAL_TINTS,
   REDUCED,
+  RELIEF_FX,
   ROOM_FX,
   SNEEZE_FX,
   airflowRate,
   airflowSpeed,
   flavorOf,
   glowAlpha,
+  holeAlpha,
   motionScale,
+  LIQUID_FX,
 } from '../../src/rendering/effects';
 import type { View } from '../../src/rendering/GameView';
 import {
@@ -106,11 +112,12 @@ function wire() {
 function expectClean() {
   expect(v.anim).toBeNull();
   expect(v.flashes.every((f) => !f.visible && f.height === v.L.cell)).toBe(true);
-  expect(v.wave.visible).toBe(false);
+  expect([v.liquid.c.visible, v.liquid.out]).toEqual([false, null]); // NS4-37
   expect(v.crest.visible).toBe(false);
   expect([v.glow.on, v.glow.s.visible, v.band.on, v.band.s.visible]).toEqual([false, false, false, false]);
   expect(v.glow.edges.every((e) => !e.visible && e.alpha === 0)).toBe(true);
   expect(live()).toHaveLength(0);
+  expect(v.petals.every((p) => p.life <= 0 && !p.s.visible)).toBe(true); // NS4-22
   expect(v.shake).toBe(0);
   expect([v.boardC.x, v.boardC.y]).toEqual([v.L.board.x, v.L.board.y]);
   // blok hücreleri dokunulmamış: yalnızca atlas dokuları, tam boy, opak, renksiz
@@ -221,17 +228,37 @@ describe('GameView efektleri: başlama, bitiş ve temizlik', () => {
   it('sıklamen: dalga + tepe şeridi, hücreler çözünür; bitişte ×2 vuruşu, sonra tamamen temiz', () => {
     stackRows(g, 8);
     expect(g.useCyc()).toBe(true);
-    expect([v.wave.visible, v.crest.visible]).toEqual([true, true]);
-    H.step(CFG.drainMs);
+    expect([v.liquid.c.visible, v.crest.visible]).toEqual([true, true]);
+    H.step(CFG.drainMs / 2);
+    // NS4-37: sıvı yükselir; yüzey dalgalı (maske ve parlak çizgi her karede çizilir)
+    expect(v.liquid.top).toBeLessThan(VIS);
+    expect(v.liquid.top).toBeGreaterThan(VIS - 9);
+    expect(v.liquid.front.mask).toBe(v.liquid.frontMask);
+    v.liquid.line.finishPoly(); // Pixi yolu tembel kaydeder
+    expect((v.liquid.line.geometry.graphicsData[0]?.shape as { points: number[] }).points).toHaveLength(2 * 49);
+    H.step(CFG.drainMs / 2);
     const dissolved = v.anim?.done?.reduce((a, b) => a + b, 0) ?? 0;
     expect(dissolved).toBeGreaterThan(8 * 8); // sıvıya giren hücreler bir kez parçacık salar
     expect(v.cells[(VIS - 1) * COLS].tint).not.toBe(0xffffff); // çözünürken pembeleşir (doku aynı)
     finishClear(g);
-    expect(v.anim?.recede).toBe(0);
+    expect(v.anim).toBeNull();
+    expect(v.liquid.out).toBe(0); // söner (anim yuvasından bağımsız)
     expect(v.glow.on).toBe(true);
     expect(v.glow.s.tint).toBe(0xff79bd);
     H.step(2000);
     expectClean();
+  });
+
+  it('NS4-37: sıklamenden hemen sonra başka temizleme (oda açılışı) başlasa da sıvı söner, ekranda kalmaz', () => {
+    stackRows(g, 8);
+    g.useCyc();
+    H.step(CFG.drainMs);
+    finishClear(g);
+    v.onClearStart({ kind: 'room', rows: [] }); // sıvı sönerken oda açılışı: anim yuvası el değiştirir
+    expect(v.anim?.kind).toBe('room');
+    H.step(LIQUID_FX.recedeMs + 50);
+    expect(v.anim?.kind).toBe('room');
+    expect([v.liquid.c.visible, v.liquid.out, v.crest.visible]).toEqual([false, null, false]);
   });
 
   it('resetFx yeni oyunda süren her efekti temizler', () => {
@@ -448,13 +475,156 @@ describe('performans ve dayanıklılık', () => {
     H.step(300);
     H.resize(1920, 1080);
     H.step(16);
-    expect(v.wave.width).toBeCloseTo(COLS * v.L.cell, 6);
-    expect(v.wave.y + v.wave.height).toBeCloseTo(VIS * v.L.cell, 4);
+    expect(v.liquid.front.width).toBeCloseTo(COLS * v.L.cell, 6);
+    expect(v.liquid.front.y + v.liquid.front.height).toBeCloseTo(VIS * v.L.cell, 4);
     H.resize(844, 390);
     H.step(CFG.drainMs);
     finishClear(g);
     H.step(2000);
     expectClean();
     expect(countNodes(v.app.stage)).toBe(nodes);
+  });
+});
+
+// NS4-22: büyük açılma anı
+describe('büyük açılma anı', () => {
+  const petals = () => v.petals.filter((p) => p.life > 0);
+
+  it('tarifler: Tetris < oda < Tam Ferahlık; kırmızı/uyarı rengi yok, yapraklar sıklamen pembesi', () => {
+    const k = ['tetris', 'room', 'allclear'] as const;
+    for (let i = 1; i < k.length; i++) {
+      const [a, b] = [RELIEF_FX[k[i - 1]], RELIEF_FX[k[i]]];
+      expect(b.peak).toBeGreaterThan(a.peak);
+      expect(b.petals).toBeGreaterThan(a.petals);
+      expect(b.sparkles).toBeGreaterThan(a.sparkles);
+    }
+    for (const r of Object.values(RELIEF_FX)) expect(r.edge).toBeGreaterThan(0); // tahta kenarı da parlar
+    for (const t of PETAL_TINTS) expect((t >> 16) & 0xff).toBeGreaterThan(0xd0); // pembe: kırmızı kanal yüksek
+    expect(PETALS.count).toBeGreaterThanOrEqual(RELIEF_FX.allclear.petals);
+  });
+
+  it('Tetris: temizlenen satırlardan parıltı ve yaprak; tahta kenarıyla parlar; yapraklar yukarı ve ortaya süzülür', () => {
+    wire();
+    setupWell(g, 4);
+    setCell(g, 0, 17, PIECE.Z);
+    dropVerticalI(g);
+    v.relief('tetris');
+    const R = RELIEF_FX.tetris,
+      c = v.L.cell;
+    expect([v.glow.on, v.glow.s.tint, v.glow.edgeK]).toEqual([true, R.glow, R.edge]);
+    expect(petals()).toHaveLength(R.petals);
+    for (const p of petals()) {
+      expect(p.s.y).toBeGreaterThan(15 * c); // satır 16..19 civarı
+      expect(PETAL_TINTS).toContain(p.s.tint);
+      expect(p.s.texture).toBe(v.petalTex);
+    }
+    const y0 = petals().map((p) => p.s.y);
+    const dx0 = petals().map((p) => Math.abs(p.s.x - (COLS * c) / 2));
+    H.step(900);
+    const alive = petals();
+    expect(alive.length).toBeGreaterThan(0);
+    const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    expect(avg(alive.map((p) => p.s.y))).toBeLessThan(avg(y0) - 3 * c); // yükselir
+    expect(avg(alive.map((p) => Math.abs(p.s.x - (COLS * c) / 2)))).toBeLessThan(avg(dx0)); // sinüs ağzına
+    // kanat çırpar: genişlik değişir, yükseklik sabit
+    for (const p of alive) expect(p.s.scale.x).toBeLessThanOrEqual(p.base + 1e-9);
+    finishClear(g);
+    H.step(3000);
+    expectClean();
+  });
+
+  it('oda / Tam Ferahlık: tahtanın altından doğar; Tam Ferahlık hafifçe sarsar', () => {
+    v.relief('room');
+    expect(petals()).toHaveLength(RELIEF_FX.room.petals);
+    for (const p of petals()) expect(p.s.y).toBeGreaterThan((VIS - 2) * v.L.cell);
+    expect(v.shake).toBe(0);
+    v.killPetals();
+    v.relief('allclear');
+    expect(petals()).toHaveLength(RELIEF_FX.allclear.petals);
+    expect(v.shake).toBeGreaterThan(0);
+    expect(v.glow.s.tint).toBe(RELIEF_FX.allclear.glow);
+    H.step(3000);
+    expectClean();
+  });
+
+  it('havuz taşmaz: art arda anlar yaprak havuzu kadar yaprak doğurur', () => {
+    for (let i = 0; i < 5; i++) v.relief('allclear');
+    expect(petals().length).toBeLessThanOrEqual(PETALS.count);
+    expect(v.petalLayer.children).toHaveLength(PETALS.count);
+  });
+
+  it('reduced motion: parıltı ve yaprak azalır, sarsıntı azalır', () => {
+    v.reducedMotion = true;
+    v.relief('allclear');
+    expect(petals().length).toBeLessThanOrEqual(Math.ceil(RELIEF_FX.allclear.petals * REDUCED.particles));
+    expect(live().length).toBeLessThanOrEqual(Math.ceil(RELIEF_FX.allclear.sparkles * REDUCED.particles));
+    expect(v.shake).toBeLessThanOrEqual(RELIEF_FX.allclear.shake * REDUCED.shake + 1e-9);
+  });
+
+  it('yeni oyun ve yeniden yerleşim yaprakları söndürür; doku yenilenir', () => {
+    v.relief('allclear');
+    v.resetFx();
+    expect(petals()).toHaveLength(0);
+    v.relief('allclear');
+    const old = v.petalTex;
+    H.resize(390, 844);
+    expect(petals()).toHaveLength(0);
+    expect(v.petalTex).not.toBe(old);
+    expect(v.petals.every((p) => p.s.texture === v.petalTex)).toBe(true);
+  });
+});
+
+// NS4-30: hava kanalı boşlukları parlar
+describe('boşluk işaretleri', () => {
+  const marks = () => v.holes.filter((h) => h.visible);
+
+  it('nefes ritmi: alpha sınırlar içinde gidip gelir; reduced motion sabit', () => {
+    let lo = 1,
+      hi = 0;
+    for (let t = 0; t < HOLE_FX.period; t += 40) {
+      const a = holeAlpha(t, false);
+      lo = Math.min(lo, a);
+      hi = Math.max(hi, a);
+    }
+    expect(hi).toBeLessThanOrEqual(HOLE_FX.alpha + 1e-9);
+    expect(lo).toBeGreaterThanOrEqual(HOLE_FX.alpha * (1 - HOLE_FX.depth) - 1e-9);
+    expect(hi - lo).toBeGreaterThan(0.1);
+    expect(holeAlpha(0, true)).toBe(holeAlpha(700, true));
+  });
+
+  it('yalnızca gri bulutçuk içeren sıralardaki boş hücreler; renkli sıralar ve boş tahta işaretsiz', () => {
+    clearBoard(g);
+    fillRow(g, 21, PIECE.GARBAGE, [4]);
+    fillRow(g, 20, PIECE.GARBAGE, [4, 7]);
+    fillRow(g, 19, PIECE.S, [0, 1]); // renkli sıra: işaret yok
+    v.syncBoard();
+    const c = v.L.cell;
+    expect(marks().map((h) => [Math.round((h.x - c / 2) / c), Math.round((h.y - c / 2) / c)])).toEqual([
+      [4, VIS - 2],
+      [7, VIS - 2],
+      [4, VIS - 1],
+    ]);
+    for (const h of marks()) expect(h.tint).toBe(HOLE_FX.tint);
+    clearBoard(g);
+    v.syncBoard();
+    expect(marks()).toHaveLength(0);
+  });
+
+  it('oda başında kanal işaretlenir; satır temizlenince güncellenir; oyun sonunda söner', () => {
+    g.reset({ rooms: true });
+    v.syncAll();
+    expect(marks()).toHaveLength(4); // 1. oda: 4 sıra × tek kanal
+    H.step(100);
+    expect(marks()[0]?.alpha).toBeGreaterThan(0);
+    v.onGameOver();
+    H.step(50);
+    for (const h of marks()) expect(h.alpha).toBe(0);
+  });
+
+  it('havuz taşmaz', () => {
+    clearBoard(g);
+    for (let y = 2; y < 22; y++) fillRow(g, y, PIECE.GARBAGE, [1, 3, 5, 7, 9]);
+    v.syncBoard();
+    expect(marks()).toHaveLength(HOLE_FX.max);
   });
 });

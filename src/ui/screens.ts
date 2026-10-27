@@ -3,10 +3,14 @@
 import { TIPS } from '../content/tips';
 import { $ } from './dom';
 import { fmt } from './hud';
+import { ALL_CLEAR } from '../content/rooms';
+
+/** Oyun sonu başlığı (index.html #o-title ile aynı); NS4-31: dört sinüsü açıp bitirince ALL_CLEAR. */
+export const OVER_TITLE = 'Sinüslerin tamamen tıkandı';
 import { renderBadges } from './badges';
 import type { BadgeId } from '../types/content';
 
-export type ScreenId = 'scr-start' | 'scr-how' | 'scr-pause' | 'scr-over' | 'scr-set' | 'scr-scores';
+export type ScreenId = 'scr-start' | 'scr-how' | 'scr-pause' | 'scr-over' | 'scr-final' | 'scr-set' | 'scr-scores';
 export type TipBoxId = 'tip-start' | 'tip-pause' | 'tip-over';
 
 let tipIdx = 0;
@@ -107,11 +111,14 @@ export interface GameOverView {
   readonly lines: number;
   readonly best: number;
   readonly isBest: boolean;
+  /** NS4-31: final ekranında "Bitir" (yenilgi değil): başlık "Bütün sinüsler açık!". */
+  readonly complete?: boolean;
   /** NS4-16: yalnızca dev ekran gösterimi (storage'a yazmadan örnek rozet durumu). Oyunda verilmez. */
   readonly badges?: { readonly earned: readonly BadgeId[]; readonly fresh: readonly BadgeId[] };
 }
 
 export function renderGameOver(r: GameOverView): void {
+  $('o-title').textContent = r.complete ? ALL_CLEAR : OVER_TITLE;
   $('o-score').textContent = fmt(r.score);
   $('o-lines').textContent = String(r.lines);
   $('o-best').textContent = fmt(r.best);

@@ -40,13 +40,14 @@ describe('içerik envanteri', () => {
     expect(Object.keys(INVENTORY).sort()).toEqual([...areas].sort());
     for (const a of areas) expect(INVENTORY[a].length, a).toBeGreaterThan(0);
     // her overlay ekranı envanterde
-    for (const id of ['scr-start', 'scr-how', 'scr-pause', 'scr-over', 'scr-set', 'scr-scores'])
+    for (const id of ['scr-start', 'scr-how', 'scr-pause', 'scr-over', 'scr-final', 'scr-set', 'scr-scores'])
       expect(html).toContain(`<section id="${id}"`);
     expect([...html.matchAll(/<section id="(scr-[a-z]+)"/g)].map((m) => m[1])).toEqual([
       'scr-start',
       'scr-how',
       'scr-pause',
       'scr-over',
+      'scr-final',
       'scr-scores',
       'scr-set',
     ]);

@@ -16,6 +16,9 @@
    NS4-20: tıkalı burun hissi: müzik kanalı bir alçak geçiren süzgeçten
    (muffle) geçer; tıkanıklık arttıkça müzik boğuklaşır, drenajla açılır.
    Oynanış sesleri süzülmez (geri bildirim net kalır).
+   NS4-22: büyük açılma anı (Tetris, Tam Ferahlık, oda): süzgeç bir anda
+   tamamen açılır, kısa süre açık kalır, sonra tıkanıklığa yavaşça döner;
+   rahatlama "ahh"ı ünlü formantlı gürültüyle sentezlenir.
    ===================================================================== */
 import type { Settings } from '../types/settings';
 
@@ -61,6 +64,17 @@ export const MUFFLE_OPEN_HZ = 16000;
 export const MUFFLE_CLOSED_HZ = 520;
 /** Kesim frekansı bu orandan az değişirse yeniden zamanlanmaz (her karede çağrılır). */
 const MUFFLE_MIN_STEP = 0.03;
+/** Süzgeç zaman sabitleri (sn): normal izleme, açılma anı (anlık) ve açılma sonrası yavaş geri dönüş. */
+const MUFFLE_TC = 0.18;
+const OPEN_TC = 0.03;
+const RECLOSE_TC = 0.7;
+/** NS4-22: açılma anında süzgecin açık kaldığı süre (sn). Oda: "Sinüs açıldı" geçişi (2,4 sn) + yeni odaya giriş. */
+export const OPEN_HOLD = { tetris: 1.2, allclear: 2.2, room: 2.8 } as const;
+/** NS4-22: "ahh" ünlüsünün iki formantı (/a/; başlangıç → bitiş Hz, Q). Perde rahatlarken hafifçe düşer. */
+const SIGH_FORMANTS = [
+  [850, 700, 5],
+  [1300, 1100, 6],
+] as const;
 
 /**
  * Tıkanıklık (0..1) → müzik süzgecinin kesim frekansı. MUFFLE_START altında açık; üstünde üstel (kulağa
@@ -96,6 +110,9 @@ export class Sound {
   private lastRotate = -1;
   /** NS4-20: son zamanlanan müzik süzgeci kesim frekansı. */
   private muffleHz = MUFFLE_OPEN_HZ;
+  /** NS4-22: süzgeç bu context zamanına kadar açık tutulur; sonraki ilk izleme yavaş geri döner. */
+  private openUntil = -1;
+  private reclose = false;
   private readonly settings: AudioSettings; // NS4-03: ayar nesnesi dışarıdan verilir
 
   constructor(settings: AudioSettings) {
@@ -243,6 +260,33 @@ export class Sound {
     s.start(t, Math.random() * 0.5);
     s.stop(t + dur + 0.05);
   }
+  /**
+   * NS4-22: rahatlama "ahh"ı: gürültü /a/ ünlüsünün iki formantından geçer (perde hafifçe düşer), yumuşak girip
+   * uzun söner. Islak veya burun sesi yok; nefes verme gibi. `dur` ≤ 1,5 sn (gürültü tamponu 2 sn).
+   */
+  sigh(dur: number, gain: number, delay = 0): void {
+    const a = this.sfxReady();
+    if (!a) return;
+    const t = a.ctx.currentTime + delay;
+    const s = a.ctx.createBufferSource();
+    s.buffer = a.noise;
+    const g = a.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + dur * 0.18);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    for (const [f0, f1, q] of SIGH_FORMANTS) {
+      const bp = a.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = q;
+      bp.frequency.setValueAtTime(f0, t);
+      bp.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      s.connect(bp);
+      bp.connect(g);
+    }
+    g.connect(a.sfx);
+    s.start(t, Math.random() * 0.5);
+    s.stop(t + dur + 0.05);
+  }
   /** Müziği kısa süre kısar (büyük ses anlarında oynanış sesi öne çıkar). Müzik yoksa etkisizdir. */
   duck(depth: number, hold: number): void {
     const a = this.audio;
@@ -259,14 +303,34 @@ export class Sound {
    * unlock() öncesi çağrılırsa değer saklanır ve grafik kurulurken uygulanır.
    */
   setCongestion(congestion: number): void {
-    const hz = muffleCutoff(congestion);
-    if (Math.abs(hz - this.muffleHz) / this.muffleHz < MUFFLE_MIN_STEP) return;
-    this.muffleHz = hz;
     const a = this.audio;
+    if (a && a.ctx.currentTime < this.openUntil) return; // NS4-22: açılma anı sürüyor
+    const hz = muffleCutoff(congestion);
+    if (Math.abs(hz - this.muffleHz) / this.muffleHz < MUFFLE_MIN_STEP) {
+      this.reclose = false; // açılma sonrası tıkanıklık zaten düşük: yavaş dönüşe gerek kalmadı
+      return;
+    }
+    this.muffleHz = hz;
     if (!a) return;
     const f = a.muffle.frequency;
     f.cancelScheduledValues(a.ctx.currentTime);
-    f.setTargetAtTime(hz, a.ctx.currentTime, 0.18);
+    f.setTargetAtTime(hz, a.ctx.currentTime, this.reclose ? RECLOSE_TC : MUFFLE_TC);
+    this.reclose = false;
+  }
+  /**
+   * NS4-22: büyük açılma anı: müzik süzgeci bir anda tamamen açılır ve `hold` sn açık kalır (setCongestion bu sürede
+   * yok sayılır); sonra tıkanıklığa yavaşça döner. unlock() öncesi etkisizdir.
+   */
+  openUp(hold: number): void {
+    const a = this.audio;
+    if (!a) return;
+    const t = a.ctx.currentTime,
+      f = a.muffle.frequency;
+    f.cancelScheduledValues(t);
+    f.setTargetAtTime(MUFFLE_OPEN_HZ, t, OPEN_TC);
+    this.muffleHz = MUFFLE_OPEN_HZ;
+    this.openUntil = Math.max(this.openUntil, t + hold);
+    this.reclose = true;
   }
   /** Müzik süzgecinin hedef kesim frekansı (tanı/test). */
   get muffleTarget(): number {
@@ -356,11 +420,28 @@ export class Sound {
    * müzik kısılır (tıkalı burun süzgeci de tıkanıklık düşünce kendiliğinden açılır).
    */
   roomClear() {
+    this.openUp(OPEN_HOLD.room); // NS4-22: süzgeç bir anda açılır, yeni odaya kadar açık kalır
     this.breath(0.6, 260, 1400, 0.07, 0.8);
-    this.breath(1.1, 1200, 300, 0.08, 0.7, 0.6);
+    this.sigh(1.2, 0.1, 0.55);
     [392, 494, 587, 784, 988].forEach((f, i) => this.voice(f, 1.5, 0.035, 0.45 + i * 0.09, 0.2));
     [1568, 2093].forEach((f, i) => this.tone(f, 0.12, 'sine', 0.02, 0, 0.9 + i * 0.08));
     this.duck(0.55, 1.6);
+  }
+  /**
+   * NS4-22: büyük açılma anı. Tetris: satır sesi (clear(4)) zaten akoru çalar; burada süzgeç açılır ve hafif bir
+   * "ahh" eklenir. Tam Ferahlık: derin içe nefes, uzun "ahh", parlak açılan akor ve aşağı süzülen parıltılar.
+   */
+  relief(kind: 'tetris' | 'allclear') {
+    this.openUp(OPEN_HOLD[kind]);
+    if (kind === 'tetris') {
+      this.sigh(0.9, 0.06, 0.15);
+      return;
+    }
+    this.breath(0.45, 260, 1400, 0.06, 0.8);
+    this.sigh(1.4, 0.11, 0.4);
+    [523, 659, 784, 1047, 1319].forEach((f, i) => this.voice(f, 1.8, 0.034, 0.35 + i * 0.08, 0.18));
+    [2637, 2349, 2093, 1760, 1568, 1319].forEach((f, i) => this.tone(f, 0.12, 'sine', 0.018, 0, 0.7 + i * 0.07));
+    this.duck(0.6, 2);
   }
   level() {
     [523, 659, 784].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.05, 0, i * 0.07));

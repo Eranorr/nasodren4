@@ -8,7 +8,18 @@ import tutorialViewSrc from '../../src/ui/tutorialView.ts?raw';
 import settingsPanelSrc from '../../src/ui/settingsPanel.ts?raw';
 import { BADGES } from '../../src/content/badges';
 import { ROOMS } from '../../src/config/gameConfig';
-import { ALL_CLEAR, FREE_GOAL, FREE_NAME, ROOM_CLEAR, ROOM_GOAL, roomLabel, roomText } from '../../src/content/rooms';
+import {
+  ALL_CLEAR,
+  CLOUD_HINT,
+  FREE_GOAL,
+  FREE_NAME,
+  ROOM_CLEAR,
+  ROOM_GOAL,
+  ROOM_NEXT_FINAL,
+  roomLabel,
+  roomText,
+} from '../../src/content/rooms';
+import { FULL_RELIEF, FULL_RELIEF_SUB } from '../../src/content/relief';
 import { HEALTH_TIPS, HEALTH_TOASTS } from '../../src/content/health';
 import { CYC_NAME, CYC_SHORT, CYC_TEXT, SNEEZE_NAME, SNEEZE_SHORT, SNEEZE_TEXT } from '../../src/ui/powerups';
 import { GLOBAL_TEXT, NO_NICKNAME } from '../../src/ui/scoresView';
@@ -34,18 +45,21 @@ export type Area =
 
 /** Görünür metin: yorum/SVG/etiket atılır, boşluk tekleşir. */
 export function visibleText(s: string): string {
-  return s
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<svg[\s\S]*?<\/svg>/g, '')
-    .replace(/<br\s*\/?>/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    s
+      .replace(/<!--[\s\S]*?-->/g, '')
+      // Prettier SVG kapanışını satıra bölebilir (</svg + satır sonu + >)
+      .replace(/<svg[\s\S]*?<\/svg\s*>/g, '')
+      .replace(/<br\s*\/?>/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 /** Bölümdeki metin düğümleri (her öğe ayrı satır). */
 function nodes(fragment: string): string[] {
   const out: string[] = [];
-  const clean = fragment.replace(/<!--[\s\S]*?-->/g, '').replace(/<svg[\s\S]*?<\/svg>/g, '');
+  const clean = fragment.replace(/<!--[\s\S]*?-->/g, '').replace(/<svg[\s\S]*?<\/svg\s*>/g, '');
   for (const m of clean.matchAll(/>([^<>]+)</g)) {
     const t = (m[1] ?? '').replace(/\s+/g, ' ').trim();
     if (t) out.push(t);
@@ -128,6 +142,9 @@ export const INVENTORY: Readonly<Record<Area, readonly string[]>> = {
   oyun_sonu: [
     visibleText(/<div class="newbest" id="newbest">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? ''),
     ...blocks(section('scr-over')),
+    ALL_CLEAR, // NS4-31: "Bitir" ile biten oyunun başlığı
+    // NS4-31: final ekranı
+    ...blocks(section('scr-final')),
   ],
   saglik_ipuclari: HEALTH_TIPS.flatMap((t) => [t.title, t.text]),
   skor_ekrani: [...blocks(section('scr-scores')), ...Object.values(GLOBAL_TEXT), NO_NICKNAME],
@@ -157,10 +174,18 @@ export const INVENTORY: Readonly<Record<Area, readonly string[]>> = {
     // NS4-27: oda popup'ları (şablonlu metinler)
     ...ROOMS.map((_, i) => `${i + 1}. oda · ${roomText(i).name}`),
     ROOM_GOAL,
+    // NS4-31: oda açılış kartı (harita)
     ROOM_CLEAR,
     ...ROOMS.map((_, i) => `${roomText(i).name} ferahladı · +<bonus>`),
-    ALL_CLEAR,
+    ...ROOMS.slice(1).map((_, i) => `Sıradaki: ${roomText(i + 1).name}`),
+    ROOM_NEXT_FINAL,
+    FREE_NAME,
     FREE_GOAL,
+    // NS4-30: ilk bulutçuk ipucu
+    CLOUD_HINT,
+    // NS4-22: Tam Ferahlık popup'ı
+    FULL_RELIEF,
+    `${FULL_RELIEF_SUB} · +<bonus>`,
   ],
   rozetler: Object.values(BADGES).flatMap((b) => [b.name, b.desc]),
 };

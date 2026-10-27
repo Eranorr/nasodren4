@@ -2,7 +2,7 @@
 // Gerçek Game + lifecycle + wireGameEvents + HUD + UI modülleri sahte DOM üzerinde; dataLayer kayıtları incelenir.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTracker, newSessionId } from '../../src/analytics/analytics';
-import { CFG } from '../../src/config/gameConfig';
+import { CFG, ROOMS } from '../../src/config/gameConfig';
 import { PIECE } from '../../src/game/pieces';
 import type { AnalyticsEvent } from '../../src/types/analytics';
 import { createAppStubs } from '../helpers/appStubs';
@@ -29,7 +29,7 @@ const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
   level_up: { level: 'number' },
   badge: { id: ['ozmotik', 'noro', 'akis', 'hapsu', 'derin'] },
   game_over: {
-    reason: ['blockout', 'lockout', 'overlap'],
+    reason: ['blockout', 'lockout', 'overlap', 'complete'],
     score: 'number',
     level: 'number',
     lines: 'number',
@@ -38,6 +38,7 @@ const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
     sneeze_uses: 'number',
     rooms_cleared: 'number',
     tetrises: 'number',
+    all_clears: 'number',
   },
   cta_click: { placement: ['game_over', 'pause_menu'], score: 'number', level: 'number', state: STATES },
   game_loaded: { global_scores: 'boolean', tutorial_done: 'boolean' },
@@ -50,6 +51,8 @@ const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
   sneeze_available: { level: 'number', congestion: 'number' },
   room_start: { room: 'number', gray: 'number' },
   room_clear: { room: 'number', level: 'number', dur_s: 'number', bonus: 'number' },
+  all_clear: { lines: 'number', level: 'number', bonus: 'number' },
+  final_choice: { choice: ['continue', 'finish'], dur_s: 'number' },
   replay_clicked: {},
   leaderboard_opened: {},
   leaderboard_tab_changed: { tab: ['local', 'global'] },
@@ -140,6 +143,7 @@ describe('tracker: dataLayer, console, oturum kimliği', () => {
       sneeze_uses: 0,
       rooms_cleared: 0,
       tetrises: 0,
+      all_clears: 0,
     });
     createTracker({ dev: false, layer: () => ({ push: vi.fn() }) }).track('level_up', { level: 2 }); // dizi değilse yok sayılır
     expect(prodLog).not.toHaveBeenCalled();
@@ -207,6 +211,48 @@ describe('oyun hunisi: her olay doğru anda bir kez', () => {
     expect(last('room_start')).toMatchObject({ room: 1 });
     g.gameOver('lockout');
     expect(last('game_over')).toMatchObject({ rooms_cleared: 1 });
+    for (const r of records()) expect(validate(r), r.event).toEqual([]);
+  });
+  it('NS4-22 Tam Ferahlık: her seferinde all_clear; oyun sonunda sayı', async () => {
+    const { g, lc } = await loadGame();
+    lc.start();
+    setupWell(g, 4);
+    dropVerticalI(g);
+    finishClear(g);
+    expect(count('all_clear')).toBe(1);
+    expect(last('all_clear')).toMatchObject({ lines: 4, level: 1, bonus: CFG.allClearBonus[4] });
+    setupWell(g, 1); // tahta boşalmaz
+    dropVerticalI(g);
+    finishClear(g);
+    expect(count('all_clear')).toBe(1);
+    g.gameOver('lockout');
+    expect(last('game_over')).toMatchObject({ all_clears: 1 });
+    for (const r of records()) expect(validate(r), r.event).toEqual([]);
+  });
+  it('NS4-31 final: devam / bitir seçimi bir kez; bitirince game_over.reason complete', async () => {
+    const { g, lc } = await loadGame(1, true);
+    lc.start();
+    g.enterRoom(ROOMS.length - 1);
+    clearBoard(g);
+    fillRow(g, 21, PIECE.GARBAGE, [9]);
+    dropVerticalI(g);
+    finishClear(g);
+    finishClear(g); // → final ekranı
+    expect(count('final_choice')).toBe(0);
+    lc.continueFree();
+    expect(last('final_choice')).toMatchObject({ choice: 'continue' });
+    lc.continueFree(); // ekran kapalı: olay yok
+    expect(count('final_choice')).toBe(1);
+    lc.start();
+    g.enterRoom(ROOMS.length - 1);
+    clearBoard(g);
+    fillRow(g, 21, PIECE.GARBAGE, [9]);
+    dropVerticalI(g);
+    finishClear(g);
+    finishClear(g);
+    lc.finish();
+    expect(last('final_choice')).toMatchObject({ choice: 'finish' });
+    expect(last('game_over')).toMatchObject({ reason: 'complete', rooms_cleared: 1 });
     for (const r of records()) expect(validate(r), r.event).toEqual([]);
   });
   it('güçlendiriciler: kullanılabilir olunca oyun başına bir kez; her hapşırık kullanımı', async () => {

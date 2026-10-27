@@ -12,3 +12,6 @@ legacy/
 docs/NS4-01-*.md
 docs/NS4-02-*.md
 docs/NS4-03-*.md
+
+# Kaynak görseller (kullanıcının dosyaları; tools/blocks ile işlenir)
+art/

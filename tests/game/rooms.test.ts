@@ -9,6 +9,7 @@ import {
   dropVerticalI,
   fillRow,
   finishClear,
+  placePiece,
   recordEvents,
   rowCells,
 } from '../helpers/gameHelpers';
@@ -38,35 +39,77 @@ describe('oda başlangıcı', () => {
     g.reset({ rooms: true });
     expect([g.rooms, g.room]).toEqual([true, 0]);
     expect(grayRows(g)).toEqual([18, 19, 20, 21]);
-    for (const y of grayRows(g)) {
-      const holes = rowCells(g, y).filter((v) => v === 0).length;
-      expect(holes).toBeGreaterThanOrEqual(1);
-      expect(holes).toBeLessThanOrEqual(ROOMS[0].maxHoles);
-    }
-    expect(g.roomGray).toBe(g.grayCount());
+    // NS4-30: tek hava kanalı: her sırada tek boşluk, hepsi aynı sütunda (tek dikey I odayı açar)
+    const holes = grayRows(g).map((y) => rowCells(g, y).flatMap((v, x) => (v === 0 ? [x] : [])));
+    expect(holes.every((h) => h.length === 1)).toBe(true);
+    expect(new Set(holes.flat()).size).toBe(1);
+    expect([g.roomGray, g.roomGray0]).toEqual([g.grayCount(), g.grayCount()]);
+    expect(g.roomOpenness()).toBe(0);
     expect(g.congestion()).toBe(4 / VIS);
     expect(log.payloads('roomstart')).toEqual([{ room: 0, gray: g.roomGray }]);
     expect(g.state).toBe('play');
     expect(g.type).not.toBe(0);
   });
 
-  it('her oda kendi sıra sayısı ve boşluk aralığıyla kurulur; tıkanıklık odadan odaya artar', () => {
+  it('NS4-30: her oda hava kanallarıyla kurulur: kanal parçaları ayrı sütunda, ek boşluk sınırlı; tıkanıklık artar', () => {
     const g = createGame(3);
     let prev = 0;
     ROOMS.forEach((def, i) => {
-      for (let k = 0; k < 20; k++) {
+      const seg = Math.ceil(def.rows / def.channels);
+      for (let k = 0; k < 30; k++) {
         g.enterRoom(i);
-        expect(grayRows(g)).toHaveLength(def.rows);
-        for (const y of grayRows(g)) {
-          const holes = rowCells(g, y).filter((v) => v === 0).length;
-          expect(holes).toBeGreaterThanOrEqual(1);
-          expect(holes).toBeLessThanOrEqual(def.maxHoles);
+        const rows = grayRows(g).reverse(); // alttan yukarı
+        expect(rows).toHaveLength(def.rows);
+        const holes = rows.map((y) => rowCells(g, y).flatMap((v, x) => (v === 0 ? [x] : [])));
+        for (const h of holes) {
+          expect(h.length).toBeGreaterThanOrEqual(1);
+          expect(h.length).toBeLessThanOrEqual(1 + def.extraHoles); // hiçbir sıra dolu değil
         }
+        // her kanal parçasında bütün sıraların ortak bir boşluk sütunu var; ardışık parçaların kanalı farklı
+        const channels: number[] = [];
+        for (let p = 0; p < def.channels; p++) {
+          const part = holes.slice(p * seg, (p + 1) * seg);
+          const common = (part[0] ?? []).filter((x) => part.every((h) => h.includes(x)));
+          expect(common.length, `oda ${i} parça ${p}`).toBeGreaterThanOrEqual(1);
+          channels.push(...common.slice(0, 1));
+        }
+        if (def.extraHoles === 0)
+          for (let p = 1; p < channels.length; p++) expect(channels[p]).not.toBe(channels[p - 1]);
       }
       expect(g.congestion()).toBeGreaterThan(prev);
       prev = g.congestion();
     });
-    expect(ROOMS.map((r) => r.rows)).toEqual([4, 6, 8, 10]);
+    expect(ROOMS.map((r) => [r.rows, r.channels, r.extraHoles])).toEqual([
+      [4, 1, 0],
+      [6, 2, 0],
+      [8, 2, 1],
+      [10, 3, 1],
+    ]);
+  });
+
+  it('NS4-30: 1. oda tek dikey I ile açılır (ve tahta boşalır: Tam Ferahlık)', () => {
+    const g = createGame(5);
+    g.reset({ rooms: true });
+    const col = rowCells(g, ROWS - 1).indexOf(0);
+    const log = recordEvents(g, ['allclear', 'roomclear']);
+    placePiece(g, PIECE.I, 1, col - 2, 0);
+    g.hardDrop();
+    finishClear(g);
+    expect(log.names()).toEqual(['allclear', 'roomclear']);
+  });
+
+  it('NS4-30: açıklık oranı temizledikçe artar; Serbest nefeste 1', () => {
+    const g = createGame(1);
+    g.reset({ rooms: true });
+    clearBoard(g);
+    fillRow(g, ROWS - 1, PIECE.GARBAGE, [9]);
+    fillRow(g, ROWS - 2, PIECE.GARBAGE, [0, 9]);
+    g.roomGray = g.roomGray0 = g.grayCount(); // 17
+    dropVerticalI(g);
+    finishClear(g);
+    expect(g.roomOpenness()).toBeCloseTo(9 / 17, 9);
+    g.enterRoom(ROOMS.length);
+    expect(g.roomOpenness()).toBe(1);
   });
 });
 

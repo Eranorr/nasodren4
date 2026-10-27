@@ -33,6 +33,8 @@ describe('kurallar oyun sabitleriyle tutarlı', () => {
     // NS4-27: oda bonusu ve oda sayısı oyunla aynı
     expect(GAME_RULES.roomBonus).toBe(CFG.roomBonus);
     expect(GAME_RULES.rooms).toBe(ROOMS.length);
+    // NS4-22: Tam Ferahlık bonusu oyunla aynı
+    expect(GAME_RULES.allClearBonus).toEqual(CFG.allClearBonus);
   });
   it('seviye satırdan belirlenir (Game.scoreClear ile aynı formül)', () => {
     expect([0, 9, 10, 23, 99, 190, 191, 5000].map(expectedLevel)).toEqual([1, 1, 2, 3, 10, 20, 20, 20]);
@@ -121,5 +123,12 @@ describe('skor gövdesi doğrulama', () => {
   it('NS4-27: hızlı geçilen dört oda (az satır, kısa süre) sınırın içinde kalır', () => {
     // 4 oda × en az 1 satır, seviye 1, 60 sn: yalnızca oda bonusu 1000 × (1+2+3+4) = 10 000
     expect(maxPlausibleScore(4, 1, 60)).toBeGreaterThan(10_000 + 4 * 800);
+  });
+  it('NS4-22: en kötü Tam Ferahlık (her satır T-spin tekli × art arda × ×2 + tekli bonus) sınırın içinde', () => {
+    const lines = 20,
+      level = expectedLevel(lines),
+      dur = Math.ceil(minDurationForLines(lines));
+    const perLine = 800 * 1.5 * CFG.cycMult + CFG.allClearBonus[1];
+    expect(maxPlausibleScore(lines, level, dur)).toBeGreaterThan(lines * perLine * level);
   });
 });

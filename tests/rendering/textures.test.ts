@@ -1,10 +1,27 @@
 // NS4-15: blok görünümü regresyon testleri. NS4-14 blok görselleri geri alındı; bloklar NS4-13 (a700ca8) çizimiyle
 // aynı olmalıdır. Node'da canvas yok: çizim komutlarını kaydeden küçük bir 2D bağlam taklidi ile atlas ölçüleri ve
 // bütün çizim komut dizisinin parmak izi sabitlenir. Parmak izi değişirse blok görünümü değişmiş demektir.
+// NS4-32: renkli bloklar artık sıklamen görselleri (kullanıcı onayı 2026-10-27). Jöle çizimi, görseller yüklenene
+// kadar yedek olarak kalır; komutları aynı, yalnızca palet karolara uyduruldu.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BLOCK_IDS, COLORS, createBlockAtlas, createHappyCloudCanvas } from '../../src/rendering/textures';
+import {
+  BLOCK_ART,
+  BLOCK_IDS,
+  COLORS,
+  blockArtUrl,
+  createBlockAtlas,
+  createHappyCloudCanvas,
+  createPetalCanvas,
+  loadBlockArt,
+  type BlockArt,
+} from '../../src/rendering/textures';
 
 type Op = readonly [name: string, ...args: unknown[]];
+
+/** NS4-32: yayınlanan blok görselleri (yalnızca adları kullanılır). */
+const SHIPPED = Object.keys(import.meta.glob('../../public/images/bloklar/*.webp')).map((f) =>
+  f.replace(/^.*\/(.+)\.webp$/, '$1'),
+);
 
 /** Komut kaydedici 2D bağlam: yöntem çağrıları ve stil atamaları sırayla `ops` dizisine yazılır. */
 function recorder() {
@@ -19,6 +36,8 @@ function recorder() {
     'closePath',
     'moveTo',
     'lineTo',
+    'bezierCurveTo',
+    'quadraticCurveTo',
     'arc',
     'arcTo',
     'ellipse',
@@ -27,11 +46,21 @@ function recorder() {
     'clip',
     'fillRect',
     'setLineDash',
+    'drawImage',
   ])
     ctx[m] = (...a: unknown[]) => void ops.push([m, ...a]);
   ctx['createLinearGradient'] = (...a: unknown[]) => (ops.push(['linear', ...a]), grad);
   ctx['createRadialGradient'] = (...a: unknown[]) => (ops.push(['radial', ...a]), grad);
-  for (const p of ['fillStyle', 'strokeStyle', 'globalAlpha', 'lineWidth', 'lineCap', 'lineJoin'])
+  for (const p of [
+    'fillStyle',
+    'strokeStyle',
+    'globalAlpha',
+    'lineWidth',
+    'lineCap',
+    'lineJoin',
+    'imageSmoothingEnabled',
+    'imageSmoothingQuality',
+  ])
     Object.defineProperty(ctx, p, { set: (v: unknown) => void ops.push(['set:' + p, v]), get: () => undefined });
   return { ctx: ctx as unknown as CanvasRenderingContext2D, ops };
 }
@@ -62,13 +91,13 @@ function fingerprint(ops: readonly Op[]): string {
 
 /**
  * a700ca8 çiziminin parmak izleri. NS4-21: gri bloğa yüz eklendiği için parmak izi renkli 7 sütunun
- * (1-7; 8. sütundan önceki bütün komutlar) üzerinden alınır. Bu önek NS4-21 öncesi kodla üretildi: renkli bloklar
- * ve hayaletleri birebir aynıdır. Tam atlas 432 → 432 + yüz komutları.
+ * (1-7; 8. sütundan önceki bütün komutlar) üzerinden alınır. Tam atlas 432 → 432 + yüz komutları.
+ * NS4-32: yedek jöle çizimi; komutlar (379) aynı, yalnızca NS4-32 paleti (a700ca8: f32c5079 / 8d5515c2 / f8db8392).
  */
 const PINNED: readonly (readonly [number, string])[] = [
-  [36, 'f32c5079:379'],
-  [64, '8d5515c2:379'],
-  [104, 'f8db8392:379'],
+  [36, '95795c25:379'],
+  [64, '1250f48c:379'],
+  [104, '00ee1e62:379'],
 ];
 /** 8. sütunun (gri tıkanıklık) ilk translate komutundan önceki komutlar. */
 function colorPrefix(ops: readonly Op[], px: number): readonly Op[] {
@@ -120,15 +149,15 @@ describe('blok atlası NS4-13 (a700ca8) görünümünde', () => {
     expect(ops.length).toBeGreaterThan(432);
   });
 
-  it('blok paleti değişmedi', () => {
+  it('NS4-32 blok paleti (sıklamen karolarına uyar; gri değişmedi)', () => {
     expect(COLORS).toEqual({
-      1: '#3fd2de',
+      1: '#5cc9c4',
       2: '#ffcf5a',
       3: '#e44d97',
-      4: '#55d08a',
-      5: '#ff7868',
-      6: '#5d8bff',
-      7: '#ffa14a',
+      4: '#7cc47e',
+      5: '#f4869f',
+      6: '#b45cf2',
+      7: '#f9a184',
       8: '#8e93a6',
     });
   });
@@ -149,5 +178,98 @@ describe('blok atlası NS4-13 (a700ca8) görünümünde', () => {
       );
     expect(fingerprint(blockOf(ops, 2))).toBe(fingerprint(blockOf(col8, 1))); // ±0 farkı yuvarlamayla gider
     expect(ops.some((o) => o[0] === 'set:fillStyle' && o[1] === 'rgba(255,140,190,.5)')).toBe(true);
+  });
+});
+
+describe('NS4-22: sıklamen yaprağı', () => {
+  it('beyaz çizilir (renk tint ile), tabanı koyu; boyut yükseklik px, genişlik yarısı', () => {
+    createPetalCanvas(48);
+    const [petal] = canvases;
+    expect([petal?.width, petal?.height]).toEqual([24, 48]);
+    const colors = (petal?.ops ?? []).filter((o) => o[0] === 'stop' || o[0].startsWith('set:')).map((o) => o.at(-1));
+    for (const c of colors.filter((x): x is string => typeof x === 'string')) expect(c).toMatch(/^rgba\((\d+),\1,\1,/); // gri tonlu: tint rengini bozmaz
+    expect(petal?.ops.filter((o) => o[0] === 'fill')).toHaveLength(1);
+    createPetalCanvas(4);
+    expect([canvases[1]?.width, canvases[1]?.height]).toEqual([6, 12]); // en küçük boyut
+  });
+});
+
+describe('NS4-32: sıklamen blok görselleri', () => {
+  /** Kimliği kendi sütun numarası olan sahte görseller: drawImage çağrısında hangi görselin çizildiği okunur. */
+  const art = Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((id) => [id, { id }])) as unknown as BlockArt;
+  /** Hayalet satırının komutları (her sütunda translate(…, P + 2) ile restore arası). */
+  const ghostOps = (ops: readonly Op[], P: number) => {
+    let inGhost = false;
+    return ops.filter((o) => {
+      if (o[0] === 'translate') inGhost = o[2] === P + 2;
+      return inGhost;
+    });
+  };
+
+  it('her parçanın görsel dosyası var; I turkuaz, J mor', () => {
+    expect(Object.keys(BLOCK_ART)).toEqual(['1', '2', '3', '4', '5', '6', '7']);
+    expect(new Set(Object.values(BLOCK_ART)).size).toBe(7);
+    expect([...SHIPPED].sort()).toEqual(Object.values(BLOCK_ART).sort());
+    expect(BLOCK_ART[1]).toBe('turkuaz');
+    expect(BLOCK_ART[6]).toBe('mor');
+    expect(blockArtUrl(3)).toBe('/images/bloklar/fusya.webp');
+  });
+
+  it('görsel varsa 1-7 sütunları görselle (paylı, yumuşak örneklemeli), gri blok jöle + yüzle çizilir', () => {
+    const px = 64,
+      P = px + 4;
+    createBlockAtlas(px, art);
+    const ops = canvases[0]?.ops ?? [];
+    const draws = ops.filter((o) => o[0] === 'drawImage');
+    expect(draws.map((o) => (o[1] as { id: number }).id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    const ins = px * 0.03;
+    for (const d of draws) expect(d.slice(2)).toEqual([ins, ins, px - ins * 2, px - ins * 2]);
+    expect(ops).toContainEqual(['set:imageSmoothingQuality', 'high']);
+    // renkli sütunlarda jöle gradyanı yok; gri sütunda var ve yüz mürekkebi duruyor
+    const pre = colorPrefix(ops, px);
+    expect(pre.some((o) => o[0] === 'linear')).toBe(false);
+    const col8 = ops.slice(pre.length);
+    expect(col8.some((o) => o[0] === 'linear')).toBe(true);
+    expect(col8.some((o) => o[1] === 'rgba(38,44,62,.72)')).toBe(true);
+    expect([canvases[0]?.width, canvases[0]?.height]).toEqual([P * 8, P * 2]);
+  });
+
+  it('hayaletler görselden etkilenmez', () => {
+    createBlockAtlas(64);
+    createBlockAtlas(64, art);
+    const [plain, withArt] = canvases;
+    expect(ghostOps(plain?.ops ?? [], 68).length).toBeGreaterThan(8 * 10); // 8 hayalet karosu yakalandı
+    expect(fingerprint(ghostOps(withArt?.ops ?? [], 68))).toBe(fingerprint(ghostOps(plain?.ops ?? [], 68)));
+  });
+
+  it('Image olmayan ortamda yükleme null döner (jöle çizimi kalır)', async () => {
+    vi.stubGlobal('Image', undefined);
+    await expect(loadBlockArt()).resolves.toBeNull();
+  });
+
+  it('bir görsel yüklenemezse null; hepsi yüklenirse 1-7 sırasıyla', async () => {
+    const make = (fail: (src: string) => boolean) =>
+      class {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(v: string) {
+          queueMicrotask(() => (fail(v) ? this.onerror?.() : this.onload?.()));
+          this.url = v;
+        }
+        url = '';
+      };
+    vi.stubGlobal(
+      'Image',
+      make((v) => v.includes('mor')),
+    );
+    await expect(loadBlockArt()).resolves.toBeNull();
+    vi.stubGlobal(
+      'Image',
+      make(() => false),
+    );
+    const loaded = (await loadBlockArt()) as unknown as Record<number, { url: string }>;
+    expect([1, 2, 3, 4, 5, 6, 7].map((id) => loaded[id]?.url)).toEqual(
+      ([1, 2, 3, 4, 5, 6, 7] as const).map((id) => blockArtUrl(id)),
+    );
   });
 });

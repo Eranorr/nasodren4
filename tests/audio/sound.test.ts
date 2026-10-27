@@ -7,10 +7,12 @@ import {
   MUFFLE_OPEN_HZ,
   MUFFLE_START,
   MUSIC_CHORD_MS,
+  OPEN_HOLD,
   Sound,
   muffleCutoff,
 } from '../../src/audio/SoundManager';
 import { FakeAudioContext, installFakeAudio } from '../helpers/fakeAudio';
+import { CFG } from '../../src/config/gameConfig';
 
 const settings = () => ({ sound: true, music: true });
 let intervals: Set<unknown>;
@@ -87,6 +89,9 @@ describe('AudioContext yalnızca kullanıcı etkileşimiyle açılır', () => {
         s.clear(2, 2);
         s.cyc();
         s.sneeze();
+        s.roomClear();
+        s.relief('tetris');
+        s.relief('allclear');
         s.level();
         s.over();
         s.setHidden(true);
@@ -323,5 +328,72 @@ describe('NS4-20: tıkalı burun süzgeci', () => {
     expect(FakeAudioContext.instances).toHaveLength(0);
     s.unlock();
     expect(graph(ctx()).muffle.frequency.value).toBeCloseTo(MUFFLE_CLOSED_HZ, 6);
+  });
+});
+
+describe('NS4-22: büyük açılma anı', () => {
+  type Biquad = { kind: string; outputs: Set<unknown>; frequency: { value: number; calls: string[] } };
+  const muffleOf = (c: FakeAudioContext) =>
+    c.nodes.find((n) => n.kind === 'biquad' && n.outputs.has(c.nodes[1])) as unknown as Biquad;
+  const setup = () => {
+    const { ctx } = installFakeAudio();
+    const s = new Sound(settings());
+    s.unlock();
+    return { s, c: ctx(), muffle: muffleOf(ctx()) };
+  };
+
+  it('süzgeç bir anda tamamen açılır ve süre boyunca açık kalır; sonra tıkanıklığa döner', () => {
+    const { s, c, muffle } = setup();
+    s.setCongestion(1);
+    expect(muffle.frequency.value).toBeCloseTo(MUFFLE_CLOSED_HZ, 6);
+    s.relief('tetris');
+    expect(muffle.frequency.value).toBe(MUFFLE_OPEN_HZ);
+    expect(s.muffleTarget).toBe(MUFFLE_OPEN_HZ);
+    c.advance(OPEN_HOLD.tetris - 0.1);
+    s.setCongestion(1); // tahta hâlâ tıkalı: açılma anı sürerken yok sayılır
+    expect(muffle.frequency.value).toBe(MUFFLE_OPEN_HZ);
+    c.advance(0.2);
+    s.setCongestion(1);
+    expect(muffle.frequency.value).toBeCloseTo(MUFFLE_CLOSED_HZ, 6);
+  });
+
+  it('Tam Ferahlık ve oda açılışı süzgeci daha uzun açık tutar', () => {
+    expect(OPEN_HOLD.allclear).toBeGreaterThan(OPEN_HOLD.tetris);
+    expect(OPEN_HOLD.room).toBeGreaterThan(CFG.roomClearMs / 1000); // "Sinüs açıldı" geçişi (harita kartı) boyunca açık
+    const { s, c, muffle } = setup();
+    s.setCongestion(1);
+    s.roomClear();
+    c.advance(1.5);
+    s.setCongestion(1);
+    expect(muffle.frequency.value).toBe(MUFFLE_OPEN_HZ);
+  });
+
+  it('ses efektleri kapalıyken de müzik süzgeci açılır (müzik ayrı ayardır)', () => {
+    const { ctx } = installFakeAudio();
+    const s = new Sound({ sound: false, music: true });
+    s.unlock();
+    s.setCongestion(1);
+    const n = ctx().sources().length;
+    s.relief('allclear');
+    expect(ctx().sources().length).toBe(n);
+    expect(muffleOf(ctx()).frequency.value).toBe(MUFFLE_OPEN_HZ);
+  });
+
+  it('"ahh": gürültü iki ünlü formantından (bant geçiren, perde düşer) geçer; Tam Ferahlık Tetris’ten uzun', () => {
+    const { s, c } = setup();
+    const span = (f: () => void) => {
+      const n = c.sources().length;
+      f();
+      const xs = c.sources().slice(n);
+      return Math.max(...xs.map((x) => x.stopped!)) - Math.min(...xs.map((x) => x.started!));
+    };
+    const before = c.nodes.length;
+    s.sigh(1, 0.1);
+    const added = c.nodes.slice(before);
+    const bands = added.filter((n) => n.kind === 'biquad') as unknown as (Biquad & { type: string })[];
+    expect(bands.map((b) => b.type)).toEqual(['bandpass', 'bandpass']);
+    expect(added.filter((n) => n.kind === 'buffer')).toHaveLength(1);
+    for (const b of bands) expect(b.frequency.calls).toEqual(['set', 'exp']);
+    expect(span(() => s.relief('allclear'))).toBeGreaterThan(span(() => s.relief('tetris')));
   });
 });
