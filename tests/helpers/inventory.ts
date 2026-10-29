@@ -93,7 +93,7 @@ function notices(src: string): string[] {
       const t = n.trim().replace(/^'|'$/g, '');
       if (t) out.push(t);
     }
-  if (/\+ ' drenaj'/.test(src)) out.push('<satır adı> drenaj');
+  if (/\+ ' satır'/.test(src)) out.push('<satır adı> satır');
   for (const m of src.matchAll(/`([^`]*(?:Kombo|kombo|T-spin)[^`]*)`|'((?:Art arda|Mini |T-spin)[^']*)'/g)) {
     const t = m[1] ?? m[2];
     if (t) out.push(t);

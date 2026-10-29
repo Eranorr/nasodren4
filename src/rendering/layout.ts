@@ -4,6 +4,8 @@
    yan buton yüksekliği 72 px ile sınırlı, Sıradaki paneli 13 → 13,6 hücre.
    NS4-04: kademeli doldurulan nesne + `as Layout` yerine her yön için tam
    nesne döndüren iki saf fonksiyon (ifadeler ve işlem sırası aynı).
+   NS4-38: Sıradaki tek parça (Beklet paneliyle aynı boyutta kare / 4 hücre); açılan yer skor ve
+   tıkanıklık kartına verildi (portrede skorun altı, yatayda Sıradaki'nin altı).
    Sonuç hem Pixi görünümüne (View.layout) hem DOM HUD yerleşimine verilir.
    ===================================================================== */
 import { COLS, VIS } from '../config/gameConfig';
@@ -44,8 +46,10 @@ function portraitLayout(W: number, H: number, pad: number): PortraitLayout {
     hw = hb;
   const hold: Rect = { x: pad, y: pad, w: hw, h: hb };
   const mini = Math.max(8, Math.floor(hb * 0.18));
-  const nw = Math.round(hb * 1.6);
-  const next: Rect = { x: W - pad - nw, y: pad, w: nw, h: hb };
+  const next: Rect = { x: W - pad - hw, y: pad, w: hw, h: hb };
+  const sx = hold.x + hw + 6,
+    sw = next.x - sx - 6,
+    sh = Math.round(hb * 0.6);
   const by2 = H - pad - 56;
   const gap = 8,
     pw = 48;
@@ -62,8 +66,9 @@ function portraitLayout(W: number, H: number, pad: number): PortraitLayout {
     miniBig: mini,
     holdSlot: { x: hold.x + hw / 2, y: hold.y + hb / 2 + 7 },
     next,
-    nextSlots: [0, 1].map((k) => ({ x: next.x + (nw * (k + 0.5)) / 2, y: next.y + hb / 2 + 7 })),
-    stats: { x: hold.x + hw + 6, y: pad, w: next.x - (hold.x + hw) - 12, h: hb },
+    nextSlot: { x: next.x + hw / 2, y: next.y + hb / 2 + 7 },
+    stats: { x: sx, y: pad, w: sw, h: sh },
+    cong: { x: sx, y: pad + sh, w: sw, h: hb - sh },
     btnHold: { x: pad, y: by2, w: bw3, h: 56 },
     btnCyc: { x: pad + bw3 + gap, y: by2, w: bw3, h: 56 },
     btnSneeze: { x: pad + (bw3 + gap) * 2, y: by2, w: bw3, h: 56 },
@@ -85,6 +90,9 @@ function landscapeLayout(W: number, H: number, pad: number): LandscapeLayout {
   const lx = bx - 40 - sw,
     rx = bx + bw + 16;
   const bh2 = Math.min(SIDE_BTN_MAX, Math.max(SIDE_BTN_MIN, cell * 1.6));
+  // NS4-38: skor ve tıkanıklık kartı; küçük hücrede (telefon yatay) en az 80 px, sol sütunda butonlara binmez
+  const cardY = by + cell * 4.6,
+    cardH = Math.min(Math.max(cell * 3.4, 80), by + bh - bh2 * 3 - 16 - 8 - cardY);
   return {
     W,
     H,
@@ -96,13 +104,14 @@ function landscapeLayout(W: number, H: number, pad: number): LandscapeLayout {
     mini: Math.round(cell * 0.62),
     miniBig: Math.round(cell * 0.8),
     holdSlot: { x: lx + sw / 2, y: by + cell * 2.2 },
-    stats: { x: lx + 4, y: by + cell * 4.6, w: sw - 4, h: cell * 3 },
+    stats: { x: lx, y: cardY, w: sw, h: cardH },
     btnHold: { x: lx, y: by + bh - bh2 * 3 - 16, w: sw, h: bh2 },
     btnCyc: { x: lx, y: by + bh - bh2 * 2 - 8, w: sw, h: bh2 },
     btnSneeze: { x: lx, y: by + bh - bh2, w: sw, h: bh2 },
-    // NS4-11: 5. parça 12,6 + 0,62 = 13,22 hücreye iniyordu; panel 13 hücreydi (taşma). Slotlar aynı.
-    next: { x: rx, y: by, w: sw, h: cell * 13.6 },
-    nextSlots: [0, 1, 2, 3, 4].map((k) => ({ x: rx + sw / 2, y: by + cell * (k === 0 ? 2.6 : 2.6 + 0.4 + k * 2.4) })),
+    // NS4-38: tek parça, Beklet paneliyle aynı ölçü; altında tıkanıklık kartı
+    next: { x: rx, y: by, w: sw, h: cell * 4 },
+    nextSlot: { x: rx + sw / 2, y: by + cell * 2.2 },
+    cong: { x: rx, y: cardY, w: sw, h: cardH },
     btnPause: { x: rx, y: by + bh - 46, w: 46, h: 46 },
     compactBtns: sw < 150,
     compactStats: sw < 150,

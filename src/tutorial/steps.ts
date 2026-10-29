@@ -40,9 +40,9 @@ export const STEP_COPY: Readonly<Record<TutorialStep, StepCopy>> = {
     touch: 'Yukarı fırlat ya da Beklet’e dokun.',
   },
   clear: {
-    title: 'Drenaj',
-    keyboard: 'Tam satır = drenaj. Bir satırı tamamen doldur, satır boşalır.',
-    touch: 'Tam satır = drenaj. Bir satırı tamamen doldur, satır boşalır.',
+    title: 'Satır temizle',
+    keyboard: 'Bir satırı baştan sona doldur: satır silinir, puan kazanırsın.',
+    touch: 'Bir satırı baştan sona doldur: satır silinir, puan kazanırsın.',
   },
 };
 

@@ -6,7 +6,7 @@ import {
   MUFFLE_CLOSED_HZ,
   MUFFLE_OPEN_HZ,
   MUFFLE_START,
-  MUSIC_CHORD_MS,
+  MUSIC_TICK_MS,
   OPEN_HOLD,
   Sound,
   muffleCutoff,
@@ -41,7 +41,7 @@ describe('AudioContext yalnızca kullanıcı etkileşimiyle açılır', () => {
   it('oluşturmak, ses çalmak ve müzik istemek context açmaz; ilk unlock() açar, sonrakiler yenisini açmaz', () => {
     installFakeAudio();
     const s = new Sound(settings());
-    s.setMusic(true);
+    s.setMusic('game');
     s.lock();
     s.clear(4, 0);
     expect(FakeAudioContext.instances).toHaveLength(0);
@@ -78,7 +78,7 @@ describe('AudioContext yalnızca kullanıcı etkileşimiyle açılır', () => {
       expect(() => {
         s.unlock();
         s.unlock();
-        s.setMusic(true);
+        s.setMusic('game');
         s.move();
         s.rotate();
         s.hold();
@@ -96,7 +96,7 @@ describe('AudioContext yalnızca kullanıcı etkileşimiyle açılır', () => {
         s.over();
         s.setHidden(true);
         s.setHidden(false);
-        s.setMusic(false);
+        s.setMusic('off');
       }).not.toThrow();
       expect(s.unsupported).toBe(true);
       expect(s.musicOn).toBe(false);
@@ -126,7 +126,7 @@ describe('ses ve müzik ayarları', () => {
     const st = { sound: true, music: false };
     const s = new Sound(st);
     s.unlock();
-    s.setMusic(true);
+    s.setMusic('game');
     expect(s.musicOn).toBe(false);
     st.music = true;
     s.applySettings();
@@ -143,47 +143,51 @@ describe('ortam müziği oturumu', () => {
     installFakeAudio();
     const s = new Sound(settings());
     s.unlock();
-    s.setMusic(true);
-    s.setMusic(true);
+    s.setMusic('game');
+    s.setMusic('game');
     s.startMusic();
     expect(intervals.size).toBe(1);
-    for (let i = 0; i < 50; i++) s.setMusic(i % 2 === 0);
-    expect(intervals.size).toBe(0); // son çağrı setMusic(false)
-    s.setMusic(true);
+    for (let i = 0; i < 50; i++) s.setMusic(i % 2 === 0 ? 'game' : 'off');
+    expect(intervals.size).toBe(0); // son çağrı setMusic('off')
+    s.setMusic('game');
     expect(intervals.size).toBe(1);
-    s.setMusic(false);
+    s.setMusic('off');
     expect(intervals.size).toBe(0);
   });
   it('durunca bütün kaynaklar durdurulur ve veri yolu ayrılır; kapalıyken çalışan müzik düğümü kalmaz', () => {
     const { ctx } = installFakeAudio();
     const s = new Sound(settings());
     s.unlock();
-    s.setMusic(true);
+    s.setMusic('game');
     const c = ctx();
-    vi.advanceTimersByTime(MUSIC_CHORD_MS * 2); // iki akor daha
+    // NS4-39: notalar ileri bakışla planlanır: zaman ilerledikçe pad, bas ve melodi eklenir
+    for (let i = 0; i < 40; i++) {
+      c.advance(MUSIC_TICK_MS / 1000);
+      vi.advanceTimersByTime(MUSIC_TICK_MS);
+    }
     const musicSources = c.sources().filter((n) => n.started !== null);
-    expect(musicSources.length).toBe(3 + 3 * 6); // gürültü + 2 LFO + 3 akor × 6 osilatör
+    expect(musicSources.length).toBeGreaterThan(3 + 8); // rüzgâr (gürültü + 2 LFO) + pad + notalar
     expect(s.musicSourceCount).toBeGreaterThan(0);
-    s.setMusic(false);
+    s.setMusic('off');
     expect(s.musicSourceCount).toBe(0);
     expect(musicSources.every((n) => n.stopped !== null)).toBe(true);
     c.advance(10);
     expect(c.sources().filter((n) => n.running)).toHaveLength(0);
     vi.advanceTimersByTime(2000);
     const buses = c.nodes.filter((n) => n.kind === 'gain' && n.disconnected);
-    expect(buses.length).toBeGreaterThan(0); // oturum veri yolu ve akor kazançları ayrıldı
-    // yeni oturum yeni veri yolu kurar, eski akorlar yeniden kullanılmaz
-    vi.advanceTimersByTime(MUSIC_CHORD_MS * 3);
+    expect(buses.length).toBeGreaterThan(0); // oturum veri yolu ve nota kazançları ayrıldı
+    // durmuş oturum yeni nota planlamaz
+    vi.advanceTimersByTime(10_000);
     expect(c.sources().filter((n) => n.started !== null).length).toBe(musicSources.length);
   });
   it('büyük ses anlarında müzik kısa süre kısılır, sonra geri gelir', () => {
     const { ctx } = installFakeAudio();
     const s = new Sound(settings());
     s.unlock();
-    s.setMusic(true);
+    s.setMusic('game');
     // NS4-20: müzik ana kanalı master'a muffle süzgeci üzerinden bağlanır
-    const master = ctx().nodes[1];
-    const muffle = ctx().nodes.find((n) => n.kind === 'biquad' && n.outputs.has(master));
+    // NS4-20 / NS4-39: oyun müziği kanalı → muffle → müzik düzeyi → master
+    const muffle = ctx().nodes.find((n) => n.kind === 'biquad');
     const mus = ctx().nodes.find((n) => n.kind === 'gain' && muffle && n.outputs.has(muffle));
     expect(mus).toBeDefined();
     s.cyc();
@@ -275,7 +279,8 @@ describe('NS4-20: tıkalı burun süzgeci', () => {
   type Biquad = { kind: string; outputs: Set<unknown>; frequency: { value: number; calls: string[] } };
   const graph = (c: FakeAudioContext) => {
     const master = c.nodes[1];
-    const muffle = c.nodes.find((n) => n.kind === 'biquad' && n.outputs.has(master)) as unknown as Biquad;
+    // ilk süzgeç: unlock() içinde kurulan muffle (müzik düzeyi kazancına bağlı)
+    const muffle = c.nodes.find((n) => n.kind === 'biquad') as unknown as Biquad;
     return { master, muffle };
   };
 
@@ -293,16 +298,17 @@ describe('NS4-20: tıkalı burun süzgeci', () => {
     }
   });
 
-  it('yalnızca müzik süzülür: müzik kanalı → muffle → master; oynanış sesleri doğrudan master', () => {
+  it('yalnızca oyun müziği süzülür: kanal → muffle → müzik düzeyi → master; oynanış sesleri doğrudan master', () => {
     const { ctx } = installFakeAudio();
     const s = new Sound(settings());
     s.unlock();
     const { master, muffle } = graph(ctx());
     expect(muffle).toBeDefined();
     const intoMuffle = ctx().nodes.filter((n) => n.kind === 'gain' && n.outputs.has(muffle as never));
-    expect(intoMuffle).toHaveLength(1); // müzik ana kanalı
-    const sfx = ctx().nodes.filter((n) => n.kind === 'gain' && n.outputs.has(master));
-    expect(sfx).toHaveLength(1);
+    expect(intoMuffle).toHaveLength(1); // oyun müziği kanalı
+    const toMaster = ctx().nodes.filter((n) => n.kind === 'gain' && n.outputs.has(master));
+    expect(toMaster).toHaveLength(2); // efektler ve müzik düzeyi
+    expect(toMaster.filter((g) => muffle.outputs.has(g))).toHaveLength(1);
     expect(muffle.frequency.value).toBe(MUFFLE_OPEN_HZ);
   });
 
@@ -333,8 +339,7 @@ describe('NS4-20: tıkalı burun süzgeci', () => {
 
 describe('NS4-22: büyük açılma anı', () => {
   type Biquad = { kind: string; outputs: Set<unknown>; frequency: { value: number; calls: string[] } };
-  const muffleOf = (c: FakeAudioContext) =>
-    c.nodes.find((n) => n.kind === 'biquad' && n.outputs.has(c.nodes[1])) as unknown as Biquad;
+  const muffleOf = (c: FakeAudioContext) => c.nodes.find((n) => n.kind === 'biquad') as unknown as Biquad;
   const setup = () => {
     const { ctx } = installFakeAudio();
     const s = new Sound(settings());

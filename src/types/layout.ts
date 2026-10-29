@@ -16,7 +16,7 @@ interface LayoutBase {
   readonly H: number;
   /** Tahta hücre boyutu. */
   readonly cell: number;
-  /** Önizleme hücre boyutu; miniBig ilk "Sıradaki" parçası içindir. */
+  /** Önizleme hücre boyutu; miniBig "Sıradaki" parçası içindir. */
   readonly mini: number;
   readonly miniBig: number;
   readonly board: Rect;
@@ -24,13 +24,15 @@ interface LayoutBase {
   readonly hold: Rect;
   readonly next: Rect;
   readonly stats: Rect;
+  /** NS4-38: tıkanıklık kartı (yüzde + çubuk). Portrede skorun altında, yatayda Sıradaki panelinin altında. */
+  readonly cong: Rect;
   readonly btnHold: Rect;
   readonly btnCyc: Rect;
   readonly btnSneeze: Rect;
   readonly btnPause: Rect;
   readonly holdSlot: Pt;
-  /** Portrede 2, yatayda 5 slot; okuyan kod indeks dışını `undefined` olarak ele almalıdır. */
-  readonly nextSlots: readonly Pt[];
+  /** NS4-38: tek "Sıradaki" parçasının merkezi (önceden portrede 2, yatayda 5 slot). */
+  readonly nextSlot: Pt;
   readonly compactBtns: boolean;
   readonly compactStats: boolean;
 }

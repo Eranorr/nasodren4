@@ -6,6 +6,11 @@ import type { BadgeId } from './content';
 export interface Settings {
   sound: boolean;
   music: boolean;
+  /** NS4-39: ana menü ve mola müziği (music kapalıysa çalmaz). */
+  menuMusic: boolean;
+  /** NS4-39: müzik ve efekt ses düzeyi (0..100). */
+  musicVol: number;
+  sfxVol: number;
   haptics: boolean;
   ghost: boolean;
   fps: boolean;
@@ -15,8 +20,8 @@ export interface Settings {
   arr: number;
 }
 
-export type BooleanSettingKey = 'sound' | 'music' | 'haptics' | 'ghost' | 'fps';
-export type NumericSettingKey = 'das' | 'arr';
+export type BooleanSettingKey = 'sound' | 'music' | 'menuMusic' | 'haptics' | 'ghost' | 'fps';
+export type NumericSettingKey = 'musicVol' | 'sfxVol' | 'das' | 'arr';
 
 /**
  * fn_meta: yalnızca cihazdaki yerel ilerleme (yerel rekor, toplam drenaj, rozetler).

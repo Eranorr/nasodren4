@@ -12,19 +12,21 @@ import { View } from '../rendering/GameView';
 import { computeLayout } from '../rendering/layout';
 import { Sound } from '../audio/SoundManager';
 import { InputController } from '../input/InputController';
-import { canVibrate, createBuzz } from '../haptics/haptics';
+import { createBuzz } from '../haptics/haptics';
 import { settings, saveSettings } from '../storage/settings';
 import { track } from '../analytics/analytics';
 import { ctaUrl } from '../analytics/cta';
 import { bindUiAnalytics } from '../analytics/funnel';
 import { $ } from '../ui/dom';
-import { updateHud, applyHudLayout } from '../ui/hud';
+import { updateHud, applyHudLayout, shownCongestion } from '../ui/hud';
+import { NextReveal } from '../ui/nextReveal';
 import { toast } from '../ui/notifications';
 import { createTutorialView } from '../ui/tutorialView';
 import { Tutorial } from '../tutorial/Tutorial';
 import { TUTORIAL_DONE_TEXT } from '../tutorial/steps';
 import { tutorialStore } from '../storage/tutorial';
-import { initTips, setTip, openSub, bindBackButtons, closeSub, initScreens } from '../ui/screens';
+import { initTips, setTip, openSub, bindBackButtons, closeSub, initScreens, renderStartBest } from '../ui/screens';
+import { meta } from '../storage/progress';
 import { leaderboardConfig } from '../leaderboard/config';
 import { createLeaderboardClient } from '../leaderboard/globalClient';
 import { loadLocalScores, updateLocalScore } from '../leaderboard/localScores';
@@ -43,6 +45,11 @@ export function bootstrap(): void {
   const sound = new Sound(settings);
   // NS4-17: sekme gizlenince AudioContext askıya alınır, görünür olunca sürer (oyun zaten otomatik molaya girer)
   document.addEventListener('visibilitychange', () => sound.setHidden(document.hidden));
+  // NS4-39: ana menüde "Bahçe" müziği. Tarayıcılar sesi ilk etkileşime kadar açmaz: sayfadaki ilk dokunuş veya
+  // tuşta açılır (sonraki etkileşimler askıdaki context'i sürdürür; unlock() tekrarlarda yeni context açmaz).
+  sound.setMusic('menu');
+  for (const ev of ['pointerdown', 'keydown'] as const)
+    document.addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
   // haptik: ayar her çağrıda okunur
   const buzz = createBuzz(() => settings.haptics);
 
@@ -166,7 +173,17 @@ export function bootstrap(): void {
   $('cta-pause', HTMLAnchorElement).href = ctaUrl('pause_menu');
 
   // ayarlar
-  bindSettingsPanel({ settings, save: saveSettings, onAudioChange: () => sound.applySettings(), canVibrate });
+  bindSettingsPanel({
+    settings,
+    save: saveSettings,
+    onAudioChange: (k) => {
+      sound.applySettings();
+      if (k === 'sfxVol' || k === 'sound') sound.preview(); // NS4-39: efekt düzeyi duyulsun
+    },
+  });
+
+  // NS4-38: sıradaki parça "?" kartıyla açılır; sesler oynanış ses kanalından (Ses ayarı kapalıysa çalmaz)
+  const reveal = new NextReveal(view, sound, () => view.reducedMotion);
 
   /* ---- ana döngü ---- */
   let fpsAcc = 0,
@@ -181,9 +198,15 @@ export function bootstrap(): void {
     }
     view.update(dt);
     const appState = lifecycle.getState(); // game.update içinde 'over' olmuş olabilir; orijinaldeki gibi burada okunur
-    if (appState === 'playing' || appState === 'over') updateHud(game, appState === 'playing');
+    if (appState === 'playing' || appState === 'over') {
+      updateHud(game, appState === 'playing');
+      reveal.update(game, dt, appState === 'playing'); // NS4-38: "Sıradaki" gizem kartı
+    }
     // NS4-20: tıkalı burun: müzik tıkanıklıkla boğuklaşır; oyun dışında açık
-    sound.setCongestion(appState === 'playing' ? game.congestion() : 0);
+    // NS4-42: gösterilen değer (oda açılınca boşalan gösterge): müzik de birlikte ferahlar
+    sound.setCongestion(appState === 'playing' ? shownCongestion(game) : 0);
+    // NS4-40: oyun müziği bağlamı: seviye tempoyu hafifçe artırır, her sinüs odasında ton değişir
+    if (appState === 'playing') sound.setMusicContext(game.level, game.rooms ? game.room : 0);
     if (settings.fps) {
       fpsAcc += raw;
       fpsFrames++;
@@ -198,6 +221,7 @@ export function bootstrap(): void {
   });
 
   setTip('tip-start');
+  renderStartBest(meta.best); // NS4-41
   // NS4-19: oyun yüklendi (sayfa başına bir kez). Kişisel veri yok: yalnızca iki durum bayrağı.
   track('game_loaded', { global_scores: leaderboard.enabled, tutorial_done: tutorialStore.isDone() });
   // document.fonts eski tarayıcılarda yoktur (DOM tipleri her zaman var sayar). FontFaceSet varsa ready her zaman tanımlıdır.

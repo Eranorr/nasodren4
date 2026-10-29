@@ -74,7 +74,7 @@ describe('HUD', () => {
 
 describe('işaretleme ve stil', () => {
   it('nefes halkası ekran okuyucudan gizli, görünür metin eklemez', () => {
-    expect(html).toMatch(/<i id="breath" class="breath" data-state="ferah" aria-hidden="true"><\/i>Nefes sv\./);
+    expect(html).toMatch(/<i id="breath" class="breath" data-state="ferah" aria-hidden="true"><\/i>Seviye/);
     expect(html).toMatch(/<div id="pressure" aria-hidden="true"><\/div>\s*<div id="danger">/);
   });
   it('basınç ve nefes renkleri token; tehlike kırmızısı kullanılmaz', () => {

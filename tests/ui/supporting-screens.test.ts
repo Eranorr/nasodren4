@@ -46,7 +46,7 @@ describe('NS4-15 izinsiz metni kaldırıldı', () => {
     expect(html).not.toMatch(/Puan ×2|tek kullanımlık/);
   });
   it('onaylı sıklamen başlangıç popup’ı ve ×2 rozeti metni duruyor', () => {
-    expect(sources['../../src/app/events.ts']).toContain("popup('Sıklamen özütü', 'Ozmotik drenaj başladı', 'cyc')");
+    expect(sources['../../src/app/events.ts']).toContain("popup('Sıklamen özütü', 'Alt satırlar temizleniyor', 'cyc')");
     expect(sources['../../src/ui/hud.ts']).toContain('`Ferah nefes ×2 · ${m} sn`');
   });
 });
@@ -61,12 +61,12 @@ describe('görünür metinler değişmedi (a67fe7f)', () => {
     [
       'scr-over',
       over,
-      'Yeni rekor Sinüslerin tamamen tıkandı 0 Puan 0 Drenaj 0 Rekor Gerçek hayatta tıkanıklıkla yaşamak zorunda değilsin. Sinüzit ve rahat nefes hakkında güvenilir bilgiler sağlık portalında. Rahat nefes rehberini aç Tekrar oyna Ana menü',
+      'Yeni rekor Sinüslerin tamamen tıkandı 0 Puan 0 Satır 0 Rekor Gerçek hayatta tıkanıklıkla yaşamak zorunda değilsin. Sinüzit ve rahat nefes hakkında güvenilir bilgiler sağlık portalında. Rahat nefes rehberini aç Tekrar oyna Ana menü',
     ],
     [
       'scr-how',
       how,
-      'Nasıl oynanır Dokunmatik Sağa-sola sürükle Bloğu kaydır Dokun Döndür (tahtanın sol üçte biri: ters yön) Aşağı sürükle Yavaşça indir Aşağı fırlat Anında bırak Yukarı fırlat Beklet Klavye ← → Kaydır ↑ / X · Z Döndür · ters döndür ↓ · Boşluk Yavaş indir · anında bırak C / Shift Beklet 1 · 2 Sıklamen özütü · hapşırık Esc / P Duraklat Oyun alanı bir sinüs boşluğu Düşen bloklar biriken mukus; alan dolarsa sinüs tamamen tıkanır. Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla başlar; parlayan boşlukları doldurup hepsini uçurunca sinüs açılır. Dördü de açılınca ister serbest nefese devam et, ister bitir. Tam satır = drenaj. Dört satır birden: ozmotik etki. T-spin: nörorefleks etki. Tahtayı tamamen boşaltırsan Tam Ferahlık bonusu. Tıkanıklık yükselince iki destek açılır. Sıklamen özütü oyunda bir kez kullanılır, alt yarıyı yavaşça boşaltır ve 30 sn puanları ikiye katlar. Hapşırık tıkanıklığın en üstteki 3 sırasını savurur. 20 blok yerleştirince yeniden dolar. Tamam Öğreticiyle oyna',
+      'Nasıl oynanır Dokunmatik Sağa-sola sürükle Bloğu kaydır Dokun Döndür (tahtanın sol üçte biri: ters yön) Aşağı sürükle Yavaşça indir Aşağı fırlat Anında bırak Yukarı fırlat Beklet Klavye ← → Kaydır ↑ / X · Z Döndür · ters döndür ↓ · Boşluk Yavaş indir · anında bırak C / Shift Beklet 1 · 2 Sıklamen özütü · hapşırık Esc / P Duraklat Oyun alanı bir sinüs boşluğu Düşen bloklar burnunda biriken tıkanıklık; alan dolarsa sinüs tamamen tıkanır. Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla başlar; parlayan boşlukları doldurup hepsini uçurunca sinüs açılır. Dördü de açılınca ister serbest nefese devam et, ister bitir. Bir satırı tamamen doldurunca satır silinir. Dört satırı birden silersen TETRİS. T bloğunu döndürüp dar bir boşluğa sokarsan T-spin: ekstra puan. Tahtayı tamamen boşaltırsan Tam Ferahlık bonusu. Tıkanıklık yükselince iki destek açılır. Sıklamen özütü oyunda bir kez kullanılır, alt yarıyı yavaşça boşaltır ve 30 sn puanları ikiye katlar. Hapşırık tıkanıklığın en üstteki 3 sırasını savurur. 20 blok yerleştirince yeniden dolar. Tamam Öğreticiyle oyna',
     ],
   ])('%s', (_id, sec, expected) => {
     // NS4-18: oyun sonundaki global gönderim formu ayrı testte sabitlenir; mevcut metinler aynı kalmalı
@@ -79,16 +79,11 @@ describe('görünür metinler değişmedi (a67fe7f)', () => {
     expect(at(over, 'id="b-menu"')).toBeLessThan(at(over, 'id="submit-score"'));
     expect(at(over, 'id="submit-score"')).toBeLessThan(at(over, 'id="tip-over"'));
   });
-  it('Ayarlar: yalnızca görevdeki üç grup başlığı eklendi', () => {
-    // grup başlıkları (legend) çıkarılınca metin a67fe7f ile aynı
+  it('Ayarlar: NS4-41: yalnızca Ses grubu', () => {
     expect(text(set.replace(/<legend>[^<]+<\/legend>/g, ''))).toBe(
-      'Ayarlar Ses efektleri Ortam müziği Titreşim Destekleyen Android cihazlarda Hayalet parça DAS Basılı tutunca kayma gecikmesi: ms ARR Kayma tekrar hızı: ms FPS göstergesi Performans testi için Kaydet',
+      'Ayarlar Müzik Müzik düzeyi Menü ve mola müziği Oyun dışında sakin bahçe ezgisi Ses efektleri Efekt düzeyi Kaydet',
     );
-    expect([...set.matchAll(/<legend>([^<]+)<\/legend>/g)].map((m) => m[1])).toEqual([
-      'Ses',
-      'Oynanış',
-      'İleri ayarlar',
-    ]);
+    expect([...set.matchAll(/<legend>([^<]+)<\/legend>/g)].map((m) => m[1])).toEqual(['Ses']);
   });
 });
 
@@ -167,32 +162,24 @@ describe('Ayarlar', () => {
     legend: /<legend>([^<]+)<\/legend>/.exec(m[2] ?? '')?.[1],
     keys: [...(m[2] ?? '').matchAll(/data-k="(\w+)"/g)].map((k) => k[1]),
   }));
-  it('Ses / Oynanış / İleri ayarlar gruplarında aynı kayıt anahtarları', () => {
+  it('NS4-41: tek grup (Ses) ve kayıt anahtarları', () => {
     expect(groups.map((g) => [g.legend, g.keys])).toEqual([
-      ['Ses', ['sound', 'music']],
-      ['Oynanış', ['haptics', 'ghost']],
-      ['İleri ayarlar', ['das', 'arr', 'fps']],
+      ['Ses', ['music', 'musicVol', 'menuMusic', 'sound', 'sfxVol']],
     ]);
-    expect(groups[2]?.cls).toContain('set-advanced');
   });
   it('kontroller yerel (klavyeyle kullanılabilir) giriş öğeleri ve etiket içinde; sınırlar değişmedi', () => {
     const inputs = [...set.matchAll(/<input\s([^>]+?)\s*\/?>/g)].map((m) => (m[1] ?? '').replace(/\s+/g, ' ').trim());
     // NS4-17: erişilebilir ad/açıklama bağları ve ilk odak (data-focus) eklendi; tür, anahtar ve sınırlar aynı
     expect(inputs).toEqual([
-      'type="checkbox" data-k="sound" data-focus',
-      'type="checkbox" data-k="music"',
-      'type="checkbox" data-k="haptics" aria-labelledby="lbl-haptics" aria-describedby="hap-note"',
-      'type="checkbox" data-k="ghost"',
-      'type="range" min="50" max="300" step="1" data-k="das" aria-labelledby="lbl-das" aria-describedby="desc-das"',
-      'type="range" min="0" max="100" step="1" data-k="arr" aria-labelledby="lbl-arr" aria-describedby="desc-arr"',
-      'type="checkbox" data-k="fps" aria-labelledby="lbl-fps" aria-describedby="desc-fps"',
+      'type="checkbox" data-k="music" data-focus',
+      'type="range" min="0" max="100" step="5" data-k="musicVol" aria-labelledby="lbl-musicvol" aria-describedby="desc-musicvol"',
+      'type="checkbox" data-k="menuMusic" aria-labelledby="lbl-menumusic" aria-describedby="desc-menumusic"',
+      'type="checkbox" data-k="sound"',
+      'type="range" min="0" max="100" step="5" data-k="sfxVol" aria-labelledby="lbl-sfxvol" aria-describedby="desc-sfxvol"',
     ]);
     // her giriş kendi <label class="set …"> öğesinin içinde (etikete tıklama/odak)
     for (const m of set.matchAll(/<label class="set[^"]*"([\s\S]*?)<\/label>/g)) expect(m[1]).toMatch(/<input\s/);
-    expect([...set.matchAll(/<label class="set/g)]).toHaveLength(7);
-    expect(set).toMatch(/Basılı tutunca kayma gecikmesi: <b id="v-das"><\/b> ms/);
-    expect(set).toMatch(/Kayma tekrar hızı: <b id="v-arr"><\/b> ms/);
-    expect(set).toMatch(/<label class="set set-minor"[\s\S]*?data-k="fps"/); // FPS geri planda
+    expect([...set.matchAll(/<label class="set/g)]).toHaveLength(5);
     expect(plainCss).toMatch(/input:focus-visible \{\s*outline: 3px solid var\(--color-focus-ring\);/);
     expect(set).not.toMatch(/tema|theme/i);
   });
@@ -204,36 +191,26 @@ describe('Ayarlar', () => {
     });
     vi.resetModules();
     const a = await import('../../src/storage/settings');
-    Object.assign(a.settings, {
+    // NS4-39: müzik düzeyi, efekt düzeyi ve menü müziği de kalıcı
+    const saved = {
       sound: false,
       music: false,
+      menuMusic: false,
+      musicVol: 45,
+      sfxVol: 100,
       haptics: false,
       ghost: false,
       fps: true,
       das: 120,
       arr: 0,
-    });
+    };
+    Object.assign(a.settings, saved);
     a.saveSettings();
-    expect(JSON.parse(data.get('fn_settings') ?? '{}')).toEqual({
-      sound: false,
-      music: false,
-      haptics: false,
-      ghost: false,
-      fps: true,
-      das: 120,
-      arr: 0,
-    });
+    expect(JSON.parse(data.get('fn_settings') ?? '{}')).toEqual(saved);
     vi.resetModules();
     const b = await import('../../src/storage/settings');
-    expect(b.settings).toEqual({
-      sound: false,
-      music: false,
-      haptics: false,
-      ghost: false,
-      fps: true,
-      das: 120,
-      arr: 0,
-    });
+    // NS4-41: ekrandan kaldırılan seçenekler yüklemede varsayılana döner; ses ayarları kalıcı
+    expect(b.settings).toEqual({ ...saved, haptics: true, ghost: true, fps: false, das: 167, arr: 33 });
   });
 });
 
@@ -336,9 +313,9 @@ describe('rozet durumları', () => {
     renderBadges(bx as unknown as HTMLElement, ['ozmotik', 'akis'], ['akis']);
     const kids = bx.children.map((c) => [c.children[0]?.textContent, c.className, c.dataset['state']]);
     expect(kids).toEqual([
-      ['Ozmotik usta', 'earned', 'earned'],
-      ['Nörorefleks uzmanı', 'locked', 'locked'],
-      ['Akış hali', 'new', 'new'],
+      ['Tetris ustası', 'earned', 'earned'],
+      ['T-spin ustası', 'locked', 'locked'],
+      ['Kombo ustası', 'new', 'new'],
       ['Çok yaşa!', 'locked', 'locked'],
       ['Derin nefes', 'locked', 'locked'],
     ]);

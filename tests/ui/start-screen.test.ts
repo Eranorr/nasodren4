@@ -23,7 +23,7 @@ describe('başlangıç ekranı içeriği', () => {
     const h1 = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(start)?.[1] ?? '';
     expect(text(h1)).toBe('Ferah Nefes');
     expect(text(/<p class="lead"[^>]*>([\s\S]*?)<\/p>/.exec(start)?.[1] ?? '')).toBe(
-      'Sinüslerini tıkayan mukus bloklarını yerleştir, satırları boşalt, nefesini aç.',
+      'Sinüslerini tıkayan blokları yerleştir, satırları temizle, nefesini aç.',
     );
     expect(text(/<p class="fine"[^>]*>([\s\S]*?)<\/p>/.exec(start)?.[1] ?? '')).toBe(
       'Bu oyun bilgilendirme ve eğlence amaçlıdır; tıbbi tavsiye yerine geçmez. Şikâyetleriniz için hekiminize veya eczacınıza danışın.',
@@ -36,11 +36,12 @@ describe('başlangıç ekranı içeriği', () => {
       m[1],
       text(m[3] ?? ''),
     ]);
+    // NS4-41: ikincil eylemler eşit karolar (Nasıl oynanır · Skorlar · Ayarlar)
     expect(buttons).toEqual([
       ['b-play', 'btn primary', 'Oyna'],
-      ['b-how', 'btn ghost', 'Nasıl oynanır'],
-      ['b-set1', 'btn ghost', 'Ayarlar'],
-      ['b-scores', 'btn ghost btn-sub', 'Skorlar'],
+      ['b-how', 'btn ghost tile', 'Nasıl oynanır'],
+      ['b-scores', 'btn ghost tile', 'Skorlar'],
+      ['b-set1', 'btn ghost tile', 'Ayarlar'],
     ]);
     expect(start).not.toMatch(/<a\s/);
     expect((start.match(/<button/g) ?? []).length).toBe(4);

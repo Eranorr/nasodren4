@@ -76,6 +76,11 @@ export class Game {
   pieceVer!: number;
   boardVer!: number;
   queueVer!: number;
+  /**
+   * NS4-38: kuyruktan çekilen parça sayacı (oyunlar arasında sıfırlanmaz; yalnızca artar, oda geçişinde parça kuyruğa
+   * geri dönünce bir azalır). "Sıradaki" önizlemesi yeni bir parçanın sıraya girdiğini buradan anlar.
+   */
+  dealt = 0;
   private _cv?: number;
   private _c!: number;
   constructor() {
@@ -213,7 +218,10 @@ export class Game {
 
   /** NS4-27: "Sinüs açıldı" geçişi: bonus, aktif parça kuyruğun başına döner, CFG.roomClearMs sonra yeni oda. */
   beginRoomClear() {
-    if (this.type) this.queue.unshift(this.type);
+    if (this.type) {
+      this.queue.unshift(this.type);
+      this.dealt--;
+    }
     this.type = 0;
     this.pieceVer++;
     this.queueVer++;
@@ -260,6 +268,7 @@ export class Game {
       type = this.queue.shift()!;
       this.fillQueue();
       this.queueVer++;
+      this.dealt++;
     } // NS4-02: kuyruk her zaman 8 elemanlı
     this.type = type;
     this.rot = 0;

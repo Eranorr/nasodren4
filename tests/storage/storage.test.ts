@@ -3,7 +3,18 @@ import { normalizeMeta } from '../../src/storage/progress';
 import { normalizeSettings } from '../../src/storage/settings';
 
 const DEFAULT_META = { best: 0, totalLines: 0, badges: [] };
-const DEFAULT_SETTINGS = { sound: true, music: true, haptics: true, ghost: true, fps: false, das: 167, arr: 33 };
+const DEFAULT_SETTINGS = {
+  sound: true,
+  music: true,
+  menuMusic: true,
+  musicVol: 70,
+  sfxVol: 80,
+  haptics: true,
+  ghost: true,
+  fps: false,
+  das: 167,
+  arr: 33,
+};
 
 /** localStorage taklidi (yalnızca store.ts'in kullandığı getItem/setItem). */
 function stubStorage(initial: Record<string, string>) {
@@ -77,7 +88,18 @@ describe('fn_settings doğrulama', () => {
   });
 
   it('geçerli kullanıcı ayarları aynen korunur', () => {
-    const user = { sound: false, music: false, haptics: false, ghost: false, fps: true, das: 50, arr: 0 };
+    const user = {
+      sound: false,
+      music: false,
+      menuMusic: false,
+      musicVol: 35,
+      sfxVol: 100,
+      haptics: false,
+      ghost: false,
+      fps: true,
+      das: 50,
+      arr: 0,
+    };
     expect(normalizeSettings(user)).toEqual(user);
   });
 
@@ -111,8 +133,31 @@ describe('fn_settings doğrulama', () => {
     expect(normalizeSettings({ arr: v }).arr).toBe(expected);
   });
 
+  it.each<[string, unknown, number]>([
+    ['metin', 'yüksek', 70],
+    ['negatif', -10, 0],
+    ['üst sınırın üstü', 140, 100],
+    ['kesirli', 42.4, 42],
+  ])('NS4-39: müzik düzeyi %s (%s) → %i; aralık 0..100', (_name, v, expected) => {
+    expect(normalizeSettings({ musicVol: v }).musicVol).toBe(expected);
+  });
+
+  it('NS4-39: eski kayıt (müzik düzeyi alanları yok) yeni varsayılanlarla tamamlanır, kullanıcı tercihi korunur', () => {
+    const old = { sound: true, music: false, haptics: true, ghost: false, fps: false, das: 200, arr: 20 };
+    expect(normalizeSettings(old)).toEqual({ ...DEFAULT_SETTINGS, ...old });
+  });
+
   it('alan sırası kaydedilen JSON için sabittir, fazladan alanlar atılır', () => {
     expect(Object.keys(normalizeSettings({ arr: 10, zzz: 1, sound: false }))).toEqual(Object.keys(DEFAULT_SETTINGS));
+  });
+});
+
+describe('NS4-41: ekrandan kaldırılan seçenekler', () => {
+  it('titreşim, hayalet parça, DAS/ARR ve FPS her zaman varsayılan; ses ayarları korunur', async () => {
+    const { withLockedDefaults, LOCKED_KEYS } = await import('../../src/storage/settings');
+    const user = { ...DEFAULT_SETTINGS, haptics: false, ghost: false, fps: true, das: 60, arr: 0, musicVol: 20 };
+    expect(withLockedDefaults(user)).toEqual({ ...DEFAULT_SETTINGS, musicVol: 20 });
+    expect([...LOCKED_KEYS].sort()).toEqual(['arr', 'das', 'fps', 'ghost', 'haptics']);
   });
 });
 
@@ -128,7 +173,8 @@ describe('localStorage yükleme', () => {
 
   it('geçerli fn_meta ve fn_settings yeniden yazılmaz', async () => {
     const metaJson = '{"best":1957,"totalLines":42,"badges":["ozmotik","noro"]}';
-    const settingsJson = '{"sound":true,"music":false,"haptics":true,"ghost":false,"fps":false,"das":200,"arr":20}';
+    const settingsJson =
+      '{"sound":true,"music":false,"menuMusic":true,"musicVol":50,"sfxVol":80,"haptics":true,"ghost":true,"fps":false,"das":167,"arr":33}';
     const { data, setItem } = stubStorage({ fn_meta: metaJson, fn_settings: settingsJson });
     vi.resetModules();
     const { meta } = await import('../../src/storage/progress');
@@ -162,7 +208,17 @@ describe('localStorage yükleme', () => {
     const { data } = stubStorage({ fn_settings: '{"sound":"evet","das":9999,"arr":20}' });
     vi.resetModules();
     const { settings } = await import('../../src/storage/settings');
-    expect(settings).toEqual({ ...DEFAULT_SETTINGS, das: 300, arr: 20 });
+    expect(settings).toEqual(DEFAULT_SETTINGS); // NS4-41: DAS/ARR artık varsayılanda sabit
+    expect(JSON.parse(data.get('fn_settings') ?? 'null')).toEqual(settings);
+  });
+
+  it('NS4-41: kaldırılan seçeneği varsayılandan farklı eski kayıt bir kez varsayılanla yeniden yazılır', async () => {
+    const old = { ...DEFAULT_SETTINGS, music: false, haptics: false, fps: true, das: 200 };
+    const { data, setItem } = stubStorage({ fn_settings: JSON.stringify(old) });
+    vi.resetModules();
+    const { settings } = await import('../../src/storage/settings');
+    expect(settings).toEqual({ ...DEFAULT_SETTINGS, music: false });
+    expect(setItem).toHaveBeenCalledTimes(1);
     expect(JSON.parse(data.get('fn_settings') ?? 'null')).toEqual(settings);
   });
 

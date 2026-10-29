@@ -20,7 +20,7 @@ import { PIECE } from '../game/pieces';
 import { COLS } from '../config/gameConfig';
 import { ROOMS } from '../config/gameConfig';
 import { FULL_RELIEF, FULL_RELIEF_SUB } from '../content/relief';
-import { fmt, reliefFlash } from '../ui/hud';
+import { drainCongestion, fmt, reliefFlash } from '../ui/hud';
 
 export interface WireDeps {
   game: Game;
@@ -76,7 +76,7 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
     if (e.kind === 'cyc') {
       sound.cyc();
       buzz(HAPTIC.cyc);
-      popup('Sıklamen özütü', 'Ozmotik drenaj başladı', 'cyc');
+      popup('Sıklamen özütü', 'Alt satırlar temizleniyor', 'cyc');
     } else if (e.kind === 'sneeze') {
       sound.sneeze();
       buzz(HAPTIC.sneeze);
@@ -104,14 +104,14 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
       cls = '';
     if (e.tspin) {
       big = (e.tspin === 1 ? 'Mini ' : '') + 'T-spin' + (e.n ? ' ' + names[e.n].toLowerCase() : '');
-      sub = 'Nörorefleks etki';
+      sub = 'Usta hamle!';
       cls = 'cyc';
     } else if (e.n === 4) {
       big = 'TETRİS';
-      sub = 'Ozmotik etki: dört satır birden';
+      sub = 'Dört satır birden!';
       cls = 'cyc';
     } else if (e.n >= 2) {
-      big = names[e.n] + ' drenaj';
+      big = names[e.n] + ' satır';
     }
     if (e.b2b) sub = 'Art arda · ' + sub;
     if (e.combo >= 2) {
@@ -128,7 +128,7 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
   });
   game.on('levelup', (lv) => {
     sound.level();
-    popup(`Nefes seviyesi ${lv}`, 'Mukus daha hızlı birikiyor');
+    popup(`Seviye ${lv}`, 'Bloklar hızlanıyor');
     track('level_up', { level: lv });
   });
   // NS4-24: sentetik açıcı / rebound / garbage kaldırıldı; hapşırık rozeti
@@ -144,6 +144,7 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
     else lifecycle.showFinal(); // NS4-31: dört sinüs açık: final ekranı (Serbest nefes popup'ı devam edilince)
   });
   game.on('allclear', (e) => {
+    drainCongestion(game); // NS4-42: tahta tertemiz: gösterge animasyonla sıfırlanır
     buzz(HAPTIC.allClear);
     popup(FULL_RELIEF, `${FULL_RELIEF_SUB} · +${fmt(e.bonus)}`, 'cyc');
     track('all_clear', { lines: e.lines, level: game.level, bonus: e.bonus });
@@ -153,6 +154,7 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
     } else relief = 'allclear';
   });
   game.on('roomclear', (e) => {
+    drainCongestion(game); // NS4-42: oda açıldı: tıkanıklık göstergesi animasyonla sıfırlanır
     view.onRoomClear();
     view.relief(roomRelief ? 'allclear' : 'room');
     sound.roomClear();

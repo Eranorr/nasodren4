@@ -7,6 +7,7 @@ import { CFG } from '../../src/config/gameConfig';
 import { PIECE } from '../../src/game/pieces';
 import { HAPTIC, createBuzz, detectVibrate, patternMs } from '../../src/haptics/haptics';
 import type { Sound } from '../../src/audio/SoundManager';
+import { GAME_OVER_MUSIC_DELAY } from '../../src/app/lifecycle';
 import { createAppStubs } from '../helpers/appStubs';
 import { installFakeAudio } from '../helpers/fakeAudio';
 import { installFakeDom, type FakeDom } from '../helpers/fakeDom';
@@ -139,14 +140,14 @@ describe('olay → ses ve haptik (her önemli olay bir kez)', () => {
       expect(buzz.mock.calls).toEqual([[HAPTIC.sneeze]]);
     }
   });
-  it('oyun sonu: over sesi, deseni ve müzik kapanışı bir kez', async () => {
+  it('oyun sonu: over sesi, deseni ve menü müziğine geçiş bir kez', async () => {
     const { g, lc, rec, buzz } = await wire();
     lc.start();
     rec.log.length = 0;
     buzz.mockClear();
     g.gameOver('blockout');
     expect(rec.count('over')).toBe(1);
-    expect(rec.args('setMusic')).toEqual([[false]]);
+    expect(rec.args('setMusic')).toEqual([['menu', GAME_OVER_MUSIC_DELAY]]);
     expect(buzz.mock.calls).toEqual([[HAPTIC.over]]);
   });
   it('sürekli hareketler (kaydırma, döndürme, yumuşak indirme) titreşim üretmez', async () => {
@@ -245,11 +246,11 @@ describe('lifecycle boyunca müzik (gerçek Sound, sahte Web Audio)', () => {
     const { g, lc, sound, intervals } = await real();
     expect(sound.unlocked).toBe(false); // sayfa açıldı, etkileşim yok
     lc.start(); // Oyna tıklaması
-    expect([sound.unlocked, sound.musicOn, intervals.size]).toEqual([true, true, 1]);
-    lc.pause();
-    expect([sound.musicOn, intervals.size, sound.musicSourceCount]).toEqual([false, 0, 0]);
+    expect([sound.unlocked, sound.musicKind, intervals.size]).toEqual([true, 'game', 1]);
+    lc.pause(); // NS4-39: molada menü müziği (tek zamanlayıcı)
+    expect([sound.musicKind, intervals.size]).toEqual(['menu', 1]);
     lc.resume();
-    expect([sound.musicOn, intervals.size]).toEqual([true, 1]);
+    expect([sound.musicKind, intervals.size]).toEqual(['game', 1]);
     // hızlı pause/resume stresi
     for (let i = 0; i < 40; i++) {
       lc.pause();
@@ -259,18 +260,18 @@ describe('lifecycle boyunca müzik (gerçek Sound, sahte Web Audio)', () => {
       lc.pause();
       lc.resume();
     }
-    expect([sound.musicOn, intervals.size]).toEqual([true, 1]);
+    expect([sound.musicKind, intervals.size]).toEqual(['game', 1]);
     g.gameOver('blockout');
-    expect([sound.musicOn, intervals.size, sound.musicSourceCount]).toEqual([false, 0, 0]);
+    expect([sound.musicKind, intervals.size]).toEqual(['menu', 1]);
     // art arda yeni oyun
     lc.start();
     lc.start();
     lc.start();
-    expect([sound.musicOn, intervals.size]).toEqual([true, 1]);
+    expect([sound.musicKind, intervals.size]).toEqual(['game', 1]);
     lc.toMenu();
-    expect([sound.musicOn, intervals.size, sound.musicSourceCount]).toEqual([false, 0, 0]);
+    expect([sound.musicKind, intervals.size]).toEqual(['menu', 1]);
     vi.advanceTimersByTime(30_000);
-    expect(intervals.size).toBe(0);
+    expect(intervals.size).toBe(1);
   });
   it('müzik ayarı kapalıyken oyun boyunca müzik düğümü ve zamanlayıcı oluşmaz', async () => {
     installFakeAudio();
@@ -284,7 +285,9 @@ describe('lifecycle boyunca müzik (gerçek Sound, sahte Web Audio)', () => {
     expect([sound.musicOn, sound.musicSourceCount]).toEqual([false, 0]);
     st.music = true;
     sound.applySettings(); // ayar panelinden açılınca hemen başlar
-    expect(sound.musicOn).toBe(true);
+    expect(sound.musicKind).toBe('game');
+    lc.pause(); // NS4-39: molada menü müziği
+    expect(sound.musicKind).toBe('menu');
   });
 });
 
@@ -305,11 +308,11 @@ describe('erişilebilirlik', () => {
       c.children[1]?.textContent,
     ]);
     expect(read).toEqual([
-      ['listitem', '', 'Ozmotik usta', 'İlk 4 satırlık drenaj', 'sr-only', ', kazanıldı'],
-      ['listitem', '', 'Nörorefleks uzmanı', 'İlk T-spin temizliği', 'sr-only', ', kilitli'],
-      ['listitem', '', 'Akış hali', '5’li kombo', 'sr-only', ', bu oyunda kazanıldı'],
+      ['listitem', '', 'Tetris ustası', 'İlk kez 4 satır birden', 'sr-only', ', kazanıldı'],
+      ['listitem', '', 'T-spin ustası', 'T-spin ile ilk satır', 'sr-only', ', kilitli'],
+      ['listitem', '', 'Kombo ustası', '5’li kombo', 'sr-only', ', bu oyunda kazanıldı'],
       ['listitem', '', 'Çok yaşa!', 'Bir oyunda 3 hapşırık', 'sr-only', ', kilitli'],
-      ['listitem', '', 'Derin nefes', 'Toplam 100 satır drenaj', 'sr-only', ', kilitli'],
+      ['listitem', '', 'Derin nefes', 'Toplam 100 satır', 'sr-only', ', kilitli'],
     ]);
     expect(Object.keys(BADGE_STATE_LABEL).sort()).toEqual(['earned', 'locked', 'new']);
   });
@@ -320,43 +323,54 @@ describe('erişilebilirlik', () => {
     expect(r).toMatch(/width: 1px/);
     expect(r).not.toMatch(/display: none|visibility: hidden/);
   });
-  it('Ayarlar: ilk odak ilk ayar kontrolü (Ses efektleri); Tab sırası gruplar → Kaydet', () => {
+  it('Ayarlar: ilk odak ilk ayar kontrolü (Müzik); Tab sırası gruplar → Kaydet', () => {
     const set = html.slice(
       html.indexOf('<section id="scr-set"'),
       html.indexOf('</section>', html.indexOf('<section id="scr-set"')),
     );
     expect([...set.matchAll(/data-focus/g)]).toHaveLength(1);
-    expect(set).toMatch(/data-k="sound" data-focus/);
+    expect(set).toMatch(/data-k="music" data-focus/);
     const order = [...set.matchAll(/data-k="(\w+)"|data-back>(\w+)</g)].map((m) => m[1] ?? m[2]);
-    expect(order).toEqual(['sound', 'music', 'haptics', 'ghost', 'das', 'arr', 'fps', 'Kaydet']);
+    expect(order).toEqual([
+      'music',
+      'musicVol',
+      'menuMusic',
+      'sound',
+      'sfxVol',
+      'Kaydet', // NS4-41: Oynanış ve İleri ayarlar kaldırıldı
+    ]);
   });
-  it('ses, müzik, titreşim ve ileri ayar kontrollerinin erişilebilir adı doğru', () => {
+  it('ses ve müzik kontrollerinin erişilebilir adı doğru (NS4-41: yalnızca Ses grubu)', () => {
     const set = html.slice(
       html.indexOf('<section id="scr-set"'),
       html.indexOf('</section>', html.indexOf('<section id="scr-set"')),
     );
-    // sarmalayan <label> metni: Ses efektleri, Ortam müziği, Hayalet parça
+    // sarmalayan <label> metni: Müzik, Ses efektleri
     expect(set).toMatch(/<label class="set">Ses efektleri<input type="checkbox" data-k="sound"/);
-    expect(set).toMatch(/<label class="set">Ortam müziği<input type="checkbox" data-k="music"/);
-    expect(set).toMatch(/<label class="set">Hayalet parça<input type="checkbox" data-k="ghost"/);
+    expect(set).toMatch(/<label class="set">Müzik<input type="checkbox" data-k="music"/);
+    expect(set).not.toMatch(/data-k="(haptics|ghost|das|arr|fps)"/);
     // aria-labelledby → kısa ad, aria-describedby → açıklama
     for (const [id, name] of [
-      ['lbl-haptics', 'Titreşim'],
-      ['lbl-das', 'DAS'],
-      ['lbl-arr', 'ARR'],
-      ['lbl-fps', 'FPS göstergesi'],
+      ['lbl-musicvol', 'Müzik düzeyi'],
+      ['lbl-menumusic', 'Menü ve mola müziği'],
+      ['lbl-sfxvol', 'Efekt düzeyi'],
     ] as const) {
       expect(set).toMatch(new RegExp(`<span id="${id}">${name}</span\\s*>`));
       expect(set).toMatch(new RegExp(`aria-labelledby="${id}"`));
     }
-    for (const id of ['hap-note', 'desc-das', 'desc-arr', 'desc-fps']) {
+    for (const id of ['desc-musicvol', 'desc-menumusic', 'desc-sfxvol']) {
       expect(set).toMatch(new RegExp(`id="${id}"`));
       expect(set).toMatch(new RegExp(`aria-describedby="${id}"`));
     }
   });
-  it('kaydırıcı değeri birimiyle okunur (aria-valuetext)', () => {
+  it('kaydırıcı değeri birimiyle okunur (aria-valuetext); NS4-39: ses düzeyi yüzde', async () => {
     const src = sources['../../src/ui/settingsPanel.ts'] ?? '';
-    expect(src).toContain("inp.setAttribute('aria-valuetext', `${settings[k]} ms`)");
+    expect(src).toContain("inp.setAttribute('aria-valuetext', spoken)");
+    const { VALUE_TEXT } = await import('../../src/ui/settingsPanel');
+    expect(VALUE_TEXT.das(167)).toEqual(['167', '167 ms']);
+    expect(VALUE_TEXT.arr(0)).toEqual(['0', '0 ms']);
+    expect(VALUE_TEXT.musicVol(70)).toEqual(['%70', 'yüzde 70']);
+    expect(VALUE_TEXT.sfxVol(80)).toEqual(['%80', 'yüzde 80']);
   });
   it('durum yalnızca ses/titreşimle verilmez: hapşırık sesi popup ile birlikte', () => {
     const ev = sources['../../src/app/events.ts'] ?? '';

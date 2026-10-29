@@ -25,7 +25,7 @@ describe('efekt bağlantıları', () => {
     const v = viewCalls(calls);
     expect(v.indexOf('view.onScored')).toBeGreaterThanOrEqual(0);
     expect(v.indexOf('view.onScored')).toBeLessThan(v.indexOf('view.onClearStart'));
-    expect(popups()).toContainEqual(['TETRİS', 'Ozmotik etki: dört satır birden']);
+    expect(popups()).toContainEqual(['TETRİS', 'Dört satır birden!']);
   });
 
   it('hapşırık: clearstart görünüme gider; popup "HAPŞUU! / Çok yaşa!"; rebound/garbage bağlantısı yok', async () => {
@@ -48,10 +48,10 @@ describe('efekt bağlantıları', () => {
     lc.start();
     stackRows(g, 8);
     expect(g.useCyc()).toBe(true);
-    expect(popups()).toEqual([['Sıklamen özütü', 'Ozmotik drenaj başladı']]);
+    expect(popups()).toEqual([['Sıklamen özütü', 'Alt satırlar temizleniyor']]);
     calls.length = 0;
     finishClear(g);
-    expect(popups()).toEqual([['Sıklamen özütü', 'Ozmotik drenaj başladı']]); // bitişte popup eklenmez
+    expect(popups()).toEqual([['Sıklamen özütü', 'Alt satırlar temizleniyor']]); // bitişte popup eklenmez
     expect(JSON.stringify(popups())).not.toMatch(/Puan ×2|tek kullanımlık/);
     expect(calls).toContain('view.onClearEnd'); // görsel ×2 vuruşu GameView'de
     expect(g.multT).toBe(CFG.cycMultMs);

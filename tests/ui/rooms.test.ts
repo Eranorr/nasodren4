@@ -112,6 +112,47 @@ describe('oda etiketleri ve tahta tonu', () => {
     expect(card().map).toEqual({ yanak: 'open', etmoid: 'opening', alin: 'next', sfenoid: 'closed' });
   });
 
+  it('NS4-42: oda açılınca tıkanıklık göstergesi animasyonla %0’a iner, geçiş boyunca kalır, yeni odada dolar', async () => {
+    const { CONG_DRAIN_MS } = await import('../../src/ui/hud');
+    const { g, frame } = await playRooms();
+    const stack = () => {
+      for (let r = 21; r >= 12; r--) fillRow(g, r, PIECE.T, [r % 10]); // ~%50 renkli yığın
+    };
+    stack();
+    frame();
+    expect(dom.el('cong-n').textContent).toBe('%50');
+    clearRoom(g);
+    stack(); // geçiş boyunca tahtada blok kalır (yeni odada silinir)
+    const st = () => ({
+      n: dom.el('cong-n').textContent,
+      drain: dom.el('cong').classList.contains('drain'),
+      meter: dom.el('meter').classList.contains('drain'),
+      done: dom.el('cong').classList.contains('done'),
+      state: dom.el('cong-state').textContent,
+    });
+    frame();
+    expect(st()).toMatchObject({ drain: true, meter: true, done: false });
+    vi.advanceTimersByTime(CONG_DRAIN_MS / 2);
+    frame();
+    const mid = Number(st().n.slice(1));
+    expect(mid).toBeGreaterThan(5);
+    expect(mid).toBeLessThan(45);
+    vi.advanceTimersByTime(CONG_DRAIN_MS / 2 + 16);
+    frame();
+    expect(st()).toEqual({ n: '%0', drain: true, meter: true, done: true, state: 'Ferah' });
+    expect(dom.el('danger').classList.contains('on')).toBe(false);
+    vi.advanceTimersByTime(CFG.roomClearMs - CONG_DRAIN_MS); // harita kartı boyunca %0
+    frame();
+    expect(st().n).toBe('%0');
+    finishClear(g); // 2. oda: yeni gri bulutçuklar
+    vi.advanceTimersByTime(200);
+    frame();
+    expect(st()).toMatchObject({ drain: false, done: false });
+    expect(dom.el('cong').classList.contains('refill')).toBe(true); // yeni değere yumuşak dolma
+    expect(st().n).toBe(`%${Math.round(g.congestion() * 100)}`);
+    expect(g.congestion()).toBeGreaterThan(0);
+  });
+
   it('NS4-31: son oda: kartta "Sırada: final"; geçiş sonunda oyun durur, final ekranı (bütün sinüsler açık)', async () => {
     const ui = await playRooms();
     const { g, lc } = ui;

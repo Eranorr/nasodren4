@@ -72,32 +72,33 @@ describe('içerik envanteri', () => {
   });
 });
 
-describe('sağlık metinleri değişmedi (NS4-18 / 93adcf1 ile birebir)', () => {
+// NS4-43: metinler herkesin anlayacağı dile çevrildi (anlam ve iddialar aynı; hepsi hâlâ inceleme bekliyor)
+describe('sağlık metinleri sabit (NS4-43 sade dil)', () => {
   it('ipuçları: sıra ve metin aynı; çalışma anı TIPS kayıttan gelir', () => {
     expect(TIPS).toEqual([
       [
-        'Paranazal sinüsler',
-        'Kafatasındaki hava dolu boşluklardır: maksiller (yanak), frontal (alın), etmoid (gözler arası) ve sfenoid (kafa tabanı).',
+        'Sinüsler nerede?',
+        'Yüzündeki hava dolu küçük boşluklardır: yanaklarda, alında, gözlerin arasında ve burnun en arkasında (kafa tabanında).',
       ],
       [
         'Tıkanıklık nasıl olur?',
-        'Sinüzitte mukoza zarı iltihaplanır ve sinüs ağızları (ostiumlar) tıkanabilir. Yüzde baskı, baş ağrısı ve koku kaybı görülebilir.',
+        'Sinüzitte burnun ve sinüslerin iç yüzeyi şişer, sinüslerin ağzı tıkanabilir. Yüzde baskı, baş ağrısı ve koku almada azalma görülebilir.',
       ],
       [
         'Sıklamen',
-        'Cyclamen europaeum L., Primulaceae familyasından yumrulu bir bitkidir. Yumrusu saponin içerir; ekstresinin burun mukozasında ozmotik etkiyle mukus akışını artırdığı bildirilmektedir.',
+        'Sıklamen, toprak altında yumrusu olan bir çiçektir (Cyclamen europaeum). Yumrusundan elde edilen özütün, burundaki salgının daha kolay akmasına yardımcı olduğu bildirilmektedir.',
       ],
       [
         'Kullanım süresine dikkat',
-        'Dekonjestan burun spreylerinin önerilenden uzun kullanımı, tıkanıklığın daha şiddetli geri dönmesine (rinitis medikamentoza) yol açabilir. Prospektüsteki süreye uyun.',
+        'Burnu açan spreyleri önerilenden uzun süre kullanmak, tıkanıklığın daha şiddetli geri dönmesine yol açabilir. Kullanma talimatındaki süreye uyun.',
       ],
       [
-        'Ne zaman hekime gitmeli?',
-        '10 günü aşan, ateşle seyreden, göz çevresinde şişlik yapan ya da giderek kötüleşen şikâyetlerde bir hekime başvurun.',
+        'Ne zaman doktora gitmeli?',
+        '10 günü aşan, ateşle birlikte olan, göz çevresinde şişlik yapan ya da giderek kötüleşen şikâyetlerde bir doktora başvurun.',
       ],
       [
-        'Sıvı tüketimi',
-        'Gün içinde yeterli sıvı almak ve burnu tuzlu suyla yıkamak mukusun akışkan kalmasına yardımcı olabilir.',
+        'Bol su iç',
+        'Gün içinde bol su içmek ve burnu tuzlu suyla yıkamak, burundaki salgının akışkan kalmasına yardımcı olabilir.',
       ],
     ]);
     expect(HEALTH_TIPS).toHaveLength(6);

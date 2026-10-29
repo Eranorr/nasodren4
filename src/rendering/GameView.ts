@@ -206,7 +206,8 @@ export class View {
   readonly holdC: PIXI.Container;
   readonly nextC: PIXI.Container;
   readonly holdS: PIXI.Sprite[];
-  readonly nextS: PIXI.Sprite[][];
+  /** NS4-38: tek "Sıradaki" parçası (gizem kartı açılınca görünür; bkz. setNextReveal). */
+  readonly nextS: PIXI.Sprite[];
   readonly flashes: PIXI.Sprite[];
   readonly pc: PIXI.ParticleContainer;
   readonly parts: Particle[];
@@ -299,8 +300,7 @@ export class View {
     this.nextC = new PIXI.Container();
     this.root.addChild(this.holdC, this.nextC);
     this.holdS = this.mkMini(this.holdC);
-    this.nextS = [];
-    for (let k = 0; k < 5; k++) this.nextS.push(this.mkMini(this.nextC));
+    this.nextS = this.mkMini(this.nextC);
 
     // satır flaşları
     this.flashes = [];
@@ -633,15 +633,20 @@ export class View {
     const g = this.game,
       L = this.L;
     this.placeMini(this.holdS, g.hold, L.holdSlot.x, L.holdSlot.y, L.mini, g.canHold ? 1 : 0.35);
-    for (let k = 0; k < 5; k++) {
-      const slot: Pt | undefined = L.nextSlots[k]; // portrede 2, yatayda 5 slot var
-      if (!slot) {
-        this.placeMini(this.nextS[k], 0);
-        continue;
-      }
-      this.placeMini(this.nextS[k], g.queue[k], slot.x, slot.y, k === 0 ? L.miniBig : L.mini, 1);
-    }
+    // NS4-38: yalnızca bir parça; kap slot merkezinden ölçeklenir (açılma "çevirme"si)
+    this.placeMini(this.nextS, g.queue[0], L.nextSlot.x, L.nextSlot.y, L.miniBig, 1);
+    this.nextC.pivot.set(L.nextSlot.x, L.nextSlot.y);
+    this.nextC.position.set(L.nextSlot.x, L.nextSlot.y);
     this.seen.queue = g.queueVer;
+  }
+
+  /**
+   * NS4-38: "Sıradaki" parçasının görünürlüğü ve ölçeği (ui/nextReveal.ts her karede yazar). Gizem kartı
+   * gösterilirken parça gizlidir; kart dönüp kapanınca parça yatay ölçekle açılır.
+   */
+  setNextReveal(visible: boolean, sx = 1, sy = 1) {
+    this.nextC.visible = visible;
+    this.nextC.scale.set(sx, sy);
   }
 
   // ---- efektler ----

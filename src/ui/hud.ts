@@ -5,6 +5,9 @@
    NS4-24: sentetik açıcı / Rebound rozeti yerine hapşırık butonu ve şarj çubuğu.
    NS4-20: nefes halkası (tıkanıklığa göre derin → sığ nefes) ve kademeli basınç vinyeti.
    NS4-22: büyük açılma anında ekran ortadan serin bir ışıkla açılır; basınç ve tehlike vinyeti o an kalkar.
+   NS4-38: skor sayarak artar ve büyük kazançta "+N" gösterir; tıkanıklık yüzdesi ve durumu ayrı bir kartta.
+   NS4-42: oda açılınca (ve Tam Ferahlık'ta) tıkanıklık göstergesi animasyonla sıfırlanır: yüzde geri sayar,
+   çubuk ve yan metre turkuaza dönerek boşalır, geçiş boyunca %0'da kalır, yeni odada yumuşakça dolar.
    ===================================================================== */
 import { $, place } from './dom';
 import { toast, clearNotifications } from './notifications';
@@ -24,7 +27,7 @@ import {
   type SneezeState,
 } from './powerups';
 import type { Game } from '../game/Game';
-import { ROOMS } from '../config/gameConfig';
+import { CFG, ROOMS } from '../config/gameConfig';
 import { openPercent, roomLabel, roomText } from '../content/rooms';
 import { resetWalls, syncWalls } from './sinusWalls';
 import type { Layout } from '../types/layout';
@@ -32,6 +35,15 @@ import type { Layout } from '../types/layout';
 /** Son yazılan değerler: yalnızca değişen değerler DOM'a yazılır (-1 / null = henüz yazılmadı). */
 interface HudCache {
   score: number;
+  /** NS4-38: ekrandaki (sayarak artan) skor, sayımın başladığı değer ve zaman (performance.now, ms). */
+  shown: number;
+  from: number;
+  t0: number;
+  /** Son "+N" kazancının değeri ve zamanı (yakın kazançlar toplanır). */
+  delta: number;
+  deltaT: number;
+  /** Tıkanıklık kartının durumu. */
+  congState: BreathState | null;
   level: number;
   lines: number;
   cong: number;
@@ -57,6 +69,12 @@ interface HudCache {
 function initialHud(): HudCache {
   return {
     score: -1,
+    shown: -1,
+    from: 0,
+    t0: 0,
+    delta: 0,
+    deltaT: -Infinity,
+    congState: null,
     level: -1,
     lines: -1,
     cong: -1,
@@ -95,12 +113,107 @@ export function fmt(n: number): string {
   return n.toLocaleString('tr-TR');
 }
 
+/** NS4-42: tıkanıklık göstergesinin boşalma süresi ve boşaldıktan sonra yeni değere dolma süresi (ms; CSS ile aynı). */
+export const CONG_DRAIN_MS = 1200;
+export const CONG_REFILL_MS = 900;
+/** Boşalma anı: başlangıç zamanı (performance.now), başlangıç değeri, %0'da kalınacak son an. */
+let drain: { t0: number; from: number; until: number; done: boolean } | null = null;
+let refillTimer: ReturnType<typeof setTimeout> | undefined;
+
+function easeInOut(k: number): number {
+  return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+}
+
+/**
+ * NS4-42: tıkanıklık göstergesini animasyonla sıfırlar (oda açıldı / Tam Ferahlık). Gösterge oda geçişi boyunca
+ * %0'da kalır (tahta yeni odada silinir), sonra gerçek değere döner. Sürerken yeniden çağrı yok sayılır.
+ */
+export function drainCongestion(g: Game): void {
+  const now = performance.now();
+  if (drain && now < drain.until) return;
+  const from = hud.cong >= 0 ? hud.cong : g.congestion();
+  drain = { t0: now, from, until: now + Math.max(CONG_DRAIN_MS, CFG.roomClearMs) + 100, done: false };
+  clearTimeout(refillTimer);
+  for (const id of ['cong', 'meter'] as const) {
+    $(id).classList.remove('refill', 'done');
+    $(id).classList.add('drain');
+  }
+}
+
+/** NS4-42: HUD'da gösterilen tıkanıklık (boşalma anında animasyonlu değer). Müzik süzgeci ve fazı da bunu izler. */
+export function shownCongestion(g: Game): number {
+  if (!drain) return g.congestion();
+  const now = performance.now();
+  if (now >= drain.until) return g.congestion();
+  const k = Math.min(1, (now - drain.t0) / CONG_DRAIN_MS);
+  return drain.from * (1 - easeInOut(k));
+}
+
+/** Boşalma bitti: gerçek değere yumuşak dolma (CSS .refill). */
+function endDrain(): void {
+  drain = null;
+  for (const id of ['cong', 'meter'] as const) {
+    $(id).classList.remove('drain', 'done');
+    $(id).classList.add('refill');
+  }
+  clearTimeout(refillTimer);
+  refillTimer = setTimeout(() => {
+    $('cong').classList.remove('refill');
+    $('meter').classList.remove('refill');
+  }, CONG_REFILL_MS);
+}
+
+/** NS4-38: skor bu süre (ms) içinde sayarak hedefe ulaşır. */
+export const SCORE_COUNT_MS = 420;
+/** Bu kadar ve üstü kazanç sayarak artar ve "+N" gösterir; küçükleri (yumuşak/sert düşüş puanı) hemen yazılır. */
+export const SCORE_DELTA_MIN = 50;
+/** "+N" görünürken (ms) gelen yeni kazanç aynı rozete eklenir. */
+const DELTA_MERGE_MS = 700;
+/** NS4-38: tıkanıklık kartındaki durum adı (eşikler nefes halkasıyla aynı). */
+export const CONG_STATE_TEXT: Readonly<Record<BreathState, string>> = {
+  ferah: 'Ferah',
+  orta: 'Artıyor',
+  tikali: 'Tıkalı!',
+};
+
+/** NS4-38: skoru yazar. Büyük kazanç sayarak artar ve "+N" rozetini tetikler; azalma (yeni oyun) hemen yazılır. */
+function updateScore(score: number): void {
+  const now = performance.now();
+  if (score !== hud.score) {
+    const gain = score - hud.score;
+    if (hud.score < 0 || gain < SCORE_DELTA_MIN) {
+      hud.shown = score;
+      $('hud-score').textContent = fmt(score);
+    } else {
+      hud.from = hud.shown;
+      hud.t0 = now;
+      hud.delta = now - hud.deltaT < DELTA_MERGE_MS ? hud.delta + gain : gain;
+      hud.deltaT = now;
+      const d = $('score-delta');
+      d.textContent = `+${fmt(hud.delta)}`;
+      restartClass(d, 'on');
+      restartClass($('hud-score'), 'bump');
+    }
+    hud.score = score;
+  }
+  if (hud.shown !== hud.score) {
+    const k = Math.min(1, (now - hud.t0) / SCORE_COUNT_MS);
+    const v = Math.round(hud.from + (hud.score - hud.from) * (1 - Math.pow(1 - k, 3)));
+    if (v !== hud.shown) {
+      hud.shown = v;
+      $('hud-score').textContent = fmt(v);
+    }
+  }
+}
+function restartClass(el: HTMLElement, cls: string): void {
+  el.classList.remove(cls);
+  void el.offsetWidth; // animasyonu yeniden başlat
+  el.classList.add(cls);
+}
+
 /** `playing`: uygulama durumu 'playing' mi (tehlike vinyeti yalnızca oynarken açılır). */
 export function updateHud(g: Game, playing: boolean): void {
-  if (g.score !== hud.score) {
-    hud.score = g.score;
-    $('hud-score').textContent = fmt(g.score);
-  }
+  updateScore(g.score);
   if (g.level !== hud.level) {
     hud.level = g.level;
     $('hud-level').textContent = String(g.level);
@@ -109,10 +222,26 @@ export function updateHud(g: Game, playing: boolean): void {
     hud.lines = g.lines;
     $('hud-lines').textContent = String(g.lines);
   }
-  const cg = Math.round(g.congestion() * 100) / 100;
+  if (drain && performance.now() >= drain.until) endDrain();
+  const cg = Math.round(shownCongestion(g) * 100) / 100;
+  if (drain && !drain.done && cg === 0) {
+    drain.done = true;
+    $('cong').classList.add('done'); // "Ferah" ve %0 küçük bir sevinçle belirir
+  }
   if (cg !== hud.cong) {
     hud.cong = cg;
     $('meter-cover').style.transform = `scaleY(${1 - cg})`;
+    // NS4-38: tıkanıklık kartı: yüzde, çubuk ve durum
+    const pct = Math.round(cg * 100);
+    $('cong-n').textContent = `%${pct}`;
+    $('cong-fill').style.transform = `scaleX(${cg})`;
+    const cs = breathState(cg);
+    $('cong').setAttribute('aria-label', `Tıkanıklık yüzde ${pct}, ${CONG_STATE_TEXT[cs].replace('!', '')}`);
+    if (cs !== hud.congState) {
+      hud.congState = cs;
+      $('cong').dataset['state'] = cs;
+      $('cong-state').textContent = CONG_STATE_TEXT[cs];
+    }
   }
   // NS4-06: vinyet her karede değerlendirilir (önceden yalnızca tıkanıklık değişince). pause() önbelleği
   // sıfırladığı için resume sonrası ilk karede mevcut tıkanıklığa göre yeniden açılır (NS4-01 Not A).
@@ -207,6 +336,9 @@ export function updateHud(g: Game, playing: boolean): void {
  */
 export function resetHud(): void {
   Object.assign(hud, initialHud());
+  drain = null; // NS4-42
+  clearTimeout(refillTimer);
+  for (const id of ['cong', 'meter'] as const) $(id).classList.remove('drain', 'done', 'refill');
   resetWalls();
 }
 
@@ -283,6 +415,8 @@ export function clearSessionHud(): void {
   $('room-map').classList.remove('on'); // NS4-31
   $('room-hud').style.display = 'none';
   $('board-bg').dataset['room'] = '';
+  $('next-mystery').classList.remove('on'); // NS4-38
+  $('score-delta').classList.remove('on');
   clearNotifications();
   resetHud();
 }
@@ -305,11 +439,7 @@ export function applyHudLayout(L: Layout): void {
   place($('board-bg'), L.board);
   // NS4-33: ızgara ::before katmanında hücre boyutunda döşenir (--cell); derinlik katmanı tahtayı kaplar
   $('board-bg').style.setProperty('--cell', `${L.cell}px`);
-  place($('meter'), L.meter);
-  const ml = $('meter-lbl');
-  ml.style.left = L.meter.x - 18 + 'px';
-  ml.style.top = L.meter.y + L.meter.h - 80 + 'px';
-  ml.style.display = L.portrait ? 'none' : '';
+  place($('meter'), L.meter); // NS4-41: dikey "Tıkanıklık" etiketi kaldırıldı (tıkanıklık kartı adlandırır)
   place($('hold-bg'), L.hold);
   place($('next-bg'), L.next);
   const lh = $('lbl-hold'),
@@ -320,6 +450,13 @@ export function applyHudLayout(L: Layout): void {
   ln.style.top = L.next.y + 6 + 'px';
   place($('stats'), L.stats);
   $('stats').classList.toggle('compact', !!L.compactStats);
+  // NS4-38: yatay düzende skor ve tıkanıklık birer kart; portrede üst şeritte skorun altında tek satır
+  $('stats').classList.toggle('wide', !L.portrait);
+  place($('cong'), L.cong);
+  $('cong').classList.toggle('wide', !L.portrait);
+  $('cong').classList.toggle('compact', !L.portrait && L.compactStats);
+  const ms = Math.round(Math.min(L.next.w, L.next.h - 22) * 0.62);
+  place($('next-mystery'), { x: L.nextSlot.x - ms / 2, y: L.nextSlot.y - ms / 2, w: ms, h: ms });
   place($('btn-hold'), L.btnHold);
   place($('btn-cyc'), L.btnCyc);
   place($('btn-sneeze'), L.btnSneeze);
@@ -339,7 +476,7 @@ export function applyHudLayout(L: Layout): void {
   place(pop, { x: L.board.x, y: L.board.y + L.board.h * 0.22, w: L.board.w, h: L.board.h * 0.4 });
   $('toast').style.top = L.board.y + 8 + 'px';
   $('toast').style.left = L.board.x + L.board.w / 2 + 'px';
-  $('toast').style.maxWidth = Math.max(180, L.board.w - 16) + 'px';
+  $('toast').style.maxWidth = Math.max(180, Math.min(300 * hudScale(L), L.board.w - 40)) + 'px'; // NS4-41: kısa satırlar
   // NS4-10: ×2 rozeti tahta genişliğinde bir sütunda, tahtanın alt kenarına hizalı; dar tahtada
   // metin satır kırar ve tahtanın dışına taşmaz (önceki konum: alt kenardan 40 / 74 px yukarıda, ortalı).
   const fx = $('fx-badges');

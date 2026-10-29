@@ -30,6 +30,13 @@ export function setTip(id: TipBoxId): void {
   box.append(b, s);
 }
 
+/** NS4-41: ana menüde kişisel rekor (yalnızca rekor varken görünür). */
+export function renderStartBest(best: number): void {
+  const el = $('start-best');
+  el.hidden = best <= 0;
+  $('start-best-n').textContent = fmt(best);
+}
+
 /**
  * NS4-10: overlay açıkken #stage (canvas + HUD butonları) `inert` olur: Tab sırasına girmez, işaretçi
  * olaylarını almaz ve yardımcı teknolojiden gizlenir. Klavye oyun kontrolleri window düzeyinde dinlenir ve

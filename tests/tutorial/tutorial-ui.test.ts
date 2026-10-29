@@ -76,7 +76,7 @@ describe('klavye akışı (DOM kartı ile)', () => {
     key(' ');
     expect(card().title).toBe('Beklet');
     key('c');
-    expect(card()).toMatchObject({ step: 'Öğretici · 6/6', title: 'Drenaj', done: true });
+    expect(card()).toMatchObject({ step: 'Öğretici · 6/6', title: 'Satır temizle', done: true });
     dom.el('tut-done').click();
     expect(card().hidden).toBe(true);
     expect(data.get('fn_tutorial')).toBe('{"done":true}');

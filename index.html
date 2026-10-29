@@ -35,19 +35,31 @@
             </svg>
           </div>
           <div id="meter" class="abs"><div id="meter-cover"></div></div>
-          <div id="meter-lbl" class="abs lbl">Tıkanıklık</div>
           <div id="hold-bg" class="abs panel"></div>
           <div id="next-bg" class="abs panel"></div>
           <div id="lbl-hold" class="abs lbl">Beklet</div>
           <div id="lbl-next" class="abs lbl">Sıradaki</div>
+          <!-- NS4-38: sıradaki parça önce siyah "?" kartı olarak gelir, kart dönünce açılır (ui/nextReveal.ts) -->
+          <div id="next-mystery" class="abs mystery" aria-hidden="true"><span>?</span></div>
           <div id="stats" class="abs">
-            <div class="score" id="hud-score">0</div>
+            <!-- NS4-38: skor öne çıktı: etiket (geniş düzende), sayarak artan değer ve "+N" kazanç -->
+            <div class="stat-lbl">Skor</div>
+            <div class="score-line">
+              <div class="score" id="hud-score">0</div>
+              <span id="score-delta" class="score-delta" aria-hidden="true"></span>
+            </div>
             <div class="row">
               <span
-                ><i id="breath" class="breath" data-state="ferah" aria-hidden="true"></i>Nefes sv.
+                ><i id="breath" class="breath" data-state="ferah" aria-hidden="true"></i>Seviye
                 <b id="hud-level">1</b></span
-              ><span>Drenaj <b id="hud-lines">0</b></span>
+              ><span>Satır <b id="hud-lines">0</b></span>
             </div>
+          </div>
+          <!-- NS4-38: tıkanıklık kartı: yüzde, durum ve dolan çubuk (yan metre çevre görüşü için kalır) -->
+          <div id="cong" class="abs cong" data-state="ferah" role="img" aria-label="Tıkanıklık yüzde 0">
+            <span class="cong-lbl">Tıkanıklık <em id="cong-state">Ferah</em></span>
+            <b id="cong-n" class="cong-n">%0</b>
+            <span class="cong-bar"><i id="cong-fill"></i></span>
           </div>
         </div>
         <div id="over-hud">
@@ -175,6 +187,7 @@
           <path class="flow flow-d" d="M-100 660 C 180 620, 470 720, 760 650 S 1120 600, 1300 680" />
         </svg>
         <div class="sheet">
+          <!-- NS4-41: ortalanmış marka: sıklamen yumuşak bir hale üstünde, başlık, kısa tanım ve kişisel rekor -->
           <div class="start-brand">
             <svg class="start-flower" viewBox="0 0 96 112" aria-hidden="true">
               <defs>
@@ -251,14 +264,41 @@
             </svg>
             <h1>Ferah<br /><span class="title-accent">Nefes</span></h1>
           </div>
-          <p class="lead">Sinüslerini tıkayan mukus bloklarını yerleştir, satırları boşalt, nefesini aç.</p>
-          <button class="btn primary" id="b-play">Oyna</button>
-          <div class="row2">
-            <button class="btn ghost" id="b-how">Nasıl oynanır</button>
-            <button class="btn ghost" id="b-set1">Ayarlar</button>
+          <p class="lead">Sinüslerini tıkayan blokları yerleştir, satırları temizle, nefesini aç.</p>
+          <p class="start-best" id="start-best" hidden>Rekorun <b id="start-best-n">0</b></p>
+          <button class="btn primary" id="b-play">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg
+            >Oyna
+          </button>
+          <!-- NS4-41: üç ikincil eylem eşit karolar (ikon + kısa ad); NS4-18 Skorlar artık ayrı satırda değil -->
+          <div class="start-actions">
+            <button class="btn ghost tile" id="b-how">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4" />
+                <circle class="dot" cx="12" cy="16.8" r="1.1" />
+              </svg>
+              <span>Nasıl oynanır</span>
+            </button>
+            <button class="btn ghost tile" id="b-scores">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 4h8v4.5a4 4 0 0 1-8 0Z" />
+                <path
+                  d="M8 6H5.5a2.5 2.5 0 0 0 2.6 3.6M16 6h2.5a2.5 2.5 0 0 1-2.6 3.6M12 12.5V16M8.5 20h7M10 16h4v4h-4Z"
+                />
+              </svg>
+              <span>Skorlar</span>
+            </button>
+            <button class="btn ghost tile" id="b-set1">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+                <circle cx="15" cy="7" r="2.2" />
+                <circle cx="9" cy="17" r="2.2" />
+              </svg>
+              <span>Ayarlar</span>
+            </button>
           </div>
-          <!-- NS4-18: yerel ve global skor tablosu (tek ikincil eylem) -->
-          <button class="btn ghost btn-sub" id="b-scores">Skorlar</button>
           <div class="tip" id="tip-start"></div>
           <p class="fine">
             Bu oyun bilgilendirme ve eğlence amaçlıdır; tıbbi tavsiye yerine geçmez. Şikâyetleriniz için hekiminize veya
@@ -310,15 +350,15 @@
             </div>
             <h3>Oyun alanı bir sinüs boşluğu</h3>
             <ul class="map">
-              <li>Düşen bloklar biriken mukus; alan dolarsa sinüs tamamen tıkanır.</li>
+              <li>Düşen bloklar burnunda biriken tıkanıklık; alan dolarsa sinüs tamamen tıkanır.</li>
               <li>
                 Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla
                 başlar; parlayan boşlukları doldurup hepsini uçurunca sinüs açılır. Dördü de açılınca ister serbest
                 nefese devam et, ister bitir.
               </li>
               <li>
-                Tam satır = drenaj. Dört satır birden: ozmotik etki. T-spin: nörorefleks etki. Tahtayı tamamen
-                boşaltırsan Tam Ferahlık bonusu.
+                Bir satırı tamamen doldurunca satır silinir. Dört satırı birden silersen TETRİS. T bloğunu döndürüp dar
+                bir boşluğa sokarsan T-spin: ekstra puan. Tahtayı tamamen boşaltırsan Tam Ferahlık bonusu.
               </li>
               <li>
                 Tıkanıklık yükselince iki destek açılır. <b>Sıklamen özütü</b> oyunda bir kez kullanılır, alt yarıyı
@@ -362,7 +402,7 @@
             <h2 id="o-title">Sinüslerin tamamen tıkandı</h2>
             <div class="stat-grid">
               <div class="stat-main"><b id="o-score">0</b><span>Puan</span></div>
-              <div><b id="o-lines">0</b><span>Drenaj</span></div>
+              <div><b id="o-lines">0</b><span>Satır</span></div>
               <div><b id="o-best">0</b><span>Rekor</span></div>
             </div>
             <div class="badges" id="o-badges" role="list"></div>
@@ -425,7 +465,7 @@
           <h2>Bütün sinüsler açık!</h2>
           <div class="stat-grid stat-final">
             <div class="stat-main"><b id="f-score">0</b><span>Puan</span></div>
-            <div><b id="f-lines">0</b><span>Drenaj</span></div>
+            <div><b id="f-lines">0</b><span>Satır</span></div>
           </div>
           <p class="final-lead">Serbest nefeste rekorunu büyütebilir ya da burada bitirebilirsin.</p>
           <div class="over-actions">
@@ -462,7 +502,7 @@
                     <th scope="col">Sıra</th>
                     <th scope="col">Takma ad</th>
                     <th scope="col">Skor</th>
-                    <th scope="col">Drenaj</th>
+                    <th scope="col">Satır</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -476,7 +516,7 @@
                     <th scope="col">Sıra</th>
                     <th scope="col">Takma ad</th>
                     <th scope="col">Skor</th>
-                    <th scope="col">Drenaj</th>
+                    <th scope="col">Satır</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -494,56 +534,49 @@
 
       <!-- Settings -->
       <section id="scr-set" class="screen screen-dim" aria-label="Ayarlar">
-        <!-- NS4-16: görsel gruplar (Ses / Oynanış / İleri ayarlar). data-k anahtarları ve davranış değişmedi. -->
+        <!-- NS4-16: görsel gruplar. NS4-41: yalnızca Ses grubu kaldı (Oynanış ve İleri ayarlar kaldırıldı; değerleri varsayılan). -->
         <div class="sheet sheet-scroll">
           <div class="sheet-body">
             <h2>Ayarlar</h2>
+            <!-- NS4-39: müzik düzeyi, menü/mola müziği ve efekt düzeyi; düzey kaydırıcısı açma anahtarının hemen altında -->
             <fieldset class="set-group">
               <legend>Ses</legend>
-              <label class="set">Ses efektleri<input type="checkbox" data-k="sound" data-focus /></label>
-              <label class="set">Ortam müziği<input type="checkbox" data-k="music" /></label>
-            </fieldset>
-            <fieldset class="set-group">
-              <legend>Oynanış</legend>
-              <label class="set"
+              <label class="set">Müzik<input type="checkbox" data-k="music" data-focus /></label>
+              <label class="set set-range set-sub"
                 ><span
-                  ><span id="lbl-haptics">Titreşim</span
-                  ><small id="hap-note">Destekleyen Android cihazlarda</small></span
-                ><input type="checkbox" data-k="haptics" aria-labelledby="lbl-haptics" aria-describedby="hap-note"
-              /></label>
-              <label class="set">Hayalet parça<input type="checkbox" data-k="ghost" /></label>
-            </fieldset>
-            <fieldset class="set-group set-advanced">
-              <legend>İleri ayarlar</legend>
-              <label class="set set-range"
-                ><span
-                  ><span id="lbl-das">DAS</span>
-                  <small id="desc-das">Basılı tutunca kayma gecikmesi: <b id="v-das"></b> ms</small></span
-                ><input
-                  type="range"
-                  min="50"
-                  max="300"
-                  step="1"
-                  data-k="das"
-                  aria-labelledby="lbl-das"
-                  aria-describedby="desc-das"
-              /></label>
-              <label class="set set-range"
-                ><span
-                  ><span id="lbl-arr">ARR</span>
-                  <small id="desc-arr">Kayma tekrar hızı: <b id="v-arr"></b> ms</small></span
+                  ><span id="lbl-musicvol">Müzik düzeyi</span>
+                  <small id="desc-musicvol"><b id="v-musicVol"></b></small></span
                 ><input
                   type="range"
                   min="0"
                   max="100"
-                  step="1"
-                  data-k="arr"
-                  aria-labelledby="lbl-arr"
-                  aria-describedby="desc-arr"
+                  step="5"
+                  data-k="musicVol"
+                  aria-labelledby="lbl-musicvol"
+                  aria-describedby="desc-musicvol"
               /></label>
-              <label class="set set-minor"
-                ><span><span id="lbl-fps">FPS göstergesi</span><small id="desc-fps">Performans testi için</small></span
-                ><input type="checkbox" data-k="fps" aria-labelledby="lbl-fps" aria-describedby="desc-fps"
+              <label class="set set-sub"
+                ><span
+                  ><span id="lbl-menumusic">Menü ve mola müziği</span
+                  ><small id="desc-menumusic">Oyun dışında sakin bahçe ezgisi</small></span
+                ><input
+                  type="checkbox"
+                  data-k="menuMusic"
+                  aria-labelledby="lbl-menumusic"
+                  aria-describedby="desc-menumusic"
+              /></label>
+              <label class="set">Ses efektleri<input type="checkbox" data-k="sound" /></label>
+              <label class="set set-range set-sub"
+                ><span
+                  ><span id="lbl-sfxvol">Efekt düzeyi</span> <small id="desc-sfxvol"><b id="v-sfxVol"></b></small></span
+                ><input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  data-k="sfxVol"
+                  aria-labelledby="lbl-sfxvol"
+                  aria-describedby="desc-sfxvol"
               /></label>
             </fieldset>
           </div>

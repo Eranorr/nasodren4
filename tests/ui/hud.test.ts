@@ -105,3 +105,47 @@ describe('efekt rozeti (×2)', () => {
     expect(html).not.toMatch(/badge-rebound|Rebound/);
   });
 });
+
+describe('NS4-38: skor ve tıkanıklık öne çıktı', () => {
+  it('tıkanıklık kartı yüzdeyi, çubuğu ve durumu yazar', async () => {
+    const { g, lc, frame } = await load();
+    lc.start();
+    frame();
+    expect(dom.el('cong-n').textContent).toBe('%0');
+    expect(dom.el('cong').dataset['state']).toBe('ferah');
+    stackRows(g, 8); // 0.40
+    frame();
+    expect(dom.el('cong-n').textContent).toBe('%40');
+    expect(dom.el('cong-fill').style['transform']).toBe('scaleX(0.4)');
+    expect(dom.el('cong').dataset['state']).toBe('orta');
+    expect(dom.el('cong-state').textContent).toBe('Artıyor');
+    stackRows(g, 15); // 0.75
+    frame();
+    expect(dom.el('cong').dataset['state']).toBe('tikali');
+    expect(dom.el('cong').getAttribute('aria-label')).toBe('Tıkanıklık yüzde 75, Tıkalı');
+  });
+
+  it('büyük kazanç sayarak artar ve "+N" gösterir; küçük kazanç hemen yazılır', async () => {
+    const { SCORE_COUNT_MS } = await import('../../src/ui/hud');
+    const { g, lc, frame } = await load();
+    lc.start();
+    frame();
+    g.score += 20; // sert düşüş puanı gibi
+    frame();
+    expect(dom.el('hud-score').textContent).toBe('20');
+    expect(dom.el('score-delta').classList.contains('on')).toBe(false);
+    g.score += 1000;
+    frame();
+    expect(dom.el('score-delta').textContent).toBe('+1.000');
+    expect(dom.el('score-delta').classList.contains('on')).toBe(true);
+    expect(dom.el('hud-score').classList.contains('bump')).toBe(true);
+    vi.advanceTimersByTime(SCORE_COUNT_MS / 3);
+    frame();
+    const mid = Number(dom.el('hud-score').textContent.replace('.', ''));
+    expect(mid).toBeGreaterThan(20);
+    expect(mid).toBeLessThan(1020);
+    vi.advanceTimersByTime(SCORE_COUNT_MS);
+    frame();
+    expect(dom.el('hud-score').textContent).toBe('1.020');
+  });
+});

@@ -181,7 +181,7 @@ describe('NS4-34: görünümde hücre bitki katmanları', () => {
     expect((cell(4)?.children ?? []).every((c) => !c.visible)).toBe(true);
     // aktif parça ve sıradaki önizlemesi
     expect(view.active.filter((a) => a.visible).every((a) => a.children[0]?.visible)).toBe(true);
-    expect(view.nextS[0]?.every((s) => s.children[0]?.visible)).toBe(true);
+    expect(view.nextS.every((s) => s.children[0]?.visible)).toBe(true);
     // oyun sonu: yığın griye dönünce bitki kalkar
     view.onGameOver();
     for (let t = 0; t < 2000; t += 16) view.update(16);

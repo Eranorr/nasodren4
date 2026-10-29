@@ -351,11 +351,11 @@ describe('Skorlar işaretlemesi ve responsive tablo (statik)', () => {
       'Sıra',
       'Takma ad',
       'Skor',
-      'Drenaj',
+      'Satır',
       'Sıra',
       'Takma ad',
       'Skor',
-      'Drenaj',
+      'Satır',
     ]);
     expect(s).toMatch(/id="global-status" role="status" aria-live="polite"/);
     expect(html).toMatch(/id="submit-status" role="status" aria-live="polite"/);

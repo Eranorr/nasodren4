@@ -61,6 +61,13 @@
   --color-pressure-soft: #c9bfe0;
   --color-fresh-soft: #bff0ea;
 
+  /* NS4-38: "Sıradaki" gizem kartı (bulunmamış eşya kartı: siyah zemin, beyaz soru işareti) */
+  --color-mystery: #121519;
+  --color-mystery-top: #2a2f36;
+  --color-mystery-mark: #ffffff;
+  --color-mystery-edge: rgba(255, 255, 255, 0.16);
+  --color-mystery-shine: rgba(255, 255, 255, 0.22);
+
   /* Doğa: sıklamen gövdesi ve yaprakları (NS4-09 başlangıç ekranı) */
   --color-leaf: #1d9a6c;
   --color-leaf-light: #9fe0c4;
@@ -114,6 +121,7 @@
   /* HUD (tahta çevresi) */
   --fs-hud-score: 32px;
   --fs-hud-score-compact: 27px;
+  --fs-hud-score-wide: 40px;
   --fs-hud-label: 13px;
   --fs-hud-value: 15px;
   --fs-hud-button: 14px;
@@ -197,12 +205,31 @@ body {
 .abs {
   position: absolute;
 }
-.panel {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+/* NS4-41: HUD panelleri (Beklet, Sıradaki, yatayda skor ve tıkanıklık kartı) tek, yumuşak cam yüzey: ince açık
+   kenar, üstte ışık çizgisi ve çok hafif gölge; keskin beyaz kutu yerine zemine karışır (göz yormaz). */
+.panel,
+#stats.wide,
+.cong.wide {
+  background: color-mix(in srgb, var(--color-surface-strong) 62%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-on-accent) 70%, transparent);
   border-radius: var(--radius-panel);
+  box-shadow:
+    0 10px 24px -18px color-mix(in srgb, var(--color-board) 55%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--color-on-accent) 85%, transparent);
   -webkit-backdrop-filter: blur(var(--blur-surface)) saturate(1.15);
   backdrop-filter: blur(var(--blur-surface)) saturate(1.15);
+}
+/* panel başlıkları: küçük, aralıklı büyük harf, turkuaz (içerikle yarışmaz) */
+#lbl-hold,
+#lbl-next,
+#stats.wide .stat-lbl,
+.cong.wide .cong-lbl {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(11px * var(--hud-scale));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fresh-strong);
 }
 /* NS4-21: sinüs boşluğu: derinlikli zemin, yumuşak çok katmanlı duvar ve üstte hava çıkışı (ostium).
    NS4-33: ızgara ::before katmanında, organik duvarların (SVG) üstünde: duvar kenar hücreye taşsa da hücre
@@ -258,6 +285,7 @@ body {
 #meter {
   border-radius: var(--radius-pill);
   overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--color-border);
   background: linear-gradient(
     to top,
     var(--color-success) 0%,
@@ -265,10 +293,11 @@ body {
     var(--color-danger-bright) 100%
   );
 }
+/* NS4-41: boş kısım koyu lacivert yerine açık, yumuşak iz (göz yormaz; dolu kısım renkli kalır) */
 #meter-cover {
   position: absolute;
   inset: 0;
-  background: var(--color-board);
+  background: color-mix(in srgb, var(--color-board) 10%, var(--color-surface-strong));
   transform-origin: top;
   transform: scaleY(1);
   transition: transform var(--dur-meter) ease-out;
@@ -279,11 +308,6 @@ body {
   font-size: calc(var(--fs-hud-label) * var(--hud-scale));
   color: var(--color-text-muted);
   letter-spacing: 0.01em;
-}
-#meter-lbl {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  font-size: calc(var(--fs-hud-sub) * var(--hud-scale));
 }
 #stats {
   display: flex;
@@ -330,12 +354,362 @@ body {
 #stats .row span {
   white-space: nowrap;
 }
+/* ---- NS4-38: skor öne çıktı ---- */
+#stats .stat-lbl {
+  display: none;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(var(--fs-hud-label) * var(--hud-scale));
+  color: var(--color-text-muted);
+}
+#stats.wide {
+  padding: calc(10px * var(--hud-scale)) calc(14px * var(--hud-scale));
+  justify-content: center;
+}
+#stats.wide .stat-lbl {
+  display: block;
+  margin-bottom: 2px;
+}
+#stats.wide .score {
+  font-size: calc(var(--fs-hud-score-wide) * var(--hud-scale));
+}
+/* dar yan sütun (telefon yatay): etiket gizli, iç boşluk ve rakamlar küçük */
+#stats.wide.compact {
+  padding: 6px 8px;
+}
+#stats.wide.compact .stat-lbl {
+  display: none;
+}
+#stats.wide.compact .score {
+  font-size: calc(var(--fs-hud-score-compact) * var(--hud-scale));
+}
+.score-line {
+  position: relative;
+  align-self: flex-start;
+  width: fit-content;
+}
+#stats.compact .score-line {
+  align-self: center;
+}
+#hud-score {
+  transform-origin: 0 70%;
+}
+#stats.compact #hud-score {
+  transform-origin: 50% 70%;
+}
+#hud-score.bump {
+  animation: scoreBump 0.42s ease-out;
+}
+@keyframes scoreBump {
+  0% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.12);
+    color: var(--color-cyclamen-strong);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.score-delta {
+  position: absolute;
+  left: 100%;
+  bottom: 62%;
+  margin-left: 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--fs-hud-label) * var(--hud-scale));
+  color: var(--color-cyclamen);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+#stats.compact .score-delta {
+  left: auto;
+  right: 0;
+  bottom: 88%;
+}
+.score-delta.on {
+  animation: scoreDelta 1.1s ease-out forwards;
+}
+@keyframes scoreDelta {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+/* ---- NS4-38: tıkanıklık kartı ---- */
+.cong {
+  --cong-color: var(--color-fresh);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: 'lbl bar n';
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  font-family: var(--font-display);
+  color: var(--color-text);
+  transition: color var(--dur-state);
+}
+.cong[data-state='orta'] {
+  --cong-color: var(--color-sneeze);
+}
+.cong[data-state='tikali'] {
+  --cong-color: var(--color-danger-bright);
+}
+.cong-lbl {
+  grid-area: lbl;
+  font-weight: 600;
+  font-size: calc(var(--fs-hud-sub) * var(--hud-scale));
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.cong-lbl em {
+  display: none;
+  font-style: normal;
+  color: var(--cong-color);
+}
+.cong-n {
+  grid-area: n;
+  font-weight: 700;
+  font-size: calc(var(--fs-hud-value) * var(--hud-scale));
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+.cong[data-state='tikali'] .cong-n {
+  color: var(--color-danger);
+}
+.cong-bar {
+  grid-area: bar;
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--color-border);
+}
+.cong-bar i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--cong-color);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition:
+    transform var(--dur-meter) ease-out,
+    background var(--dur-state);
+}
+.cong[data-state='tikali'] .cong-bar {
+  animation: congPulse 1.3s ease-in-out infinite;
+}
+@keyframes congPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger-bright) 35%, transparent);
+  }
+}
+.cong.wide {
+  grid-template-columns: 1fr;
+  grid-template-areas: 'lbl' 'n' 'bar';
+  align-content: center;
+  gap: calc(4px * var(--hud-scale));
+  padding: calc(10px * var(--hud-scale)) calc(14px * var(--hud-scale));
+}
+.cong.wide .cong-lbl em {
+  display: inline;
+  margin-left: 0.3em;
+}
+.cong.wide .cong-n {
+  font-size: calc(var(--fs-hud-score-wide) * var(--hud-scale));
+  line-height: 1;
+}
+.cong.wide .cong-bar {
+  height: calc(10px * var(--hud-scale));
+}
+.cong.wide.compact {
+  gap: 4px;
+  padding: 6px 8px;
+}
+.cong.wide.compact .cong-lbl em {
+  display: block;
+  margin-left: 0;
+}
+.cong.wide.compact .cong-n {
+  font-size: calc(var(--fs-hud-score-compact) * var(--hud-scale));
+}
+.cong.wide.compact .cong-bar {
+  height: 8px;
+}
+/* ---- NS4-42: oda açılınca tıkanıklık göstergesinin boşalması ----
+   .drain: değer JS ile her karede yazılır (geçiş kapalı); renk turkuaza döner, çubuk üzerinde boşalma yönünde ışık
+   kayar, çubuk yumuşak turkuaz bir hale ile parlar. .done: %0'a inince sayı ve "Ferah" hafifçe zıplar.
+   .refill: yeni odanın değerine yavaş dolma. */
+.cong.drain {
+  --cong-color: var(--color-fresh);
+}
+.cong.drain .cong-bar i,
+#meter.drain #meter-cover {
+  transition: none;
+}
+.cong.drain .cong-n,
+.cong.drain .cong-lbl em {
+  color: var(--color-fresh-strong);
+}
+.cong.drain .cong-bar {
+  animation: congDrainGlow 1.4s ease-out;
+}
+.cong.drain .cong-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-on-accent) 80%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translateX(100%);
+  animation: congDrainShine 0.6s ease-in-out 2;
+  pointer-events: none;
+}
+#meter.drain {
+  animation: meterDrainGlow 1.4s ease-out;
+}
+.cong.done .cong-n,
+.cong.done .cong-lbl em {
+  display: inline-block;
+  animation: congDonePop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+/* sayı kendi kenarından büyür (geniş kartta sol, portre satırında sağ): yerinden kaymaz */
+.cong.done .cong-n {
+  justify-self: end;
+  transform-origin: 100% 60%;
+}
+.cong.wide.done .cong-n {
+  justify-self: start;
+  transform-origin: 0 60%;
+}
+.cong.refill .cong-bar i {
+  transition: transform calc(var(--dur-meter) * 2.6) cubic-bezier(0.4, 0, 0.2, 1);
+}
+#meter.refill #meter-cover {
+  transition: transform calc(var(--dur-meter) * 2.6) cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes congDrainGlow {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  30% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-fresh) 35%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@keyframes meterDrainGlow {
+  0% {
+    box-shadow:
+      inset 0 0 0 1px var(--color-border),
+      0 0 0 0 transparent;
+  }
+  30% {
+    box-shadow:
+      inset 0 0 0 1px var(--color-border),
+      0 0 14px 3px color-mix(in srgb, var(--color-fresh) 45%, transparent);
+  }
+  100% {
+    box-shadow:
+      inset 0 0 0 1px var(--color-border),
+      0 0 0 0 transparent;
+  }
+}
+@keyframes congDrainShine {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes congDonePop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+/* ---- NS4-38: "Sıradaki" gizem kartı ---- */
+.mystery {
+  display: none;
+  place-items: center;
+  border-radius: 22%;
+  overflow: hidden;
+  background: linear-gradient(to bottom, var(--color-mystery-top), var(--color-mystery) 55%);
+  border: 1px solid var(--color-mystery-edge);
+  box-shadow:
+    inset 0 1px 0 var(--color-mystery-edge),
+    var(--shadow-control);
+  will-change: transform;
+  container-type: size;
+}
+.mystery.on {
+  display: grid;
+}
+.mystery span {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 68cqh;
+  line-height: 1;
+  color: var(--color-mystery-mark);
+  animation: mysteryMark 0.38s ease-in-out infinite alternate;
+}
+/* parlama: kartın üzerinden geçen ince ışık */
+.mystery::after {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  background: linear-gradient(105deg, transparent 40%, var(--color-mystery-shine) 50%, transparent 60%);
+  transform: translateX(-70%);
+  animation: mysteryShine 0.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes mysteryMark {
+  from {
+    transform: scale(0.94);
+  }
+  to {
+    transform: scale(1.04);
+  }
+}
+@keyframes mysteryShine {
+  to {
+    transform: translateX(70%);
+  }
+}
 .gbtn {
   position: absolute;
   pointer-events: auto;
   touch-action: manipulation;
   border: 1px solid var(--color-border);
-  background: var(--color-btn-bg);
+  background: color-mix(in srgb, var(--color-btn-bg) 88%, transparent);
   color: var(--color-btn-text);
   border-radius: var(--radius-control);
   font-family: var(--font-display);
@@ -440,11 +814,14 @@ input:focus-visible {
 .gbtn.ready {
   animation: readyPulse 1.6s ease-in-out infinite;
 }
+/* NS4-41: hazır: hafif renkli zemin + renkli kenar; nabız halkası ince */
 #btn-cyc.ready {
-  border-color: var(--color-cyclamen);
+  border-color: color-mix(in srgb, var(--color-cyclamen) 70%, transparent);
+  background: color-mix(in srgb, var(--color-cyclamen) 6%, var(--color-btn-bg));
 }
 #btn-sneeze.ready {
-  border-color: var(--color-sneeze);
+  border-color: color-mix(in srgb, var(--color-sneeze) 75%, transparent);
+  background: color-mix(in srgb, var(--color-sneeze) 7%, var(--color-btn-bg));
 }
 @keyframes readyPulse {
   0%,
@@ -452,7 +829,7 @@ input:focus-visible {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-cyclamen) 0%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-cyclamen) 22%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-cyclamen) 14%, transparent);
   }
 }
 #btn-sneeze.ready {
@@ -464,7 +841,7 @@ input:focus-visible {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-sneeze) 0%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-sneeze) 24%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-sneeze) 16%, transparent);
   }
 }
 #btn-pause {
@@ -835,19 +1212,23 @@ input:focus-visible {
     opacity: 0;
   }
 }
+/* NS4-41: bildirim kısa ve yarı saydam: tahtanın üstünü daha az kapatır */
 #toast {
   position: absolute;
   pointer-events: none;
   left: 50%;
   transform: translate(-50%, 0);
-  background: var(--color-surface-strong);
+  background: color-mix(in srgb, var(--color-surface-strong) 86%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   color: var(--color-text);
-  border: 1px solid var(--color-border);
+  border: 1px solid color-mix(in srgb, var(--color-on-accent) 70%, transparent);
   border-radius: var(--radius-control);
-  padding: 9px 14px;
-  font-size: calc(var(--fs-hud-label) * var(--hud-scale));
+  padding: 7px 12px;
+  font-size: calc(12.5px * var(--hud-scale));
+  line-height: 1.35;
   font-weight: 700;
-  max-width: min(320px, 86vw);
+  max-width: min(280px, 80vw);
   text-align: center;
   opacity: 0;
   transition:
@@ -1619,6 +2000,22 @@ input:focus-visible {
 .set:focus-within {
   box-shadow: 0 1px 0 var(--color-fresh-strong);
 }
+/* NS4-39: ana anahtara bağlı alt seçenek (düzey, menü müziği): içeride; anahtar kapalıyken soluk */
+.set.set-sub {
+  padding-left: calc(14px * var(--ui-scale));
+  font-size: calc(var(--fs-ui) * var(--ui-scale));
+}
+.set-range small b {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.set.off {
+  opacity: 0.45;
+  cursor: default;
+}
+.set.off input {
+  cursor: default;
+}
 /* FPS geliştirici seçeneği geri planda */
 .set.set-minor {
   min-height: 44px;
@@ -1876,12 +2273,13 @@ input:focus-visible {
 /* ---------- başlangıç ekranı (NS4-09) ----------
    Ferah hava akışı + sıklamen. Yalnızca #scr-start kapsamında; diğer ekranlar ve HUD değişmez.
    Hareketler yalnızca transform/opacity kullanır ve reduced motion altında kapanır. */
+/* NS4-41: arka plan opak (oyun HUD'u menünün arkasından görünmez); kart ortalı, sakin ve tek odaklı */
 #scr-start.screen {
   overflow: hidden;
   background:
-    radial-gradient(60% 50% at 12% 8%, color-mix(in srgb, var(--color-fresh) 20%, transparent), transparent 70%),
-    radial-gradient(55% 45% at 92% 96%, color-mix(in srgb, var(--color-cyclamen) 14%, transparent), transparent 70%),
-    color-mix(in srgb, var(--color-bg-top) 80%, transparent);
+    radial-gradient(60% 50% at 12% 8%, color-mix(in srgb, var(--color-fresh) 18%, transparent), transparent 70%),
+    radial-gradient(55% 45% at 92% 96%, color-mix(in srgb, var(--color-cyclamen) 12%, transparent), transparent 70%),
+    linear-gradient(to bottom, var(--color-bg-top), var(--color-bg-bottom));
 }
 #scr-start .airflow {
   position: absolute;
@@ -1909,8 +2307,9 @@ input:focus-visible {
 }
 #scr-start .sheet {
   position: relative;
-  width: min(440px, 100%);
-  padding: 28px 28px 20px;
+  width: min(420px, 100%);
+  padding: 30px 26px 18px;
+  text-align: center;
   background: color-mix(in srgb, var(--color-surface-strong) 90%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-on-accent) 75%, transparent);
   box-shadow:
@@ -1921,17 +2320,37 @@ input:focus-visible {
   animation: startSheetIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 #scr-start .start-brand {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 10px;
 }
+/* sıklamenin arkasında yumuşak hale (pembe → nane) */
+#scr-start .start-brand::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  width: 124px;
+  height: 124px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--color-cyclamen-soft) 90%, transparent) 0%,
+    color-mix(in srgb, var(--color-fresh-soft) 55%, transparent) 52%,
+    transparent 72%
+  );
+  pointer-events: none;
+}
 #scr-start .start-flower {
+  position: relative;
   display: block;
-  width: 72px;
-  height: 84px;
-  margin: -4px 0 0 -8px;
+  width: 76px;
+  height: 90px;
+  margin: 0 auto;
   transform-origin: 45% 95%;
   animation: startFlowerBreathe 7s ease-in-out infinite;
 }
@@ -1962,8 +2381,8 @@ input:focus-visible {
   opacity: 0.2;
 }
 #scr-start h1 {
-  font-size: 52px;
-  line-height: 0.92;
+  font-size: 48px;
+  line-height: 0.95;
   letter-spacing: -0.02em;
   margin: 0;
   color: var(--color-text);
@@ -1972,8 +2391,66 @@ input:focus-visible {
   color: var(--color-cyclamen-strong);
 }
 #scr-start .lead {
-  max-width: 36ch;
-  margin-bottom: 20px;
+  max-width: 32ch;
+  margin: 0 auto 16px;
+  font-size: calc(var(--fs-body) * var(--ui-scale));
+  font-weight: 600;
+}
+/* NS4-41: kişisel rekor (yalnızca rekor varken) */
+#scr-start .start-best {
+  width: fit-content;
+  margin: -4px auto 16px;
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-fresh) 11%, transparent);
+  color: var(--color-fresh-strong);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(var(--fs-ui) * var(--ui-scale));
+}
+#scr-start .start-best b {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+#scr-start .start-best[hidden] {
+  display: none;
+}
+#scr-start .ico {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+#scr-start .btn.primary .ico {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+/* üç ikincil eylem: eşit karolar, ikon üstte */
+#scr-start .start-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+#scr-start .btn.tile {
+  flex-direction: column;
+  gap: 6px;
+  min-height: 78px;
+  margin-top: 0;
+  padding: 10px 4px;
+  font-size: calc(var(--fs-ui) * var(--ui-scale));
+  line-height: 1.15;
+}
+#scr-start .btn.tile .ico {
+  fill: none;
+  stroke: var(--color-fresh-strong);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#scr-start .btn.tile .ico .dot {
+  fill: var(--color-fresh-strong);
+  stroke: none;
 }
 #scr-start .btn.primary {
   min-height: 56px;
@@ -1985,8 +2462,9 @@ input:focus-visible {
     inset 0 1px 0 color-mix(in srgb, var(--color-on-accent) 28%, transparent);
 }
 #scr-start .btn.ghost {
-  background: color-mix(in srgb, var(--color-btn-bg) 72%, transparent);
-  border-color: var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-btn-bg) 78%, transparent);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-control);
 }
 @media (hover: hover) {
   #scr-start .btn.primary:hover {
@@ -1996,15 +2474,21 @@ input:focus-visible {
     border-color: var(--color-fresh);
   }
 }
+/* ipucu: kenar çizgisi yerine yumuşak nane zemin; başlık turkuaz (sakin) */
 #scr-start .tip {
   margin-top: 18px;
-  border-left-width: 3px;
-  border-radius: 0 var(--radius-control) var(--radius-control) 0;
-  background: color-mix(in srgb, var(--color-cyclamen) 7%, transparent);
+  padding: 12px 14px;
+  border-left: 0;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-fresh) 8%, transparent);
+  text-align: left;
+}
+#scr-start .tip b {
+  color: var(--color-fresh-strong);
 }
 #scr-start .fine {
-  border-top: 1px solid var(--color-border);
-  padding-top: 12px;
+  padding-top: 10px;
+  text-align: center;
 }
 /* Büyük ekranlar: kart ve başlık bir kademe büyür (yerleşim aynı) */
 @media (min-width: 1600px) and (min-height: 900px) {
@@ -2013,7 +2497,7 @@ input:focus-visible {
     padding: 32px 32px 22px;
   }
   #scr-start h1 {
-    font-size: 58px;
+    font-size: 54px;
   }
   #scr-start .start-flower {
     width: 80px;
@@ -2059,14 +2543,27 @@ input:focus-visible {
   }
   #scr-start .start-brand {
     flex-direction: row;
+    justify-content: center;
     align-items: center;
     gap: 10px;
     margin-bottom: 8px;
+  }
+  #scr-start .start-brand::before {
+    content: none;
   }
   #scr-start .start-flower {
     width: 44px;
     height: 52px;
     margin: 0;
+  }
+  #scr-start .btn.tile {
+    min-height: 58px;
+    gap: 3px;
+    padding: 6px 4px;
+  }
+  #scr-start .btn.tile .ico {
+    width: 18px;
+    height: 18px;
   }
   #scr-start h1 {
     font-size: 34px;
@@ -2089,6 +2586,19 @@ input:focus-visible {
   }
   .room-open-fill {
     transition: none;
+  }
+  /* NS4-38: gizem kartı nabız ve parlama olmadan; skor zıplamaz; tıkanıklık çubuğu nabızsız.
+     NS4-42: boşalma ışığı, parlaması ve zıplaması yok (değer yine sayarak iner) */
+  .cong.drain .cong-bar,
+  .cong.drain .cong-bar::after,
+  #meter.drain,
+  .cong.done .cong-n,
+  .cong.done .cong-lbl em,
+  .mystery span,
+  .mystery::after,
+  #hud-score.bump,
+  .cong[data-state='tikali'] .cong-bar {
+    animation: none;
   }
   /* NS4-31: harita kartı yerinde belirir; sinüsler zıplamadan renk değiştirir */
   .room-map,

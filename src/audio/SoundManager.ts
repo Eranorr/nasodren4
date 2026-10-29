@@ -19,38 +19,88 @@
    NS4-22: büyük açılma anı (Tetris, Tam Ferahlık, oda): süzgeç bir anda
    tamamen açılır, kısa süre açık kalır, sonra tıkanıklığa yavaşça döner;
    rahatlama "ahh"ı ünlü formantlı gürültüyle sentezlenir.
+   NS4-39: iki müzik parçası (audio/music.ts): menü/mola/oyun sonu "Bahçe",
+   oyun içi "Nefes". setMusic(mode) parçalar arasında yumuşak geçiş yapar;
+   notalar 100 ms'lik ileri bakışlı tek zamanlayıcıyla planlanır. Menü
+   müziği tıkanıklık süzgecinden ve kısmadan geçmez. Müzik ve efekt düzeyi
+   ayardan (musicVol / sfxVol, 0..100) gelir.
+   NS4-40: oyun müziği enerjik ve uyarlanır: tıkanıklık fazı (ferah / orta /
+   tikali), oda (ton) ve seviye (tempo) ölçü başında okunur; davul (yumuşak
+   kick, parmak şıklatma, shaker), bas, arpej ve melodi BarPlan'dan çalınır.
    ===================================================================== */
 import type { Settings } from '../types/settings';
+import {
+  Melody,
+  STEPS,
+  TRACKS,
+  eighth,
+  gamePhase,
+  planBar,
+  type BarPlan,
+  type GamePhase,
+  type HitEv,
+  type MusicKind,
+  type NoteEv,
+  type Track,
+} from './music';
 
 /** unlock() ile oluşturulan temel ses grafiği. */
 interface AudioGraph {
   readonly ctx: AudioContext;
   readonly master: GainNode;
   readonly sfx: GainNode;
-  /** Müzik ana kanalı (kısma/ducking burada); oturum veri yolları buna bağlanır. */
+  /** NS4-39: müzik düzeyi (ayar): muffle ve menü veri yolu buna, bu master'a bağlanır. */
+  readonly vol: GainNode;
+  /** Oyun müziği kanalı (kısma/ducking burada); oyun oturumu veri yolu buna bağlanır. */
   readonly mus: GainNode;
-  /** NS4-20: müzik → muffle → master. Kesim frekansı tıkanıklığa göre (setCongestion). */
+  /** NS4-20: oyun müziği → muffle → vol → master. Kesim frekansı tıkanıklığa göre (setCongestion). */
   readonly muffle: BiquadFilterNode;
   /** 2 sn'lik beyaz gürültü (nefes efektleri ve rüzgâr). */
   readonly noise: AudioBuffer;
 }
 
 type IntervalId = ReturnType<typeof window.setInterval>;
-type AudioSettings = Readonly<Pick<Settings, 'sound' | 'music'>>;
+/** NS4-39: menuMusic / musicVol / sfxVol verilmezse varsayılan (eski ayar nesneleri ve testler). */
+type AudioSettings = Readonly<Pick<Settings, 'sound' | 'music'>> &
+  Partial<Readonly<Pick<Settings, 'menuMusic' | 'musicVol' | 'sfxVol'>>>;
 
-/** Bir müzik oturumu: başlat → durdur arasında oluşturulan bütün düğümler. */
+/** NS4-39: uygulamanın istediği müzik: yok, menü (ana menü, mola, oyun sonu) veya oyun. */
+export type MusicMode = 'off' | MusicKind;
+
+/** Bir müzik oturumu: başlat → durdur arasında oluşturulan bütün düğümler ve zamanlama durumu. */
 interface MusicSession {
+  readonly kind: MusicKind;
+  readonly track: Track;
   readonly bus: GainNode;
   readonly pad: BiquadFilterNode;
-  /** Çalan kaynaklar (rüzgâr gürültüsü, LFO'lar, akor osilatörleri). */
+  /** Çalan kaynaklar (rüzgâr gürültüsü, LFO'lar, pad / bas / melodi osilatörleri). */
   readonly sources: Set<AudioScheduledSourceNode>;
   readonly timer: IntervalId;
+  readonly melody: Melody;
+  /** Sıradaki 16'lığın context zamanı ve sırası (ölçü = STEPS adım). */
+  next: number;
+  step: number;
+  /** Bu ölçünün planı ve 16'lık süresi (sn; tempo ölçü başında değişebilir). */
+  plan: BarPlan | null;
+  sixteenth: number;
+  /** NS4-40: önceki ölçünün fazı ve ferah/orta döngüsünün başladığı ölçü. */
+  phase: GamePhase;
+  cycleStart: number;
 }
 
-/** Ortam müziği hedef seviyesi (NS4-17: 0,32 → 0,26; oynanış sesleri öne çıkar). */
-export const MUSIC_LEVEL = 0.26;
-/** Müzik akor döngüsü (ms). */
-export const MUSIC_CHORD_MS = 7000;
+/** Ses düzeyi ayarlarının varsayılanı (bu düzeyde kazanç 1: NS4-39 öncesi miks korunur). */
+export const DEFAULT_MUSIC_VOL = 70;
+export const DEFAULT_SFX_VOL = 80;
+/** NS4-39: ayar (0..100) → kazanç. Kulağa doğrusal gelsin diye kare eğri; varsayılan düzeyde 1. */
+export function volumeGain(v: number, ref: number): number {
+  const k = Math.max(0, Math.min(100, v)) / ref;
+  return k * k;
+}
+/** Oyun müziği hedef seviyesi (NS4-17: 0,32 → 0,26; oynanış sesleri öne çıkar). */
+export const MUSIC_LEVEL = TRACKS.game.level;
+/** NS4-39: nota zamanlayıcısının aralığı (ms) ve ileri bakış süresi (sn). */
+export const MUSIC_TICK_MS = 100;
+const MUSIC_LOOKAHEAD = 0.3;
 /** Hareket/döndürme sesleri arasındaki en kısa aralık (sn); daha sık tekrarlar çalınmaz. */
 export const MOVE_MIN_GAP = 0.05;
 const ROTATE_MIN_GAP = 0.045;
@@ -71,6 +121,9 @@ const RECLOSE_TC = 0.7;
 /** NS4-22: açılma anında süzgecin açık kaldığı süre (sn). Oda: "Sinüs açıldı" geçişi (2,4 sn) + yeni odaya giriş. */
 export const OPEN_HOLD = { tetris: 1.2, allclear: 2.2, room: 2.8 } as const;
 /** NS4-22: "ahh" ünlüsünün iki formantı (/a/; başlangıç → bitiş Hz, Q). Perde rahatlarken hafifçe düşer. */
+/** NS4-38: "Sıradaki" açılış sesleri her parçada çalar: tık hareket sesi (0,026) düzeyinde, çan ondan az üstte. */
+export const REVEAL_TICK_GAIN = 0.02;
+export const REVEAL_CHIME_GAIN = 0.022;
 const SIGH_FORMANTS = [
   [850, 700, 5],
   [1300, 1100, 6],
@@ -87,27 +140,26 @@ export function muffleCutoff(congestion: number): number {
   return MUFFLE_OPEN_HZ * Math.pow(MUFFLE_CLOSED_HZ / MUFFLE_OPEN_HZ, k);
 }
 
-const CHORDS = [
-  [220, 277.2, 329.6],
-  [196, 246.9, 293.7],
-  [174.6, 220, 261.6],
-  [196, 246.9, 329.6],
-] as const;
-
 const noop = () => {};
 
 export class Sound {
   private audio: AudioGraph | null = null;
   /** AudioContext oluşturulamadı (desteklenmiyor veya tarayıcı reddetti): ses olmadan devam edilir. */
   unsupported = false;
-  /** Uygulama müzik istiyor mu (oyun sırasında true); ayarla birlikte değerlendirilir. */
-  private wantMusic = false;
+  /** NS4-39: uygulamanın istediği müzik; ayarla birlikte değerlendirilir. */
+  private mode: MusicMode = 'off';
+  /** Sıradaki başlatmada müziğin girişi bu kadar gecikir (sn; oyun sonu sesi önce duyulsun). */
+  private startDelay = 0;
   private session: MusicSession | null = null;
-  private chordIdx = 0;
+  /** NS4-40: oyun müziği fazı (tıkanıklıktan, gecikmeli) ve bağlam (seviye → tempo, oda → ton). */
+  private phase: GamePhase = 'ferah';
+  private musicLevel = 1;
+  private musicRoom = 0;
   /** Sekme gizlenince bu sınıf context'i askıya aldıysa true (görünür olunca devam ettirilir). */
   private suspendedByHide = false;
   private lastMove = -1;
   private lastRotate = -1;
+  private lastPreview = -1;
   /** NS4-20: son zamanlanan müzik süzgeci kesim frekansı. */
   private muffleHz = MUFFLE_OPEN_HZ;
   /** NS4-22: süzgeç bu context zamanına kadar açık tutulur; sonraki ilk izleme yavaş geri döner. */
@@ -122,6 +174,14 @@ export class Sound {
   /** Müzik oturumu açık mı. */
   get musicOn(): boolean {
     return this.session !== null;
+  }
+  /** NS4-40: oyun müziğinin şu anki fazı (tıkanıklığa göre). */
+  get musicPhase(): GamePhase {
+    return this.phase;
+  }
+  /** NS4-39: çalan parça (yoksa 'off'). */
+  get musicKind(): MusicMode {
+    return this.session?.kind ?? 'off';
   }
   /** AudioContext oluşturuldu mu (yalnızca kullanıcı etkileşiminden sonra). */
   get unlocked(): boolean {
@@ -156,11 +216,13 @@ export class Sound {
       master.connect(ctx.destination);
       const sfx = ctx.createGain();
       sfx.connect(master);
+      const vol = ctx.createGain();
+      vol.connect(master);
       const muffle = ctx.createBiquadFilter();
       muffle.type = 'lowpass';
       muffle.frequency.value = this.muffleHz;
       muffle.Q.value = 0.9;
-      muffle.connect(master);
+      muffle.connect(vol);
       const mus = ctx.createGain();
       mus.gain.value = 1;
       mus.connect(muffle);
@@ -168,7 +230,7 @@ export class Sound {
         buf = ctx.createBuffer(1, len, ctx.sampleRate),
         d = buf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-      this.audio = { ctx, master, sfx, mus, muffle, noise: buf };
+      this.audio = { ctx, master, sfx, vol, mus, muffle, noise: buf };
       this.applySettings();
     }
     this.suspendedByHide = false;
@@ -194,10 +256,17 @@ export class Sound {
     }
   }
   applySettings(): void {
-    if (!this.audio) return;
-    this.audio.sfx.gain.value = this.settings.sound ? 1 : 0;
-    if (this.settings.music && this.wantMusic) this.startMusic();
-    else this.stopMusic();
+    const a = this.audio;
+    if (!a) return;
+    const st = this.settings;
+    a.sfx.gain.value = st.sound ? volumeGain(st.sfxVol ?? DEFAULT_SFX_VOL, DEFAULT_SFX_VOL) : 0;
+    // kaydırıcı sürüklenirken tıkırtı olmasın diye kısa yumuşatma
+    const mv = st.musicVol ?? DEFAULT_MUSIC_VOL;
+    a.vol.gain.setTargetAtTime(volumeGain(mv, DEFAULT_MUSIC_VOL), a.ctx.currentTime, 0.05);
+    const want: MusicMode =
+      !st.music || mv <= 0 || (this.mode === 'menu' && st.menuMusic === false) ? 'off' : this.mode;
+    if (want === 'off') this.stopMusic();
+    else this.startMusic(want);
   }
 
   // ---- sentez yardımcıları ----
@@ -303,6 +372,7 @@ export class Sound {
    * unlock() öncesi çağrılırsa değer saklanır ve grafik kurulurken uygulanır.
    */
   setCongestion(congestion: number): void {
+    this.phase = gamePhase(congestion, this.phase); // NS4-40: müzik ölçü başında okur
     const a = this.audio;
     if (a && a.ctx.currentTime < this.openUntil) return; // NS4-22: açılma anı sürüyor
     const hz = muffleCutoff(congestion);
@@ -443,6 +513,33 @@ export class Sound {
     [2637, 2349, 2093, 1760, 1568, 1319].forEach((f, i) => this.tone(f, 0.12, 'sine', 0.018, 0, 0.7 + i * 0.07));
     this.duck(0.6, 2);
   }
+  /**
+   * NS4-38: "Sıradaki" gizem kartının tıkı: kasa açma çarkı gibi, ama yumuşak. Kısa, kısık bir plastik "tık"
+   * (dar bantlı gürültü + kısa üçgen ton); her tık biraz pesleşir ve kısılır (çark yavaşlıyor). Her parçada çaldığı
+   * için hareket sesinden kısık tutulur; perde hafifçe rastgele (tekrar yorgunluğu olmasın).
+   */
+  revealTick(i: number) {
+    const k = Math.min(i, 3),
+      j = 1 + (Math.random() - 0.5) * 0.06;
+    this.breath(0.026, 3400 * j, 2600 * j, REVEAL_TICK_GAIN * (1 - k * 0.12), 5);
+    this.tone((1900 - k * 140) * j, 0.024, 'triangle', REVEAL_TICK_GAIN * 0.8 * (1 - k * 0.15));
+  }
+  /** NS4-38: kart açılınca hafif çan (iki sinüs kısmisi, kısa kuyruk). Hızlı oyunda daha kısık ve kısa. */
+  revealChime(fast: boolean) {
+    const g = fast ? REVEAL_CHIME_GAIN * 0.55 : REVEAL_CHIME_GAIN;
+    const d = fast ? 0.16 : 0.3;
+    this.tone(1319, d, 'sine', g);
+    this.tone(1976, d * 0.8, 'sine', g * 0.6, 0, 0.035);
+  }
+  /** NS4-39: efekt düzeyi kaydırıcısı sürüklenirken örnek ses (çan); sık tekrarda seyreltilir. */
+  preview() {
+    const a = this.sfxReady();
+    if (!a) return;
+    const now = a.ctx.currentTime;
+    if (now - this.lastPreview < 0.15) return;
+    this.lastPreview = now;
+    this.revealChime(false);
+  }
   level() {
     [523, 659, 784].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.05, 0, i * 0.07));
   }
@@ -451,20 +548,55 @@ export class Sound {
     this.breath(0.9, 900, 160, 0.06, 0.7);
   }
 
-  // ---- ortam müziği ----
-  startMusic(): void {
+  // ---- müzik (NS4-39: iki parça, ileri bakışlı nota zamanlayıcısı) ----
+  /** `kind` parçasını başlatır; başka parça çalıyorsa o söner (yumuşak geçiş). Aynı parça yeniden başlamaz. */
+  startMusic(kind: MusicKind = 'game'): void {
     const a = this.audio;
-    if (!a || this.session) return;
+    if (!a) return;
+    if (this.session?.kind === kind) return;
+    this.stopMusic();
     const ctx = a.ctx,
-      t = ctx.currentTime;
-    a.mus.gain.cancelScheduledValues(t);
-    a.mus.gain.setValueAtTime(1, t);
+      t = ctx.currentTime,
+      track = TRACKS[kind],
+      delay = this.startDelay;
+    this.startDelay = 0;
+    if (kind === 'game') {
+      a.mus.gain.cancelScheduledValues(t);
+      a.mus.gain.setValueAtTime(1, t);
+    }
     const bus = ctx.createGain();
     bus.gain.setValueAtTime(0.0001, t);
-    bus.gain.setTargetAtTime(MUSIC_LEVEL, t, 1.2);
-    bus.connect(a.mus);
+    bus.gain.setTargetAtTime(track.level, t + delay, 1.2);
+    // menü müziği tıkanıklık süzgecinden ve kısmadan geçmez
+    bus.connect(kind === 'game' ? a.mus : a.vol);
     const sources = new Set<AudioScheduledSourceNode>();
-    // rüzgâr / nefes: filtrelenmiş gürültü + yavaş LFO
+    if (track.wind) this.wind(a, bus, sources, t);
+    const pad = ctx.createBiquadFilter();
+    pad.type = 'lowpass';
+    pad.frequency.value = track.padCutoff;
+    pad.connect(bus);
+    const s: MusicSession = {
+      kind,
+      track,
+      bus,
+      pad,
+      sources,
+      melody: new Melody(track),
+      next: t + 0.1 + delay,
+      step: 0,
+      plan: null,
+      sixteenth: eighth(track.bpm) / 2,
+      phase: this.phase,
+      cycleStart: 0,
+      timer: setInterval(() => this.schedule(s), MUSIC_TICK_MS),
+    };
+    this.session = s;
+    this.schedule(s);
+  }
+
+  /** Rüzgâr / nefes: filtrelenmiş gürültü + yavaş LFO'lar (oyun parçası). */
+  private wind(a: AudioGraph, bus: GainNode, sources: Set<AudioScheduledSourceNode>, t: number): void {
+    const ctx = a.ctx;
     const n = ctx.createBufferSource();
     n.buffer = a.noise;
     n.loop = true;
@@ -489,45 +621,181 @@ export class Sound {
     n.connect(bp);
     bp.connect(ng);
     ng.connect(bus);
-    for (const s of [n, lfo, lfo2]) {
-      s.start(t);
-      sources.add(s);
+    for (const src of [n, lfo, lfo2]) {
+      src.start(t);
+      sources.add(src);
     }
-    // yumuşak pad
-    const pad = ctx.createBiquadFilter();
-    pad.type = 'lowpass';
-    pad.frequency.value = 900;
-    pad.connect(bus);
-    const play = () => {
-      if (this.session?.bus !== bus) return;
-      const c = CHORDS[this.chordIdx++ % CHORDS.length] ?? CHORDS[0],
-        t0 = ctx.currentTime;
-      for (const f of c) {
-        for (let d = -1; d <= 1; d += 2) {
-          const o = ctx.createOscillator(),
-            g = ctx.createGain();
-          o.type = 'sine';
-          o.frequency.value = f;
-          o.detune.value = d * 6;
-          g.gain.setValueAtTime(0.0001, t0);
-          g.gain.linearRampToValueAtTime(0.03, t0 + 2.5);
-          g.gain.linearRampToValueAtTime(0.0001, t0 + 8.5);
-          o.connect(g);
-          g.connect(pad);
-          o.onended = () => {
-            sources.delete(o);
-            g.disconnect();
-          };
-          o.start(t0);
-          o.stop(t0 + 8.6);
-          sources.add(o);
-        }
-      }
-    };
-    this.chordIdx = 0;
-    this.session = { bus, pad, sources, timer: setInterval(play, MUSIC_CHORD_MS) };
-    play();
   }
+
+  /**
+   * İleri bakış penceresine giren 16'lıkları planlar. Ölçü başında faz, oda ve seviye okunur ve ölçünün planı
+   * (BarPlan) üretilir; faz değişiminden sonra ferah/orta dönüşünde döngü nakarattan başlar (rahatlama).
+   */
+  private schedule(s: MusicSession): void {
+    const a = this.audio;
+    if (!a || this.session !== s) return;
+    while (s.next < a.ctx.currentTime + MUSIC_LOOKAHEAD) {
+      const t = s.next,
+        step = s.step % STEPS,
+        bar = Math.floor(s.step / STEPS);
+      if (step === 0 || !s.plan) {
+        const phase = s.kind === 'game' ? this.phase : 'ferah';
+        if (s.phase === 'tikali' && phase !== 'tikali') s.cycleStart = bar - 8; // rahatlama: doğrudan nakarat
+        s.plan = planBar(
+          {
+            kind: s.kind,
+            bar,
+            cycleBar: bar - s.cycleStart,
+            phase,
+            prevPhase: s.phase,
+            level: this.musicLevel,
+            room: this.musicRoom,
+          },
+          s.melody,
+        );
+        s.phase = phase;
+        s.sixteenth = eighth(s.plan.bpm) / 2;
+        this.renderBarStart(s, s.plan, t);
+      }
+      this.renderStep(s, s.plan, step, t);
+      s.step++;
+      s.next += s.sixteenth;
+    }
+  }
+
+  /** Ölçü başı: pad akoru ve faz geçişi süsü. */
+  private renderBarStart(s: MusicSession, p: BarPlan, t: number): void {
+    if (p.pad) this.padChord(s, p.pad.chord, t, p.pad.bars * STEPS * s.sixteenth);
+    if (p.fill === 'tense') {
+      // gerilime iniş: derin, yumuşak "dum" (kaybetmeye yaklaşılıyor)
+      this.musicNote(s, 90, t, 0.9, 0.22, 0.01, 0, 38);
+    } else if (p.fill === 'relief') {
+      // rahatlama: hızlı yükselen neşeli arpej
+      [523.3, 659.3, 784, 1046.5].forEach((f, i) => this.musicNote(s, f, t + i * 0.06, 0.4, 0.05, 0.005, 0.15));
+    }
+  }
+
+  /** Bir 16'lığın olayları (plan sabit adımlıdır; bir adımda birden çok katman çalabilir). */
+  private renderStep(s: MusicSession, p: BarPlan, step: number, t: number): void {
+    const at = <T extends { step: number }>(xs: readonly T[]) => xs.filter((x) => x.step === step);
+    const len = (n: NoteEv) => n.len * s.sixteenth;
+    for (const n of at(p.bass))
+      this.musicNote(s, n.f, t, Math.max(0.16, len(n) * 1.1), n.gain, 0.012, 0.12, 0, 'triangle');
+    // kalimba/marimba: temel + yumuşak oktav kısmisi, hızlı atak, uzun sönüm
+    for (const n of at(p.melody)) this.musicNote(s, n.f, t, Math.max(0.5, len(n) * 1.6), n.gain, 0.005, 0.2);
+    for (const n of at(p.arp)) this.musicNote(s, n.f, t, 0.14, n.gain, 0.004, 0);
+    for (const h of at(p.kick)) this.kick(s, t, h);
+    for (const h of at(p.snap)) this.noiseHit(s, t, h.gain, 'bandpass', 1900, 0.9, 0.09);
+    // shaker: tiz gürültü ama yumuşak (sert hi-hat değil); swing için tek 16'lıklar biraz geç
+    for (const h of at(p.hat))
+      this.noiseHit(s, t + (step % 2 ? s.sixteenth * 0.12 : 0), h.gain, 'bandpass', 6500, 1.2, 0.04);
+  }
+
+  /** Yumuşak kick: perdesi hızla düşen sinüs (gümleme yok, kısa). */
+  private kick(s: MusicSession, t: number, h: HitEv): void {
+    this.musicNote(s, 120, t, 0.2, h.gain, 0.003, 0, 46);
+  }
+
+  /** Gürültü vuruşu (parmak şıklatma / shaker): süzülmüş kısa gürültü. */
+  private noiseHit(
+    s: MusicSession,
+    t: number,
+    gain: number,
+    type: BiquadFilterType,
+    hz: number,
+    q: number,
+    dur: number,
+  ) {
+    const a = this.audio!;
+    const src = a.ctx.createBufferSource();
+    src.buffer = a.noise;
+    const f = a.ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = hz;
+    f.Q.value = q;
+    const g = a.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f);
+    f.connect(g);
+    g.connect(s.bus);
+    src.onended = () => {
+      s.sources.delete(src);
+      f.disconnect();
+      g.disconnect();
+    };
+    src.start(t, Math.random() * 1.5);
+    src.stop(t + dur + 0.02);
+    s.sources.add(src);
+  }
+
+  /** Akor: her nota iki hafif ayrık sinüs; yavaş girer, bir sonraki akorla örtüşerek söner. */
+  private padChord(s: MusicSession, chord: readonly number[], t: number, dur: number): void {
+    const ctx = this.audio!.ctx;
+    for (const f of chord)
+      for (let d = -1; d <= 1; d += 2) {
+        const o = ctx.createOscillator(),
+          g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = f;
+        o.detune.value = d * 6;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(s.track.padGain, t + Math.min(1.6, dur * 0.4));
+        g.gain.linearRampToValueAtTime(s.track.padGain * 0.7, t + dur);
+        g.gain.linearRampToValueAtTime(0.0001, t + dur + 1.2);
+        this.musicSource(s, o, g, s.pad, t, t + dur + 1.3);
+      }
+  }
+
+  /**
+   * Tek nota. `harm`: oktav kısmisinin kazanç oranı (0 = yok); `glide`: perde bu frekansa iner (kick, iniş süsü);
+   * `type`: dalga biçimi (bas üçgen, diğerleri sinüs).
+   */
+  private musicNote(
+    s: MusicSession,
+    f: number,
+    t: number,
+    dur: number,
+    gain: number,
+    attack: number,
+    harm: number,
+    glide = 0,
+    type: OscillatorType = 'sine',
+  ) {
+    const ctx = this.audio!.ctx;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(f, t);
+    if (glide > 0) o.frequency.exponentialRampToValueAtTime(glide, t + dur * 0.6);
+    this.musicSource(s, o, g, s.bus, t, t + dur + 0.05);
+    if (harm > 0) {
+      const o2 = ctx.createOscillator(),
+        g2 = ctx.createGain();
+      o2.type = 'sine';
+      o2.frequency.value = f * 2;
+      g2.gain.value = harm;
+      this.musicSource(s, o2, g2, g, t, t + dur + 0.05);
+    }
+  }
+
+  /** Osilatörü kazanca, kazancı hedefe bağlar; oturuma kaydeder, bitince kaydı silinir ve kazanç ayrılır. */
+  private musicSource(s: MusicSession, o: OscillatorNode, g: GainNode, to: AudioNode, t0: number, t1: number) {
+    o.connect(g);
+    g.connect(to);
+    o.onended = () => {
+      s.sources.delete(o);
+      g.disconnect();
+    };
+    o.start(t0);
+    o.stop(t1);
+    s.sources.add(o);
+  }
+
   stopMusic(): void {
     const a = this.audio,
       s = this.session;
@@ -556,8 +824,19 @@ export class Sound {
     // Node/test ortamında süreci tutmaz
     (release as { unref?: () => void }).unref?.();
   }
-  setMusic(want: boolean): void {
-    this.wantMusic = want;
+  /**
+   * NS4-39: uygulamanın istediği müzik. 'menu': ana menü, mola, oyun sonu; 'game': oyun; 'off': sessiz.
+   * `delay` (sn): yeni parçanın girişi gecikir (ör. oyun sonu sesi önce duyulsun). Ayar kapalıysa çalmaz.
+   */
+  /** NS4-40: oyun müziği bağlamı (her karede çağrılabilir; ölçü başında okunur). */
+  setMusicContext(level: number, room: number): void {
+    this.musicLevel = level;
+    this.musicRoom = room;
+  }
+  setMusic(mode: MusicMode, delay = 0): void {
+    this.mode = mode;
+    this.startDelay = delay;
     this.applySettings();
+    this.startDelay = 0;
   }
 }

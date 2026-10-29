@@ -104,9 +104,7 @@ describe('Beklet ve Sıradaki parçaları panel içinde', () => {
   it.each(TARGETS)('%i×%i', (W, H) => {
     const L = computeLayout(W, H);
     expect(within(pieceBox(L.holdSlot.x, L.holdSlot.y, L.mini), L.hold), 'hold').toBe(true);
-    L.nextSlots.forEach((s, k) => {
-      expect(within(pieceBox(s.x, s.y, k === 0 ? L.miniBig : L.mini), L.next), `next ${k}`).toBe(true);
-    });
+    expect(within(pieceBox(L.nextSlot.x, L.nextSlot.y, L.miniBig), L.next), 'next').toBe(true);
   });
 });
 
@@ -128,5 +126,23 @@ describe('resize ve yön değişimi', () => {
     expect(land.portrait).toBe(false);
     expect(port.portrait).toBe(true);
     for (const L of [land, port]) expect(L.board.h).toBe(L.board.w * 2);
+  });
+});
+
+// NS4-38: tek "Sıradaki" paneli Beklet ile aynı ölçüde; tıkanıklık kartı ekranda, tahtaya ve butonlara binmez
+const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+describe('NS4-38: Sıradaki tek parça, skor ve tıkanıklık kartı', () => {
+  it.each(TARGETS)('%i×%i', (W, H) => {
+    const L = computeLayout(W, H);
+    expect([L.next.w, L.next.h]).toEqual([L.hold.w, L.hold.h]);
+    for (const r of [L.cong, L.stats]) {
+      expect(r.x).toBeGreaterThanOrEqual(0);
+      expect(r.x + r.w).toBeLessThanOrEqual(W);
+      expect(r.w).toBeGreaterThan(0);
+      for (const o of [L.board, L.next, L.hold, L.btnHold, L.btnCyc, L.btnSneeze, L.btnPause])
+        expect(overlaps(r, o)).toBe(false);
+    }
+    expect(overlaps(L.cong, L.stats)).toBe(false);
+    if (L.portrait) expect(L.cong.y + L.cong.h).toBeLessThanOrEqual(L.board.y);
   });
 });

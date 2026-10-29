@@ -3,6 +3,8 @@
    start / pause / resume / toMenu / oyun sonu akışı. Oyun kuralı hesaplamaz;
    Game, View, Sound, input, UI, storage ve analitiği birbirine bağlar.
    NS4-03: main.ts'ten taşındı; adımların sırası değişmedi.
+   NS4-39: müzik: oyunda "Nefes", ana menü / mola / oyun sonunda "Bahçe"
+   (molada ayar değişikliği hemen duyulur; oyun sonu sesinden sonra girer).
    ===================================================================== */
 import type * as PIXI from 'pixi.js';
 import type { Game } from '../game/Game';
@@ -15,13 +17,16 @@ import { meta, saveMeta } from '../storage/progress';
 import { track } from '../analytics/analytics';
 import { hideDanger, forgetDanger, clearSessionHud } from '../ui/hud';
 import { award, resetNewBadges } from '../ui/badges';
-import { setTip, show, renderGameOver } from '../ui/screens';
+import { setTip, show, renderGameOver, renderStartBest } from '../ui/screens';
 import { renderFinal } from '../ui/sinusMap';
 import { popup } from '../ui/notifications';
 import { FREE_GOAL, FREE_NAME } from '../content/rooms';
 import type { Tutorial } from '../tutorial/Tutorial';
 import { addLocalScore, type LocalScore } from '../leaderboard/localScores';
 import { loadNickname, newGameId } from '../leaderboard/nickname';
+
+/** NS4-39: oyun sonunda menü müziği bu kadar sonra girer (sn; oyun sonu sesi önce duyulur). */
+export const GAME_OVER_MUSIC_DELAY = 1.6;
 
 export interface LifecycleDeps {
   game: Game;
@@ -90,7 +95,7 @@ export function createLifecycle({
     resetInput();
     appState = 'playing';
     show(null);
-    sound.setMusic(true);
+    sound.setMusic('game');
     tutorial?.onGameStart();
     track('game_start', { best: meta.best });
   }
@@ -103,7 +108,7 @@ export function createLifecycle({
     resetInput();
     setTip('tip-pause');
     show('scr-pause');
-    sound.setMusic(false);
+    sound.setMusic('menu');
     hideDanger();
     forgetDanger();
     tutorial?.onPause(); // NS4-12: kart gizlenir, adım korunur
@@ -113,7 +118,7 @@ export function createLifecycle({
     app.ticker.start();
     appState = 'playing';
     show(null);
-    sound.setMusic(true);
+    sound.setMusic('game');
     tutorial?.onResume();
   }
   function toMenu() {
@@ -121,8 +126,9 @@ export function createLifecycle({
     app.ticker.start();
     appState = 'menu';
     setTip('tip-start');
+    renderStartBest(meta.best); // NS4-41
     show('scr-start');
-    sound.setMusic(false);
+    sound.setMusic('menu');
     // NS4-07: yarım oyunun geçici HUD durumu menüde kalmaz (skor bilerek kaydedilmez, NS4-01 Not E)
     clearSessionHud();
     tutorial?.onSessionEnd(); // yarım öğretici tamamlanmış sayılmaz
@@ -200,7 +206,7 @@ export function createLifecycle({
       sound.over();
       buzz(HAPTIC.over);
     }
-    sound.setMusic(false);
+    sound.setMusic('menu', GAME_OVER_MUSIC_DELAY);
     resetInput();
     appState = 'over';
     hideDanger();
