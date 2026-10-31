@@ -3,9 +3,20 @@
    En iyi 10 tamamlanmış oyun. fn_meta (best/totalLines/rozetler) ayrı ve
    değişmeden kalır. Kayıtlar yüklenirken doğrulanır; geçersiz/bozuk
    kayıtlar atılır, aynı oyun (gameId) iki kez eklenmez.
+   Kural seti: her kayıt oynandığı kural setini taşır (RULESET); liste
+   yalnızca güncel kural setini gösterir. Alanı olmayan eski kayıtlar
+   LEGACY_RULESET sayılır, silinmez; her kural seti kendi en iyi 10'unu
+   saklar (yeni kayıtlar eskileri itip silmez).
    ===================================================================== */
 import { store } from '../storage/store';
-import { GAME_RULES, SCORE_LIMITS, validateNickname } from '../../supabase/functions/_shared/scoreRules.ts';
+import {
+  GAME_RULES,
+  LEGACY_RULESET,
+  RULESET,
+  RULESET_RE,
+  SCORE_LIMITS,
+  validateNickname,
+} from '../../supabase/functions/_shared/scoreRules.ts';
 
 export const LOCAL_SCORES_KEY = 'scores';
 export const LOCAL_SCORES_VERSION = 1;
@@ -24,6 +35,8 @@ export interface LocalScore {
   readonly recordedAt: number;
   /** Global tabloya başarıyla gönderildi (aynı oyun tekrar gönderilmez). */
   readonly submitted: boolean;
+  /** Oyunun kural seti (yeni kayıtlarda RULESET; alanı olmayan eski kayıtlarda LEGACY_RULESET). */
+  readonly ruleset: string;
 }
 interface Stored {
   readonly v: number;
@@ -54,6 +67,7 @@ export function normalizeLocalScore(raw: unknown): LocalScore | null {
     durationSeconds: r.durationSeconds,
     recordedAt: r.recordedAt,
     submitted: r.submitted === true,
+    ruleset: typeof r.ruleset === 'string' && RULESET_RE.test(r.ruleset) ? r.ruleset : LEGACY_RULESET,
   };
 }
 
@@ -62,8 +76,8 @@ export function compareScores(a: LocalScore, b: LocalScore): number {
   return b.score - a.score || a.recordedAt - b.recordedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
-/** Ham depo değerinden doğrulanmış, sıralı, tekrarsız en çok 10 kayıt. */
-export function normalizeLocalScores(raw: unknown): LocalScore[] {
+/** Ham depo değerinden bütün kural setlerinin doğrulanmış, sıralı, tekrarsız kayıtları (her kural seti en çok 10). */
+export function normalizeAllLocalScores(raw: unknown): LocalScore[] {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return [];
   const r = raw as Partial<Record<keyof Stored, unknown>>;
   if (r.v !== LOCAL_SCORES_VERSION || !Array.isArray(r.entries)) return [];
@@ -75,11 +89,28 @@ export function normalizeLocalScores(raw: unknown): LocalScore[] {
     seen.add(s.id);
     out.push(s);
   }
-  return out.sort(compareScores).slice(0, LOCAL_SCORES_MAX);
+  out.sort(compareScores);
+  const perSet = new Map<string, number>();
+  return out.filter((e) => {
+    const n = (perSet.get(e.ruleset) ?? 0) + 1;
+    perSet.set(e.ruleset, n);
+    return n <= LOCAL_SCORES_MAX;
+  });
 }
 
+/** Ham depo değerinden güncel kural setinin doğrulanmış, sıralı, tekrarsız en çok 10 kaydı. */
+export function normalizeLocalScores(raw: unknown, ruleset: string = RULESET): LocalScore[] {
+  return normalizeAllLocalScores(raw).filter((e) => e.ruleset === ruleset);
+}
+
+/** Güncel kural setinin listesi (Skorlar ekranı ve oyun sonu). */
 export function loadLocalScores(): LocalScore[] {
   return normalizeLocalScores(store.get(LOCAL_SCORES_KEY, null));
+}
+
+/** Bütün kural setlerinin kayıtları (saklarken eski kayıtlar korunur). */
+function loadAll(): LocalScore[] {
+  return normalizeAllLocalScores(store.get(LOCAL_SCORES_KEY, null));
 }
 
 function save(entries: readonly LocalScore[]): void {
@@ -88,22 +119,24 @@ function save(entries: readonly LocalScore[]): void {
 }
 
 /**
- * Tamamlanmış oyunu ekler (aynı id varsa eklemez). En iyi 10 dışında kalırsa listeye girmez.
- * Dönüş: güncel liste ve kaydın listeye girip girmediği.
+ * Tamamlanmış oyunu kendi kural setinin listesine ekler (aynı id varsa eklemez). O kural setinin en iyi 10'u dışında
+ * kalırsa listeye girmez; başka kural setlerinin (eski) kayıtları dokunulmadan saklanır.
+ * Dönüş: kaydın kural setinin güncel listesi ve kaydın listeye girip girmediği.
  */
 export function addLocalScore(entry: LocalScore): { readonly entries: LocalScore[]; readonly added: boolean } {
-  const current = loadLocalScores();
+  const all = loadAll();
   const valid = normalizeLocalScore(entry);
-  if (!valid || current.some((e) => e.id === valid.id)) return { entries: current, added: false };
-  const next = [...current, valid].sort(compareScores).slice(0, LOCAL_SCORES_MAX);
+  const own = (rs: string) => all.filter((e) => e.ruleset === rs);
+  if (!valid || all.some((e) => e.id === valid.id)) return { entries: own(valid?.ruleset ?? RULESET), added: false };
+  const next = [...own(valid.ruleset), valid].sort(compareScores).slice(0, LOCAL_SCORES_MAX);
   const added = next.some((e) => e.id === valid.id);
-  if (added) save(next);
+  if (added) save([...all.filter((e) => e.ruleset !== valid.ruleset), ...next].sort(compareScores));
   return { entries: next, added };
 }
 
 /** Kayıt alanlarını günceller (takma ad, gönderildi işareti). Kayıt yoksa değişiklik yapılmaz. */
 export function updateLocalScore(id: string, patch: Partial<Pick<LocalScore, 'nickname' | 'submitted'>>): void {
-  const current = loadLocalScores();
-  if (!current.some((e) => e.id === id)) return;
-  save(current.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  const all = loadAll();
+  if (!all.some((e) => e.id === id)) return;
+  save(all.map((e) => (e.id === id ? { ...e, ...patch } : e)));
 }

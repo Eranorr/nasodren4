@@ -81,6 +81,8 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
       sound.sneeze();
       buzz(HAPTIC.sneeze);
       popup('HAPŞUU!', 'Çok yaşa!', 'sneeze');
+    } else if (e.kind === 'flush') {
+      sound.clear(1, 0); // sıklamen çekirdeği drenajı: mevcut tekli satır sesi, metin yok
     }
   });
   // NS4-03: powerup_use analitiği Game.useCyc/useSyn içinden buraya taşındı. Orijinalde track() emit('clearstart')
@@ -93,7 +95,9 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
   game.on('clearend', () => view.onClearEnd());
   game.on('scored', (e) => {
     view.onScored(e); // NS4-15: temizleme dili (Ozmotik / Nörorefleks); Game bunu clearstart'tan önce yayar
-    sound.clear(e.n, e.tspin);
+    // 4'ten fazla satır (çekirdek çökmesinin bıraktığı tam sıra + Tetris) dört satır gibi sunulur
+    const n4 = Math.min(e.n, 4);
+    sound.clear(n4, e.tspin);
     if (e.n) buzz(HAPTIC.clear(e.n));
     // NS4-19: oyundaki ilk drenaj (Game, scored'u satır toplamını artırmadan önce yayar: game.lines henüz 0)
     if (e.n > 0 && game.lines === 0)
@@ -103,15 +107,15 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
       sub = '',
       cls = '';
     if (e.tspin) {
-      big = (e.tspin === 1 ? 'Mini ' : '') + 'T-spin' + (e.n ? ' ' + names[e.n].toLowerCase() : '');
+      big = (e.tspin === 1 ? 'Mini ' : '') + 'T-spin' + (n4 ? ' ' + names[n4].toLowerCase() : '');
       sub = 'Usta hamle!';
       cls = 'cyc';
-    } else if (e.n === 4) {
+    } else if (n4 === 4) {
       big = 'TETRİS';
       sub = 'Dört satır birden!';
       cls = 'cyc';
     } else if (e.n >= 2) {
-      big = names[e.n] + ' satır';
+      big = names[n4] + ' satır';
     }
     if (e.b2b) sub = 'Art arda · ' + sub;
     if (e.combo >= 2) {
@@ -119,7 +123,7 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
       else sub = (sub ? sub + ' · ' : '') + `kombo ×${e.combo}`;
     }
     if (big) popup(big, sub, cls);
-    if (e.n === 4) {
+    if (n4 === 4) {
       award('ozmotik');
       relief = 'tetris';
     }
@@ -134,6 +138,15 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
   // NS4-24: sentetik açıcı / rebound / garbage kaldırıldı; hapşırık rozeti
   game.on('powerdone', (e) => {
     if (e.kind === 'sneeze' && game.sneezeUses >= 3) award('hapsu');
+  });
+  // Sıklamen çekirdeği: her durum geçişi Game'de bir kez yayılır (görünüm Game alanlarını kendisi okur)
+  game.on('core', (e) => {
+    const at = { room: game.room, level: game.level };
+    if (e.kind === 'seen') track('core_piece_seen', at);
+    else if (e.kind === 'activated') track('core_activated', at);
+    else if (e.kind === 'expired') track('core_expired', at);
+    else if (e.kind === 'triggered') track('core_triggered', at);
+    else if (e.kind === 'drained') track('core_drain_completed', { ...at, cells: e.cells, moved: e.moved });
   });
   // NS4-27: Sinüs Odaları
   game.on('roomstart', (e) => {

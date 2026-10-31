@@ -18,6 +18,7 @@ const body = () => ({
   level: 3,
   durationSeconds: 245,
   clientVersion: 'web-ns4-18',
+  ruleset: 'cyclamen-flow-v1',
 });
 const SECRET = 'service-role-SECRET-should-never-leak';
 function deps(over: Partial<HandlerDeps> = {}, env: Record<string, string> = {}) {
@@ -52,6 +53,7 @@ describe('submit-score: yöntem, içerik türü, boyut, JSON', () => {
         duration_seconds: 245,
         game_hash: await sha256Hex('game:pepper-1:3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b'),
         client_version: 'web-ns4-18',
+        ruleset: 'cyclamen-flow-v1',
       },
     ]);
     // ham oyun kimliği, IP veya user-agent saklanmaz

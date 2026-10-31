@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { CFG, COLS, ROWS } from '../../src/config/gameConfig';
 import { Game } from '../../src/game/Game';
 import { PIECE } from '../../src/game/pieces';
+import { FLOW } from '../../src/game/cyclamenFlow';
 import type { GameEventName, GameEvents } from '../../src/types/events';
 import type { BlockId, CellValue, RotationState, TetrominoType } from '../../src/types/game';
 
@@ -67,9 +68,13 @@ export function stackRows(g: Game, rows: number): void {
   setupWell(g, rows, PIECE.GARBAGE);
 }
 
-/** Aktif parçayı verilen konuma koyar (spawn() ile aynı sayaç sıfırlamaları, kuyruktan çekmeden). */
+/**
+ * Aktif parçayı verilen konuma koyar (spawn() ile aynı sayaç sıfırlamaları, kuyruktan çekmeden). Yerine geçilen parçanın
+ * sıklamen çekirdeği taşınmaz (core = false); çekirdek isteyen test placePiece'ten sonra g.core = true yazar.
+ */
 export function placePiece(g: Game, type: TetrominoType, rot: RotationState, x: number, y: number): void {
   g.type = type;
+  g.core = false;
   g.rot = rot;
   g.x = x;
   g.y = y;
@@ -91,7 +96,14 @@ export function dropVerticalI(g: Game): void {
 export function finishClear(g: Game): void {
   const p = g.pending;
   if (!p) throw new Error('finishClear: bekleyen temizleme yok');
-  const ms = { lines: CFG.lineClearMs, sneeze: CFG.sneezeMs, cyc: CFG.drainMs, room: CFG.roomClearMs };
+  const ms = {
+    lines: CFG.lineClearMs,
+    sneeze: CFG.sneezeMs,
+    cyc: CFG.drainMs,
+    room: CFG.roomClearMs,
+    flush: FLOW.rowMs,
+    collapse: FLOW.collapseMs,
+  };
   g.update(ms[p.kind]);
 }
 
@@ -111,6 +123,7 @@ const EVENT_FLAGS: Record<GameEventName, true> = {
   roomstart: true,
   roomclear: true,
   allclear: true,
+  core: true,
 };
 /** GameEvents içindeki tüm olay adları (Record tipi eksik/fazla adı derleme hatası yapar). */
 export const ALL_EVENTS = Object.keys(EVENT_FLAGS) as GameEventName[];

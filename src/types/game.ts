@@ -29,8 +29,11 @@ export type KickTable = Readonly<Record<RotationTransition, readonly Offset[]>>;
 export type GameState = 'idle' | 'play' | 'clearing' | 'draining' | 'over';
 /** NS4-31: 'complete': dört sinüs açıldıktan sonra final ekranında "Bitir" (yenilgi değil). */
 export type GameOverReason = 'blockout' | 'lockout' | 'overlap' | 'complete';
-/** 'lines' satır temizleme, 'cyc' sıklamen özütü, 'sneeze' hapşırık (NS4-24: 'syn' sentetik açıcı yerine). */
-export type PendingClearKind = 'lines' | 'cyc' | 'sneeze' | 'room';
-export type PowerupKind = Exclude<PendingClearKind, 'lines' | 'room'>;
+/**
+ * 'lines' satır temizleme, 'cyc' sıklamen özütü, 'sneeze' hapşırık (NS4-24: 'syn' sentetik açıcı yerine), 'room' oda
+ * açılışı; 'flush' sıklamen çekirdeği drenajı ve 'collapse' ardından renkli hücrelerin sütunda inmesi.
+ */
+export type PendingClearKind = 'lines' | 'cyc' | 'sneeze' | 'room' | 'flush' | 'collapse';
+export type PowerupKind = Exclude<PendingClearKind, 'lines' | 'room' | 'flush' | 'collapse'>;
 /** 0 yok, 1 mini, 2 tam T-spin. */
 export type TSpinKind = 0 | 1 | 2;

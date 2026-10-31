@@ -11,6 +11,7 @@
 import { CLIENT_VERSION, READ_RPC, SUBMIT_FUNCTION, type LeaderboardConfig } from './config';
 import {
   GAME_RULES,
+  RULESET,
   SCORE_LIMITS,
   validateNickname,
   validateScorePayload,
@@ -37,7 +38,7 @@ export type SubmitResult =
 export interface LeaderboardClient {
   readonly enabled: boolean;
   fetchTop(limit?: number): Promise<FetchResult>;
-  submit(payload: Omit<ScorePayload, 'clientVersion'>): Promise<SubmitResult>;
+  submit(payload: Omit<ScorePayload, 'clientVersion' | 'ruleset'>): Promise<SubmitResult>;
 }
 
 export interface ClientOptions {
@@ -98,7 +99,7 @@ export function createLeaderboardClient(cfg: LeaderboardConfig | null, opts: Cli
     enabled: true,
     async fetchTop(limit = 10) {
       const n = Math.max(1, Math.min(10, Math.floor(limit)));
-      const res = await request(`${cfg.url}/rest/v1/rpc/${READ_RPC}?limit_count=${n}`, {
+      const res = await request(`${cfg.url}/rest/v1/rpc/${READ_RPC}?limit_count=${n}&ruleset_name=${RULESET}`, {
         method: 'GET',
         headers: { ...authHeaders(cfg.key), Accept: 'application/json' },
       });
@@ -118,7 +119,7 @@ export function createLeaderboardClient(cfg: LeaderboardConfig | null, opts: Cli
       return { ok: true, entries };
     },
     async submit(p) {
-      const payload = { ...p, clientVersion: CLIENT_VERSION };
+      const payload = { ...p, clientVersion: CLIENT_VERSION, ruleset: RULESET };
       if (!validateScorePayload(payload).ok) return { ok: false, reason: 'invalid' };
       const res = await request(`${cfg.url}/functions/v1/${SUBMIT_FUNCTION}`, {
         method: 'POST',

@@ -9,10 +9,25 @@
    bulutçuklarla başlar; hepsi temizlenince oda açılır, sonra Serbest nefes.
    NS4-22: Tam Ferahlık: satır temizlemesi tahtayı tamamen boşaltırsa bonus.
    NS4-30: oda boşlukları hava kanalları hâlinde hizalanır; açıklık oranı.
+   Sıklamen çekirdeği (kural seti cyclamen-flow-v1, bkz. cyclamenFlow.ts ve
+   docs/CYCLAMEN-CORE-V3-FINAL.md): torba başına bir çekirdekli parça,
+   yakınlıkla aktifleşme, sonraki satır temizlemesinde kontrollü drenaj ve
+   drenajın dokunduğu sütunlarda renkli hücre çökmesi.
    ===================================================================== */
 import { COLS, ROWS, HIDDEN, VIS, CFG, ROOMS } from '../config/gameConfig';
 import { PIECE, SHAPES, KICK_JLSTZ, KICK_I, kickKey, nextRotation } from './pieces';
 import { LINK, PLANTS } from './plants';
+import {
+  CORE,
+  FLOW,
+  collapseColumns,
+  findCore,
+  grayCellsInSpan,
+  hasCore,
+  nearGrayRow,
+  shiftedRow,
+  withCore,
+} from './cyclamenFlow';
 import type { GameEventArgs, GameEventListener, GameEventName, PendingClear } from '../types/events';
 import type {
   GameOverReason,
@@ -72,6 +87,39 @@ export class Game {
   roomsCleared!: number;
   /** NS4-22: bu oyundaki Tam Ferahlık sayısı. */
   allClears!: number;
+  /**
+   * Sıklamen çekirdeği (bkz. cyclamenFlow.ts): aktif, kuyruktaki (queue ile aynı sıra) ve bekletilen parçanın çekirdeği;
+   * torbada çekirdeğin düştüğü dizin (-1 yok); sıradaki satır temizlemesinden sonra drenaj başlatacak çekirdek hücresi
+   * (-1 yok); son drenajın sütunu, sırası (-1 yok) ve hücre sayısı. coreLife: tahtadaki aktif çekirdeğin kalan parça
+   * ömrü (0: yok). Aktifleşirken sabitlenen hedef sıra (-1 yok; satır silindikçe kayar) ve çekirdek sütunu; yakınlık
+   * sağlanamayıp sönen çekirdek (fizzleAt: son sönen hücre, fizzleVer: görünüm için sayaç); son çökmenin indirdiği
+   * hücre sayısı ve tam sıra bırakıp bırakmadığı; sayaçlar. coreReseen: oda geçişinde kuyruğa dönen çekirdekli parça
+   * yeniden doğunca 'seen' olayı tekrar yayılmaz.
+   */
+  core!: boolean;
+  queueCore!: boolean[];
+  holdCore!: boolean;
+  bagCore!: number;
+  flushFrom!: number;
+  flushCol!: number;
+  flushRow!: number;
+  lastFlush!: number;
+  coreLife!: number;
+  coresArmed!: number;
+  coresExpired!: number;
+  coreTargetRow!: number;
+  coreTargetCol!: number;
+  coresFizzled!: number;
+  fizzleAt!: number;
+  fizzleVer!: number;
+  collapseFullRows!: number;
+  lastCollapseFull!: boolean;
+  lastCollapseMoves!: number;
+  coreReseen!: boolean;
+  collapsedCells!: number;
+  coresDealt!: number;
+  flushes!: number;
+  flushedCells!: number;
   elapsed!: number;
   pieceVer!: number;
   boardVer!: number;
@@ -122,6 +170,30 @@ export class Game {
     this.plant.fill(0);
     this.bag = [];
     this.queue = [];
+    this.core = false;
+    this.queueCore = [];
+    this.holdCore = false;
+    this.bagCore = -1;
+    this.flushFrom = -1;
+    this.flushCol = -1;
+    this.flushRow = -1;
+    this.lastFlush = 0;
+    this.coreLife = 0;
+    this.coresArmed = 0;
+    this.coresExpired = 0;
+    this.coreTargetRow = -1;
+    this.coreTargetCol = -1;
+    this.coresFizzled = 0;
+    this.fizzleAt = -1;
+    this.fizzleVer = 0;
+    this.collapseFullRows = 0;
+    this.lastCollapseFull = false;
+    this.lastCollapseMoves = 0;
+    this.coreReseen = false;
+    this.collapsedCells = 0;
+    this.coresDealt = 0;
+    this.flushes = 0;
+    this.flushedCells = 0;
     this.fillQueue();
     this.hold = 0;
     this.canHold = true;
@@ -177,6 +249,8 @@ export class Game {
     this.room = i;
     this.board.fill(0);
     this.plant.fill(0);
+    this.coreLife = 0; // oda değişince tahtadaki aktif çekirdek de gider (tetiklemez)
+    this.coreTargetRow = -1;
     const def = ROOMS[i];
     if (def) {
       const seg = Math.ceil(def.rows / def.channels);
@@ -221,8 +295,11 @@ export class Game {
     if (this.type) {
       this.queue.unshift(this.type);
       this.dealt--;
+      this.queueCore.unshift(this.core);
+      this.coreReseen = this.core; // yeniden doğunca 'seen' tekrar yayılmasın
     }
     this.type = 0;
+    this.core = false;
     this.pieceVer++;
     this.queueVer++;
     const bonus = CFG.roomBonus * (this.room + 1) * this.level;
@@ -248,8 +325,13 @@ export class Game {
           b[j] = t;
         }
         this.bag = b;
+        // sıklamen çekirdeği: torbanın bir parçası (karıştırmadan sonra rastgele bir konum)
+        this.bagCore = (Math.random() * 7) | 0;
       }
+      const core = this.bag.length - 1 === this.bagCore;
+      if (core) this.coresDealt++;
       this.queue.push(this.bag.pop()!); // NS4-02: bag boşsa üstte yeniden dolduruluyor
+      this.queueCore.push(core);
     }
   }
 
@@ -263,14 +345,20 @@ export class Game {
     return true;
   }
 
-  spawn(type?: TetrominoType) {
+  /** `core`: verilen parçanın çekirdeği (hold'dan dönen parça); kuyruktan çekilen parça kendi çekirdeğini getirir. */
+  spawn(type?: TetrominoType, core = false) {
+    let fresh = false; // kuyruktan ilk kez gelen çekirdekli parça ('seen' bir kez)
     if (!type) {
       type = this.queue.shift()!;
+      core = this.queueCore.shift() === true;
+      fresh = core && !this.coreReseen;
+      this.coreReseen = false;
       this.fillQueue();
       this.queueVer++;
       this.dealt++;
     } // NS4-02: kuyruk her zaman 8 elemanlı
     this.type = type;
+    this.core = core;
     this.rot = 0;
     this.x = 3;
     this.y = 0;
@@ -283,6 +371,7 @@ export class Game {
     this.lowestY = this.y;
     this.pieceVer++;
     this.emit('spawn');
+    if (fresh) this.emit('core', { kind: 'seen' });
   }
 
   grounded() {
@@ -363,14 +452,18 @@ export class Game {
 
   doHold() {
     if (this.state !== 'play' || !this.canHold) return false;
-    const cur = this.type;
+    const cur = this.type,
+      curCore = this.core;
     this.canHold = false;
     if (this.hold) {
-      const h = this.hold;
+      const h = this.hold,
+        hc = this.holdCore;
       this.hold = cur;
-      this.spawn(h);
+      this.holdCore = curCore;
+      this.spawn(h, hc);
     } else {
       this.hold = cur;
+      this.holdCore = curCore;
       this.spawn();
     }
     this.queueVer++;
@@ -413,15 +506,38 @@ export class Game {
       const cx = this.x + s[i][0],
         cy = this.y + s[i][1];
       this.board[cy * COLS + cx] = this.type;
-      this.plant[cy * COLS + cx] = plant[i];
+      this.plant[cy * COLS + cx] = withCore(plant[i], this.core);
       cells.push(cy * COLS + cx);
       if (cy >= HIDDEN) allHidden = false;
+    }
+    // sıklamen çekirdeği: yalnızca yakınında gri varsa aktifleşir (eski aktif çekirdeğin yerini alır); yoksa söner
+    let armed = false,
+      fizzled = false;
+    if (this.core) {
+      const head = cells.find((k) => hasCore(this.plant[k])) ?? -1;
+      const row = head >= 0 ? nearGrayRow(this.board, head) : -1;
+      if (row >= 0) {
+        this.clearCoreExcept(head);
+        this.coreTargetRow = row;
+        this.coreTargetCol = head % COLS;
+        this.coreLife = FLOW.coreLife;
+        this.coresArmed++;
+        armed = true;
+      } else if (head >= 0) {
+        this.plant[head] &= ~CORE;
+        this.coresFizzled++;
+        this.fizzleAt = head;
+        this.fizzleVer++;
+        fizzled = true;
+      }
     }
     this.boardVer++;
     this.canHold = true;
     if (this.sneezePieces < CFG.sneezePieces) this.sneezePieces++;
     this.emit('lock', cells);
     if (allHidden) return this.gameOver('lockout');
+    if (armed) this.emit('core', { kind: 'activated', row: this.coreTargetRow, col: this.coreTargetCol });
+    else if (fizzled) this.emit('core', { kind: 'fizzled' });
 
     const full: number[] = [];
     for (let y = 0; y < ROWS; y++) {
@@ -435,11 +551,27 @@ export class Game {
     }
     this.scoreClear(full.length, tspin);
     if (full.length && this.emptyExcept(full)) this.scoreAllClear(full.length);
+    if (this.coreLife > 0) {
+      // aktif çekirdeği ilk standart satır temizlemesi tetikler (çekirdeğin kendi parçasınınki dahil);
+      // temizleme olmazsa yeni parça ömürden düşer, ömür biterse çekirdek söner
+      if (full.length) {
+        this.flushFrom = findCore(this.board, this.plant);
+        this.coreLife = 0;
+        this.emit('core', { kind: 'triggered' });
+      } else if (!armed && --this.coreLife === 0) {
+        this.clearCore();
+        this.coreTargetRow = -1;
+        this.coresExpired++;
+        this.boardVer++;
+        this.emit('core', { kind: 'expired' });
+      }
+    }
     if (full.length) {
       this.state = 'clearing';
       this.stateT = CFG.lineClearMs;
       this.pending = { kind: 'lines', rows: full };
       this.type = 0;
+      this.core = false;
       this.pieceVer++;
       this.emit('clearstart', { rows: full, kind: 'lines' });
     } else {
@@ -448,10 +580,14 @@ export class Game {
   }
 
   scoreClear(n: number, tspin: TSpinKind) {
+    // Sıklamen çekirdeği çökmesinin bıraktığı tam sıra bir sonraki kilitte silinir; o kilit 4'ten fazla satır
+    // silebilir. Puan tabloları 4 satırda (T-spin'de 3'te) doyar; 4 ve üstü Tetris gibi sayılır. n ≤ 4 için aynı.
+    const k = Math.min(n, 4),
+      t = Math.min(k, 3);
     const base =
-      tspin === 2 ? [400, 800, 1200, 1600][n] : tspin === 1 ? [100, 200, 400, 400][n] : [0, 100, 300, 500, 800][n];
+      tspin === 2 ? [400, 800, 1200, 1600][t] : tspin === 1 ? [100, 200, 400, 400][t] : [0, 100, 300, 500, 800][k];
     // NS4-06: tspin !== 0 ile ifade her zaman boolean (önceden T-spin'siz temizlemede 0 üretiyordu; doğruluk değeri aynı)
-    const difficult = n === 4 || (tspin !== 0 && n > 0);
+    const difficult = k === 4 || (tspin !== 0 && n > 0);
     let pts = base * this.level;
     let b2b = false;
     if (n > 0) {
@@ -466,7 +602,7 @@ export class Game {
     } else this.combo = -1;
     if (this.multT > 0) pts *= CFG.cycMult;
     this.score += pts;
-    if (n === 4) this.tetrises++;
+    if (k === 4) this.tetrises++;
     if (tspin && n > 0) this.tspins++;
     if (n > 0 || tspin) this.emit('scored', { n, tspin, b2b, combo: this.combo, pts });
     if (n > 0) {
@@ -613,7 +749,28 @@ export class Game {
       this.spawn();
       return;
     }
+    if (p.kind === 'flush') {
+      this.removeCells(p.cells ?? []);
+      this.score += FLOW.flushBonus;
+      this.emit('clearend', p);
+      if (this.beginCollapse(p.cells ?? [])) return;
+      this.emit('core', { kind: 'drained', cells: this.lastFlush, moved: 0 });
+      if (this.roomCleared()) this.beginRoomClear();
+      else this.spawn();
+      return;
+    }
+    if (p.kind === 'collapse') {
+      // tahta çökme başlarken güncellendi; satır temizlemesi ya da puan yok
+      this.emit('clearend', p);
+      this.emit('core', { kind: 'drained', cells: this.lastFlush, moved: this.lastCollapseMoves });
+      if (this.roomCleared()) this.beginRoomClear();
+      else this.spawn();
+      return;
+    }
     this.removeRows(p.rows);
+    // çekirdeğin sabit hedef sırası satırlarla kayar; kendisi silindiyse hedef kalmaz
+    if (this.coreTargetRow >= 0)
+      this.coreTargetRow = p.rows.includes(this.coreTargetRow) ? -1 : shiftedRow(this.coreTargetRow, p.rows);
     if (p.kind === 'cyc') {
       this.score += 150 * p.rows.length * this.level;
       this.multT = CFG.cycMultMs;
@@ -623,9 +780,96 @@ export class Game {
       this.emit('powerdone', { kind: 'sneeze', n: p.rows.length });
     }
     this.emit('clearend', p);
+    // güç aktif çekirdeğin hücresini sildiyse çekirdek tetiklemeden gider
+    if (this.coreLife > 0 && findCore(this.board, this.plant) < 0) {
+      this.coreLife = 0;
+      this.coreTargetRow = -1;
+    }
+    if (p.kind === 'lines' && this.flushFrom >= 0 && this.beginFlush()) return;
     if (this.roomCleared()) this.beginRoomClear();
     else if (p.kind === 'lines') this.spawn();
     else this.fixActiveOverlap();
+  }
+
+  /**
+   * Satır temizlemesi bitti ve aktif çekirdeği tetikledi: çekirdek tüketilir; aktifleşirken sabitlenen hedef sırada
+   * yalnızca çekirdek sütunu ±FLOW.span içindeki griler (en çok 5) akar ('draining', FLOW.rowMs; aktif parça yok).
+   * Hedef yoksa ya da aralıkta gri kalmadıysa false (akış normal sürer). Satır, seviye, kombo sayılmaz.
+   */
+  beginFlush(): boolean {
+    this.flushFrom = -1;
+    this.clearCore();
+    this.boardVer++;
+    const row = this.coreTargetRow;
+    this.coreTargetRow = -1;
+    this.flushRow = row;
+    const cells = row >= 0 ? grayCellsInSpan(this.board, row, this.coreTargetCol, FLOW.span) : [];
+    if (!cells.length) return false;
+    this.flushes++;
+    this.flushedCells += cells.length;
+    this.lastFlush = cells.length;
+    this.flushCol = this.coreTargetCol;
+    const p = { kind: 'flush', rows: [], cells } as const;
+    this.state = 'draining';
+    this.stateT = FLOW.rowMs;
+    this.pending = p;
+    this.emit('clearstart', p);
+    return true;
+  }
+
+  /**
+   * Drenajdan sonra, drenajın dokunduğu sütunlarda renkli hücreler aşağı iner (gri sabit; bkz.
+   * collapseColumns). İnen hücre varsa tahta hemen güncellenir ve FLOW.collapseMs süren ayrı bir evre başlar
+   * ('draining', aktif parça yok); yoksa false. Tam sıra oluşsa da burada temizlenmez (puan, satır, zincir yok).
+   */
+  beginCollapse(drained: readonly number[]): boolean {
+    const cols = new Set<number>();
+    for (const k of drained) cols.add(k % COLS);
+    const moves = collapseColumns(this.board, this.plant, cols);
+    this.lastCollapseFull = false;
+    this.lastCollapseMoves = moves.length;
+    if (!moves.length) return false;
+    this.boardVer++;
+    this.collapsedCells += moves.length;
+    // çökme tam sıra bıraktı mı: burada temizlenmez; sonraki kilitte normal satır kuralıyla (puan, kombo, b2b) silinir
+    for (let y = 0; y < ROWS && !this.lastCollapseFull; y++) {
+      let f = true;
+      for (let x = 0; x < COLS && f; x++) f = this.board[y * COLS + x] !== 0;
+      this.lastCollapseFull = f;
+    }
+    if (this.lastCollapseFull) this.collapseFullRows++;
+    const p = { kind: 'collapse', rows: [], moves } as const;
+    this.state = 'draining';
+    this.stateT = FLOW.collapseMs;
+    this.pending = p;
+    this.emit('clearstart', p);
+    return true;
+  }
+
+  /** `keep` dışındaki çekirdek bitlerini kaldırır (tahtada tek çekirdek). */
+  clearCoreExcept(keep: number) {
+    for (let k = 0; k < this.plant.length; k++)
+      if (k !== keep && this.board[k] && this.plant[k] & CORE) this.plant[k] &= ~CORE;
+  }
+
+  /** Tahtadaki çekirdek bitini kaldırır (hücre ve bitki kalır). */
+  clearCore() {
+    const k = findCore(this.board, this.plant);
+    if (k >= 0) this.plant[k] &= ~CORE;
+  }
+
+  /** Çekirdek drenajı: tek tek hücre siler (yerçekimi yok); komşu sapların bu hücreye uzanan bağlantısı kopar. */
+  removeCells(cells: readonly number[]) {
+    for (const k of cells) {
+      const x = k % COLS;
+      this.board[k] = 0;
+      this.plant[k] = 0;
+      if (k >= COLS) this.plant[k - COLS] &= ~LINK.down;
+      if (k < (ROWS - 1) * COLS) this.plant[k + COLS] &= ~LINK.up;
+      if (x > 0) this.plant[k - 1] &= ~LINK.right;
+      if (x < COLS - 1) this.plant[k + 1] &= ~LINK.left;
+    }
+    this.boardVer++;
   }
 
   fixActiveOverlap() {

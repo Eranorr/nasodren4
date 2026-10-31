@@ -21,6 +21,8 @@ export interface ScoreRow {
   readonly duration_seconds: number;
   readonly game_hash: string;
   readonly client_version: string;
+  /** Kural seti (doğrulamada yalnızca güncel RULESET kabul edilir). */
+  readonly ruleset: string;
 }
 export type InsertResult = 'ok' | 'duplicate' | 'error';
 
@@ -173,6 +175,7 @@ export async function handleSubmit(req: Request, deps: HandlerDeps): Promise<Res
       duration_seconds: p.durationSeconds,
       game_hash: await sha256Hex(`game:${pepper}:${p.gameId}`),
       client_version: p.clientVersion,
+      ruleset: p.ruleset,
     });
   } catch {
     result = 'error';

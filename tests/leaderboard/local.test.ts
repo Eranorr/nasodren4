@@ -21,6 +21,7 @@ const entry = (n: number, score: number, at = 1000 + n, extra: Record<string, un
   durationSeconds: 60,
   recordedAt: at,
   submitted: false,
+  ruleset: 'cyclamen-flow-v1',
   ...extra,
 });
 
@@ -94,6 +95,54 @@ describe('bozuk storage güvenle filtrelenir', () => {
       [id(1), ''],
       [id(6), ''],
     ]);
+  });
+});
+
+describe('kural seti (cyclamen-flow-v1)', () => {
+  /** Kural seti alanı olmayan eski (NS4-18) kayıt. */
+  const legacy = (n: number, score: number) =>
+    Object.fromEntries(Object.entries(entry(n, score)).filter(([k]) => k !== 'ruleset'));
+  const stored = () => JSON.parse(data.get('fn_scores') ?? '{}') as { entries: Record<string, unknown>[] };
+
+  it('eski kayıtlar (alan yok) silinmez ama güncel listede görünmez; legacy olarak ayrılır', async () => {
+    data.set('fn_scores', JSON.stringify({ v: 1, entries: [legacy(1, 9000), legacy(2, 8000)] }));
+    const m = await mod();
+    expect(m.loadLocalScores()).toEqual([]);
+    expect(m.normalizeLocalScores(JSON.parse(data.get('fn_scores') ?? '{}'), 'legacy').map((e) => e.id)).toEqual([
+      id(1),
+      id(2),
+    ]);
+    m.addLocalScore(entry(3, 100)); // yeni kural setinde ilk kayıt
+    expect(m.loadLocalScores().map((e) => e.id)).toEqual([id(3)]);
+    expect(
+      stored()
+        .entries.map((e) => e['id'])
+        .sort(),
+    ).toEqual([id(1), id(2), id(3)]); // eskiler korundu
+    m.updateLocalScore(id(3), { submitted: true });
+    expect(stored().entries).toHaveLength(3);
+  });
+
+  it('her kural seti kendi en iyi 10’unu tutar: yeni kayıtlar eskileri itip silmez', async () => {
+    data.set(
+      'fn_scores',
+      JSON.stringify({ v: 1, entries: Array.from({ length: 10 }, (_, i) => legacy(100 + i, 50_000 + i)) }),
+    );
+    const m = await mod();
+    for (let i = 1; i <= 12; i++) m.addLocalScore(entry(i, i * 100));
+    expect(m.loadLocalScores()).toHaveLength(10);
+    expect(m.loadLocalScores()[0]?.score).toBe(1200);
+    const all = m.normalizeAllLocalScores(JSON.parse(data.get('fn_scores') ?? '{}'));
+    expect(all.filter((e) => e.ruleset === 'legacy')).toHaveLength(10);
+    expect(all.filter((e) => e.ruleset === 'cyclamen-flow-v1')).toHaveLength(10);
+  });
+
+  it('bilinmeyen biçimli kural seti legacy sayılır; yeni kayıt kendi kural setini taşır', async () => {
+    const m = await mod();
+    expect(m.normalizeLocalScore({ ...entry(1, 5), ruleset: '<b>' })?.ruleset).toBe('legacy');
+    expect(m.normalizeLocalScore(legacy(2, 5))?.ruleset).toBe('legacy');
+    m.addLocalScore(entry(3, 7));
+    expect(stored().entries[0]).toMatchObject({ ruleset: 'cyclamen-flow-v1' });
   });
 });
 

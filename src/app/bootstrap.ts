@@ -248,5 +248,13 @@ export function bootstrap(): void {
     void import('../dev/audioDemo').then(({ createAudioDemo }) => {
       fn.sfx = createAudioDemo(sound, buzz);
     });
+    // sıklamen çekirdeği gösterimi ve durum (__fn.core)
+    void import('../dev/coreDemo').then(({ createCoreDemo }) => {
+      fn.core = createCoreDemo(game, lifecycle);
+    });
+    // gri bulutçuk teması gösterimi (__fn.collisionDemo)
+    void import('../dev/collisionDemo').then(({ createCollisionDemo }) => {
+      fn.collisionDemo = createCollisionDemo(game, view, lifecycle);
+    });
   }
 }

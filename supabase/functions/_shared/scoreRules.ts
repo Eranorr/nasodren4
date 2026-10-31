@@ -50,6 +50,16 @@ export const SCORE_LIMITS = {
 
 export const CLIENT_VERSION_MAX = 32;
 
+/**
+ * Oyun kural seti (sıklamen çekirdeği kalıcı oldu; bkz. docs/CYCLAMEN-CORE-V3-FINAL.md). Skorlar yalnızca aynı kural
+ * setiyle karşılaştırılır: yerel liste ve global tablo bu değere göre ayrılır; gönderimde yalnızca bu değer kabul edilir.
+ * Kural seti alanı olmayan (önceki sürümden kalan) kayıtlar LEGACY_RULESET sayılır ve silinmez.
+ */
+export const RULESET = 'cyclamen-flow-v1';
+export const LEGACY_RULESET = 'legacy';
+/** Kural seti adı biçimi (veritabanı kısıtıyla aynı). */
+export const RULESET_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;
+
 export type NicknameError = 'type' | 'short' | 'long' | 'chars';
 export type Result<T, E> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: E };
 
@@ -119,6 +129,8 @@ export interface ScorePayload {
   readonly level: number;
   readonly durationSeconds: number;
   readonly clientVersion: string;
+  /** Kural seti (yalnızca RULESET kabul edilir). */
+  readonly ruleset: string;
 }
 export type PayloadError =
   | 'body'
@@ -130,11 +142,21 @@ export type PayloadError =
   | 'level'
   | 'durationSeconds'
   | 'clientVersion'
+  | 'ruleset'
   | 'implausible';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const VERSION_RE = /^[a-z0-9][a-z0-9._-]*$/;
-const FIELDS = ['gameId', 'nickname', 'score', 'lines', 'level', 'durationSeconds', 'clientVersion'] as const;
+const FIELDS = [
+  'gameId',
+  'nickname',
+  'score',
+  'lines',
+  'level',
+  'durationSeconds',
+  'clientVersion',
+  'ruleset',
+] as const;
 
 const isInt = (v: unknown, min: number, max: number): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
@@ -159,6 +181,7 @@ export function validateScorePayload(raw: unknown): Result<ScorePayload, Payload
     !VERSION_RE.test(r.clientVersion)
   )
     return { ok: false, error: 'clientVersion' };
+  if (r.ruleset !== RULESET) return { ok: false, error: 'ruleset' };
   if (
     r.level !== expectedLevel(r.lines) ||
     r.durationSeconds < minDurationForLines(r.lines) ||
@@ -175,6 +198,7 @@ export function validateScorePayload(raw: unknown): Result<ScorePayload, Payload
       level: r.level,
       durationSeconds: r.durationSeconds,
       clientVersion: r.clientVersion,
+      ruleset: r.ruleset,
     },
   };
 }

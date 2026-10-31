@@ -29,6 +29,8 @@ import {
 } from './plants';
 import type { PlantArt } from './plants';
 import { PLANTS } from '../game/plants';
+import { FLOW, hasCore, withCore } from '../game/cyclamenFlow';
+import { CORE_FX, coreMarkPulse, createCoreMarkCanvas } from './coreMark';
 import {
   Budget,
   CYC_DONE,
@@ -87,6 +89,11 @@ interface ClearAnim {
   readonly done?: Uint8Array;
   /** NS4-24: hapşırık patladı mı (hazırlık evresi bitti; konfeti bir kez). */
   burst?: boolean;
+  /** Sıklamen çekirdeği 'flush': akan bulutçuklar (görünür hücre indeksi) ve hedef gri sıra (görünür sıra). */
+  readonly cells?: readonly number[];
+  readonly row?: number;
+  /** 'collapse': inen hücreler (görünür hücre indeksi: hedef, ve başlangıç görünür sırası; gizliden gelebilir). */
+  readonly drops?: readonly (readonly [to: number, fromRow: number])[];
 }
 /** NS4-15: Texture.WHITE ile tahta üstü vuruşlu ışıma (yeni doku yok). */
 interface Glow {
@@ -136,9 +143,12 @@ interface SeenVersions {
 /** Tahta hücresi → BlockId. Tahtaya yalnızca Game yazar ve yalnızca 0..8 saklar; buraya 0 olmayan değerler gelir. */
 const asBlock = (v: number): BlockId => v as BlockId;
 
-/** NS4-34: iki boş bitki katmanı (sap, çiçek) ekler; merkezde, hücreyle aynı boyutta (bkz. View.setPlant). */
+/**
+ * NS4-34: iki boş bitki katmanı (sap, çiçek) ekler; merkezde, hücreyle aynı boyutta (bkz. View.setPlant).
+ * Sıklamen çekirdeği: üçüncü katman çekirdek işaretidir (yalnızca çekirdekli çiçek hücresinde görünür).
+ */
 function withPlant(s: PIXI.Sprite): PIXI.Sprite {
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) {
     const c = new PIXI.Sprite();
     c.anchor.set(0.5);
     c.visible = false;
@@ -185,6 +195,14 @@ export class View {
   plantArt: PlantArt | null = null;
   plantBase?: PIXI.BaseTexture;
   plantTex: readonly PIXI.Texture[] = [];
+  /** Sıklamen çekirdeği: işaret dokusu, hücre/önizleme sprite'larının işaret katmanları, nabız saati. */
+  coreTex!: PIXI.Texture;
+  readonly marks: PIXI.Sprite[];
+  coreT: number;
+  /** Yakınlık sağlanamayıp sönen çekirdeğin kısa sönme işareti (tek sprite), süresi ve görülen sayaç. */
+  readonly fizzle: PIXI.Sprite;
+  fizzleT: number;
+  fizzleSeen: number;
   /**
    * NS4-37: sıklamen özütü sıvısı: arka ve ön katman (renk geçişi + dalgalı yüzey maskesi) ve yüzey çizgisi.
    * `top`: yüzeyin hücre cinsinden yüksekliği (tahtanın üstünden); `out`: sönme süresi (ms, sönmüyorsa null).
@@ -301,6 +319,14 @@ export class View {
     this.root.addChild(this.holdC, this.nextC);
     this.holdS = this.mkMini(this.holdC);
     this.nextS = this.mkMini(this.nextC);
+    this.marks = [...this.cells, ...this.active, ...this.holdS, ...this.nextS].map((s) => s.children[2] as PIXI.Sprite);
+    this.coreT = 0;
+    this.fizzle = new PIXI.Sprite();
+    this.fizzle.anchor.set(0.5);
+    this.fizzle.visible = false;
+    this.fxLayer.addChild(this.fizzle);
+    this.fizzleT = -1;
+    this.fizzleSeen = 0;
 
     // satır flaşları
     this.flashes = [];
@@ -389,8 +415,10 @@ export class View {
    * yüklenmeden gizli. Çocuk sprite'lar hücrenin konum, ölçek, döndürme ve saydamlığını izler.
    */
   setPlant(s: PIXI.Sprite, type: number, code: number) {
-    const [stem, bloom] = s.children as PIXI.Sprite[];
+    const [stem, bloom, mark] = s.children as PIXI.Sprite[];
     if (!stem || !bloom) return;
+    // çekirdek işareti bitki görselinden bağımsız (bitki yüklenmese de görünür)
+    if (mark) mark.visible = type >= 1 && type <= 7 && hasCore(code);
     if (!this.plantTex.length || !code || type < 1 || type > 7) {
       stem.visible = bloom.visible = false;
       return;
@@ -427,7 +455,8 @@ export class View {
     const oldDrop = this.dropTex,
       oldLiquid = this.liquidTex,
       oldHappy = this.happyTex,
-      oldPetal = this.petalTex;
+      oldPetal = this.petalTex,
+      oldCore = this.coreTex;
     const { atlas, P } = createBlockAtlas(px, this.art); // NS4-03: çizim rendering/textures.ts içinde
     const base = (this.atlasBase = PIXI.BaseTexture.from(atlas));
     // i: atlas sütunu (BLOCK_IDS sırası). NS4-04: önce bütün blok, sonra bütün hayalet karoları oluşturulur.
@@ -451,6 +480,9 @@ export class View {
       PIXI.BaseTexture.from(createHappyCloudCanvas(px)),
       new PIXI.Rectangle(2, 2, px, px),
     );
+    this.coreTex = PIXI.Texture.from(createCoreMarkCanvas(px));
+    for (const m of this.marks) m.texture = this.coreTex;
+    this.fizzle.texture = this.coreTex;
     this.petalTex = PIXI.Texture.from(createPetalCanvas(cell * res * 0.6));
     for (const p of this.petals) p.s.texture = this.petalTex;
     // damlacık
@@ -474,6 +506,7 @@ export class View {
     if (oldLiquid) oldLiquid.destroy(true);
     if (oldHappy) oldHappy.destroy(true);
     if (oldPetal) oldPetal.destroy(true);
+    if (oldCore) oldCore.destroy(true);
   }
 
   layout(L: Layout) {
@@ -583,7 +616,7 @@ export class View {
       const cx = g.x + sh[i][0],
         cy = g.y + sh[i][1] - HIDDEN;
       a.texture = this.tex[type];
-      this.setPlant(a, type, PLANTS[type][g.rot][i]);
+      this.setPlant(a, type, withCore(PLANTS[type][g.rot][i], g.core));
       this.setSize(a, c);
       a.position.set(cx * c + c / 2, cy * c + c / 2);
       a.visible = cy >= 0;
@@ -599,7 +632,7 @@ export class View {
     this.seen.ghost = this.settings.ghost;
   }
 
-  placeMini(sprites: readonly PIXI.Sprite[], type: PieceSlot, cx = 0, cy = 0, mc = 0, alpha = 1) {
+  placeMini(sprites: readonly PIXI.Sprite[], type: PieceSlot, cx = 0, cy = 0, mc = 0, alpha = 1, core = false) {
     // NS4-02: varsayılanlar yalnızca type=0 çağrısı için (erken dönüş)
     if (!type) {
       for (const s of sprites) s.visible = false;
@@ -621,7 +654,7 @@ export class View {
     for (let i = 0; i < 4; i++) {
       const s = sprites[i];
       s.texture = this.tex[type];
-      this.setPlant(s, type, PLANTS[type][0][i]);
+      this.setPlant(s, type, withCore(PLANTS[type][0][i], core));
       this.setSize(s, mc);
       s.position.set(ox + (sh[i][0] - minx) * mc + mc / 2, oy + (sh[i][1] - miny) * mc + mc / 2);
       s.visible = true;
@@ -632,9 +665,9 @@ export class View {
   syncQueue() {
     const g = this.game,
       L = this.L;
-    this.placeMini(this.holdS, g.hold, L.holdSlot.x, L.holdSlot.y, L.mini, g.canHold ? 1 : 0.35);
+    this.placeMini(this.holdS, g.hold, L.holdSlot.x, L.holdSlot.y, L.mini, g.canHold ? 1 : 0.35, g.holdCore);
     // NS4-38: yalnızca bir parça; kap slot merkezinden ölçeklenir (açılma "çevirme"si)
-    this.placeMini(this.nextS, g.queue[0], L.nextSlot.x, L.nextSlot.y, L.miniBig, 1);
+    this.placeMini(this.nextS, g.queue[0], L.nextSlot.x, L.nextSlot.y, L.miniBig, 1, g.queueCore[0]);
     this.nextC.pivot.set(L.nextSlot.x, L.nextSlot.y);
     this.nextC.position.set(L.nextSlot.x, L.nextSlot.y);
     this.seen.queue = g.queueVer;
@@ -859,6 +892,9 @@ export class View {
   /** Yeni oyun: süren bütün efektler temizlenir (NS4-15 öncesi lifecycle'daki sıfırlamaları da kapsar). */
   resetFx() {
     this.overT = -1;
+    this.fizzleT = -1;
+    this.fizzle.visible = false;
+    this.fizzleSeen = this.game.fizzleVer;
     this.anim = null;
     this.flavor = 'drain';
     this.hideLiquid();
@@ -944,12 +980,42 @@ export class View {
       kind: e.kind,
       rows: e.rows.map((r) => r - HIDDEN).filter((r) => r >= 0),
       t: 0,
-      dur: { cyc: CFG.drainMs, sneeze: CFG.sneezeMs, room: CFG.roomClearMs, lines: CFG.lineClearMs }[e.kind],
+      dur: {
+        cyc: CFG.drainMs,
+        sneeze: CFG.sneezeMs,
+        room: CFG.roomClearMs,
+        lines: CFG.lineClearMs,
+        flush: FLOW.rowMs,
+        collapse: FLOW.collapseMs,
+      }[e.kind],
       flavor,
       ...(e.kind === 'cyc' ? { done: new Uint8Array(COLS * VIS) } : {}),
+      ...(e.kind === 'flush'
+        ? {
+            cells: (e.cells ?? []).map((k) => k - HIDDEN * COLS).filter((i) => i >= 0),
+            row: g.flushRow - HIDDEN,
+          }
+        : {}),
+      ...(e.kind === 'collapse'
+        ? {
+            drops: (e.moves ?? [])
+              .map(([from, to]) => [to - HIDDEN * COLS, ((from / COLS) | 0) - HIDDEN] as const)
+              .filter(([i]) => i >= 0),
+          }
+        : {}),
     };
     const rows = this.anim.rows;
-    if (e.kind === 'sneeze' || e.kind === 'room') {
+    if (e.kind === 'collapse') {
+      // tahta günceldir (syncBoard yeni konumları çizdi); hücreler eski sıralarından başlayıp iner
+      this.placeDrops(this.anim, 0);
+    } else if (e.kind === 'flush') {
+      // hedef gri sıra kısa süre parlar (ilk satır flaşı; onClearEnd geri alır)
+      const f = this.flashes[0];
+      f.visible = true;
+      f.tint = CORE_FX.tint;
+      f.alpha = CORE_FX.channelAlpha * this.motion.glow;
+      this.placeFlushGlow(this.anim);
+    } else if (e.kind === 'sneeze' || e.kind === 'room') {
       // NS4-24: hazırlık ("ha… ha…") update() içinde; patlama evresinde konfeti ve sarsıntı
       // NS4-27: oda kutlaması onRoomClear() (roomclear olayı, clearstart'tan hemen önce) ve update() içinde
     } else if (e.kind !== 'cyc') {
@@ -1029,6 +1095,29 @@ export class View {
       this.crest.alpha = 0;
       this.crest.visible = true;
     }
+  }
+
+  /** Çökme: inen hücrelerin konumu (p 0..1, hızlanarak iner; reduced motion: doğrudan hedefte). */
+  placeDrops(a: ClearAnim, p: number) {
+    const c = this.L.cell,
+      e = this.reducedMotion ? 1 : p * p;
+    for (const [i, fromRow] of a.drops ?? []) {
+      const s = this.cells[i];
+      if (!s?.visible) continue;
+      const toRow = (i / COLS) | 0;
+      s.y = (fromRow + (toRow - fromRow) * e) * c + c / 2;
+    }
+  }
+
+  /** Çekirdek drenajı ışığı: hedef sıra boyunca (gizli sıradaysa ışık yok). */
+  placeFlushGlow(a: ClearAnim) {
+    const f = this.flashes[0],
+      c = this.L.cell,
+      row = a.row ?? -1;
+    f.visible = row >= 0;
+    f.width = COLS * c;
+    f.height = c;
+    f.y = row * c;
   }
 
   onClearEnd() {
@@ -1305,6 +1394,25 @@ export class View {
             -c * 2,
             ((0.25 + Math.random() * 0.3) * c) / dw,
           );
+      } else if (a.kind === 'collapse') {
+        this.placeDrops(a, Math.min(1, a.t / a.dur));
+      } else if (a.kind === 'flush') {
+        // bulutçuklar gülümseyip yerlerinden yukarı süzülerek söner (reduced motion: yerinde söner)
+        const p = Math.min(1, a.t / a.dur),
+          e = 1 - Math.pow(1 - p, 2),
+          move = this.reducedMotion ? 0 : 1;
+        // ışık her karede yerleşir (drenaj sırasında yeniden boyutlandırmada layout() satır flaşına çevirir)
+        this.flashes[0].alpha = CORE_FX.channelAlpha * m.glow * (1 - p);
+        this.placeFlushGlow(a);
+        for (const i of a.cells ?? []) {
+          const s = this.cells[i];
+          if (!s?.visible) continue;
+          const r = (i / COLS) | 0;
+          s.texture = this.happyTex;
+          s.scale.set((c / this.happyTex.orig.width) * (1 - 0.25 * p));
+          s.alpha = 1 - p * p;
+          s.y = r * c + c / 2 - e * c * 1.2 * move;
+        }
       } else if (a.kind === 'room') {
         // NS4-27: kalan hücreler hafifçe yükselip söner; yeni oda geçiş sonunda (clearend → syncAll)
         const p = Math.min(1, a.t / a.dur),
@@ -1375,6 +1483,41 @@ export class View {
             // Ozmotik: hücreler zar boyunca tahtanın ortasına süzülür
             if (a.flavor === 'osmotic') s.x = col * c + c / 2 + (COLS / 2 - col - 0.5) * c * 0.18 * p;
           }
+      }
+    }
+
+    // çekirdek işareti nabzı (reduced motion: sabit)
+    this.coreT += dt;
+    const cp = coreMarkPulse(this.coreT, this.reducedMotion);
+    // aday çekirdek (düşen parça, Next, Hold) nabızlı; tahtadaki aktif çekirdek sabit ve net. Son FLOW.coreFadeAt
+    // parçasında aktif işaret hafifçe söner (sayaç/metin yok)
+    const fade = g.coreLife > 0 && g.coreLife <= FLOW.coreFadeAt ? CORE_FX.fadeAlpha : 1;
+    for (let i = 0; i < this.marks.length; i++) {
+      const mk = this.marks[i];
+      if (!mk.visible) continue;
+      const onBoard = i < this.cells.length;
+      mk.scale.set(onBoard ? 1 : cp.scale);
+      mk.alpha = onBoard ? fade : cp.alpha;
+    }
+    // yakınlık sağlanamayan çekirdek kısa süre büyüyüp solar (reduced motion: efekt yok, işaret doğrudan kalkar)
+    if (g.fizzleVer !== this.fizzleSeen) {
+      this.fizzleSeen = g.fizzleVer;
+      const r = ((g.fizzleAt / COLS) | 0) - HIDDEN;
+      if (!this.reducedMotion && r >= 0 && g.fizzleAt >= 0) {
+        this.fizzle.position.set((g.fizzleAt % COLS) * c + c / 2, r * c + c / 2);
+        this.fizzle.tint = CORE_FX.fizzleTint;
+        this.fizzleT = 0;
+        this.fizzle.visible = true;
+      }
+    }
+    if (this.fizzleT >= 0) {
+      this.fizzleT += dt;
+      const q = Math.min(1, this.fizzleT / CORE_FX.fizzleMs);
+      this.fizzle.scale.set((c / this.coreTex.orig.width) * (1 + 0.35 * q));
+      this.fizzle.alpha = 1 - q;
+      if (q >= 1) {
+        this.fizzleT = -1;
+        this.fizzle.visible = false;
       }
     }
 

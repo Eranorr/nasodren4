@@ -113,27 +113,48 @@ describe('NS4-34: tahtada bitki', () => {
     expect(g.plant.every((c) => c === 0)).toBe(true);
   });
 
-  it('rastgele oyun boyunca saplar hep geçerli (satır silme, çoklu silme)', () => {
-    const g = createGame(11);
-    let clears = 0;
-    for (let n = 0; n < 400 && g.state !== 'over'; n++) {
-      if (g.state === 'play' && g.type) {
-        const rot = ((Math.random() * 4) | 0) as 0 | 1 | 2 | 3;
-        for (let k = 0; k < rot; k++) g.rotate(1);
-        const dx = ((Math.random() * 9) | 0) - 4;
-        for (let k = 0; k < Math.abs(dx); k++) g.move(dx < 0 ? -1 : 1);
-        g.hardDrop();
+  it('rastgele oyun boyunca saplar hep geçerli (satır silme, çoklu silme, çekirdek drenajı ve çökme)', () => {
+    let clears = 0,
+      flushes = 0;
+    for (const seed of [11, 12, 13, 14])
+      for (const rooms of [false, true]) {
+        const g = createGame(seed);
+        g.reset({ rooms });
+        for (let n = 0; n < 400 && g.state !== 'over'; n++) {
+          if (g.state === 'play' && g.type) {
+            // rastgele rotasyon, en alçağa inen konum (eşitlikte rastgele): satırlar dolar, temizleme sık olur
+            const rot = ((Math.random() * 4) | 0) as 0 | 1 | 2 | 3;
+            for (let k = 0; k < rot; k++) g.rotate(1);
+            const t = g.type;
+            let bestX = g.x,
+              bestY = -1;
+            for (let x = -2; x < COLS; x++) {
+              if (!g.fits(t, g.rot, x, g.y)) continue;
+              let y = g.y;
+              while (g.fits(t, g.rot, x, y + 1)) y++;
+              if (y > bestY || (y === bestY && Math.random() < 0.5)) {
+                bestY = y;
+                bestX = x;
+              }
+            }
+            while (g.x < bestX && g.move(1));
+            while (g.x > bestX && g.move(-1));
+            g.hardDrop();
+          }
+          while (g.pending) {
+            clears++;
+            finishClear(g);
+            expect(linksValid(g)).toBe(true);
+          }
+          expect(linksValid(g)).toBe(true);
+          if (g.stackHeight() > 14) {
+            clearBoard(g);
+            g.plant.fill(0);
+          }
+        }
+        flushes += g.flushes;
       }
-      if (g.pending) {
-        clears++;
-        finishClear(g);
-      }
-      expect(linksValid(g)).toBe(true);
-      if (g.stackHeight() > 14) {
-        clearBoard(g);
-        g.plant.fill(0);
-      }
-    }
     expect(clears).toBeGreaterThan(0);
+    expect(flushes).toBeGreaterThan(0); // çekirdek drenajı da sınandı
   });
 });

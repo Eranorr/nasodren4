@@ -5,6 +5,8 @@ import type { View } from '../rendering/GameView';
 import type { FxDemo } from '../dev/fxDemo';
 import type { ScreensDemo } from '../dev/screensDemo';
 import type { AudioDemo } from '../dev/audioDemo';
+import type { CoreDemo } from '../dev/coreDemo';
+import type { CollisionDemo } from '../dev/collisionDemo';
 
 declare global {
   interface Window {
@@ -16,6 +18,10 @@ declare global {
       fx?: FxDemo;
       ui?: ScreensDemo;
       sfx?: AudioDemo;
+      /** Sıklamen çekirdeği gösterimi ve durumu. */
+      core?: CoreDemo;
+      /** Gri bulutçuk teması gösterimi. */
+      collisionDemo?: CollisionDemo;
     };
     /**
      * Etiket yöneticisi (ör. GTM) kuyruğu. Sayfaya dışarıdan eklenir; öğeleri bu kodun kontrolünde

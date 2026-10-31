@@ -23,6 +23,7 @@ import { popup } from '../ui/notifications';
 import { FREE_GOAL, FREE_NAME } from '../content/rooms';
 import type { Tutorial } from '../tutorial/Tutorial';
 import { addLocalScore, type LocalScore } from '../leaderboard/localScores';
+import { RULESET } from '../../supabase/functions/_shared/scoreRules.ts';
 import { loadNickname, newGameId } from '../leaderboard/nickname';
 
 /** NS4-39: oyun sonunda menü müziği bu kadar sonra girer (sn; oyun sonu sesi önce duyulur). */
@@ -185,6 +186,7 @@ export function createLifecycle({
       durationSeconds: Math.max(1, Math.round(game.elapsed / 1000)),
       recordedAt: Date.now(),
       submitted: false,
+      ruleset: RULESET, // sıklamen çekirdeği kural seti (eski kayıtlar ayrı listelenir)
     };
     if (recordedId !== gameId) {
       recordedId = gameId;

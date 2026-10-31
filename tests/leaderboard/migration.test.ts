@@ -5,6 +5,8 @@ import toml from '../../supabase/config.toml?raw';
 import envExample from '../../.env.example?raw';
 import gitignore from '../../.gitignore?raw';
 import indexTs from '../../supabase/functions/submit-score/index.ts?raw';
+import rulesetSql from '../../supabase/migrations/20261031000000_cyclamen_flow_ruleset.sql?raw';
+import { RULESET } from '../../supabase/functions/_shared/scoreRules.ts';
 
 const sources = import.meta.glob<string>('../../src/**/*.ts', { query: '?raw', import: 'default', eager: true });
 const code = sql.replace(/--.*$/gm, ''); // yorumlar hariç
@@ -73,6 +75,34 @@ describe('migration: RLS ve yetkiler', () => {
     expect(sql).toMatch(/drop function if exists public\.get_leaderboard\(integer\);/);
     expect(sql).toMatch(/supabase db push/);
     expect(sql).toMatch(/supabase functions deploy submit-score/);
+  });
+});
+
+describe('migration: kural seti (cyclamen-flow-v1)', () => {
+  const rs = rulesetSql.replace(/--.*$/gm, '').replace(/\s+/g, ' '); // yorumlar hariç, tek boşluk
+  it('ruleset sütunu (eski satırlar legacy), izinli değerler kısıtı ve kural seti içinde sıralama indexi', () => {
+    expect(rs).toContain("add column if not exists ruleset text not null default 'legacy'");
+    expect(rs).toContain(`check (ruleset in ('legacy', '${RULESET}'))`);
+    expect(rs).toContain('on public.leaderboard_scores (ruleset, score desc, created_at asc, id asc)');
+    expect(RULESET).toBe('cyclamen-flow-v1');
+  });
+  it('okuma tek kural setinden: eski tek parametreli fonksiyon kaldırılır; alanlar ve üst sınır aynı', () => {
+    expect(rs).toContain('drop function if exists public.get_leaderboard(integer);');
+    expect(rs).toContain(
+      `create or replace function public.get_leaderboard( limit_count integer default 10, ruleset_name text default '${RULESET}' )`,
+    );
+    expect(rs).toContain('returns table (rank bigint, nickname text, score integer, lines integer, level smallint)');
+    expect(rs).toContain("security definer set search_path = ''");
+    const fn = rs.slice(rs.indexOf('as $$'), rs.lastIndexOf('$$'));
+    expect(fn).toContain('where s.ruleset = ruleset_name');
+    expect(fn).toContain('limit least(greatest(coalesce(limit_count, 10), 1), 50)');
+    expect(fn).not.toMatch(/game_hash|duration_seconds|client_version|s\.id,|s\.created_at,/);
+    expect(rs).toContain('revoke all on function public.get_leaderboard(integer, text) from public;');
+    expect(rs).toContain(
+      'grant execute on function public.get_leaderboard(integer, text) to anon, authenticated, service_role;',
+    );
+    expect(rs).not.toMatch(/grant [^;]*(insert|update|delete)[^;]* to [^;]*(anon|authenticated)/i);
+    expect(rulesetSql).toContain('Geri alma (rollback)');
   });
 });
 

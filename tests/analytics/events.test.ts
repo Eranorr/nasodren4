@@ -52,6 +52,11 @@ const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
   room_start: { room: 'number', gray: 'number' },
   room_clear: { room: 'number', level: 'number', dur_s: 'number', bonus: 'number' },
   all_clear: { lines: 'number', level: 'number', bonus: 'number' },
+  core_piece_seen: { room: 'number', level: 'number' },
+  core_activated: { room: 'number', level: 'number' },
+  core_expired: { room: 'number', level: 'number' },
+  core_triggered: { room: 'number', level: 'number' },
+  core_drain_completed: { room: 'number', level: 'number', cells: 'number', moved: 'number' },
   final_choice: { choice: ['continue', 'finish'], dur_s: 'number' },
   replay_clicked: {},
   leaderboard_opened: {},
@@ -309,6 +314,51 @@ describe('oyun hunisi: her olay doğru anda bir kez', () => {
   });
 });
 
+describe('sıklamen çekirdeği olayları', () => {
+  it('görülme, aktifleşme, tetikleme, drenaj ve sönme: her durum bir kez; yalnızca sayısal alanlar', async () => {
+    const { g, lc } = await loadGame(1, true);
+    lc.start();
+    const before = count('core_piece_seen');
+    // kuyruktan gelen çekirdekli parçalar: her biri bir kez 'görüldü' (Hold dönüşü tekrar saymaz)
+    let seen = 0;
+    for (let i = 0; i < 14; i++) {
+      g.spawn();
+      if (g.core) seen++;
+    }
+    expect(count('core_piece_seen') - before).toBe(seen);
+    g.core = true;
+    g.doHold();
+    g.canHold = true;
+    const atHold = count('core_piece_seen');
+    g.doHold();
+    expect(count('core_piece_seen')).toBe(atHold);
+    // aktifleşme → tetikleme → drenaj (+ çökme)
+    clearBoard(g);
+    fillRow(g, 21, PIECE.S, [0]);
+    fillRow(g, 20, PIECE.GARBAGE, [0, 3]);
+    placePiece(g, PIECE.T, 0, 5, 0);
+    g.core = true;
+    g.hardDrop();
+    placePiece(g, PIECE.I, 1, -2, 0);
+    g.hardDrop();
+    while (g.pending) finishClear(g);
+    expect([count('core_activated'), count('core_triggered'), count('core_drain_completed')]).toEqual([1, 1, 1]);
+    expect(last('core_drain_completed')).toMatchObject({ room: 0, level: 1, cells: 5 });
+    // ömrü dolan çekirdek
+    clearBoard(g);
+    fillRow(g, 21, PIECE.GARBAGE, [0, 9]);
+    placePiece(g, PIECE.T, 0, 5, 0);
+    g.core = true;
+    g.hardDrop();
+    for (const c of [0, 0, 1, 1, 2, 2, 3]) {
+      placePiece(g, PIECE.I, 1, c - 2, 0);
+      g.hardDrop();
+    }
+    expect([count('core_activated'), count('core_expired')]).toEqual([2, 1]);
+    for (const r of records()) expect(validate(r), r.event).toEqual([]);
+  });
+});
+
 describe('öğretici olayları', () => {
   async function tut(done = false) {
     const { Tutorial } = await import('../../src/tutorial/Tutorial');
@@ -360,7 +410,10 @@ describe('öğretici olayları', () => {
     b.t.onGameStart();
     for (const step of ['move', 'rotate', 'soft', 'hard', 'hold'] as const) {
       if (step === 'move') b.g.move(1);
-      if (step === 'rotate') b.g.rotate(1);
+      if (step === 'rotate') {
+        placePiece(b.g, PIECE.T, 0, 3, 1); // dönebilen parça (ilk parça tohuma göre O olabilir)
+        b.g.rotate(1);
+      }
       if (step === 'soft') b.t.softDrop();
       if (step === 'hard') b.g.hardDrop();
       if (step === 'hold') b.g.doHold();
@@ -413,6 +466,7 @@ describe('skor tablosu ve global gönderim olayları; kişisel veri yok', () => 
       durationSeconds: 90,
       recordedAt: 1,
       submitted: false,
+      ruleset: 'cyclamen-flow-v1',
     });
     const input = dom.el('nick-input') as unknown as { value: string };
     input.value = '<x>';

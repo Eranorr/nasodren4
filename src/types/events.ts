@@ -6,6 +6,10 @@ import type { GameOverReason, PendingClearKind, TSpinKind } from './game';
 export interface PendingClear {
   readonly kind: PendingClearKind;
   readonly rows: readonly number[];
+  /** 'flush' (sıklamen çekirdeği drenajı): akan gri bulutçuklar (tahta indeksi; rows boştur). */
+  readonly cells?: readonly number[];
+  /** 'collapse': drenajdan sonra inen renkli hücreler ([eski, yeni] tahta indeksi; tahta zaten günceldir). */
+  readonly moves?: readonly (readonly [number, number])[];
 }
 
 export interface ScoredEvent {
@@ -36,6 +40,16 @@ export interface AllClearEvent {
   readonly bonus: number;
 }
 
+/**
+ * Sıklamen çekirdeği: 'seen' çekirdekli parça kuyruktan ilk kez geldi; 'activated' kilitte yakın gri vardı (hedef sıra ve
+ * çekirdek sütunu, tahta koordinatı); 'fizzled' yakın gri yoktu; 'expired' ömrü doldu; 'triggered' satır temizlemesi
+ * tetikledi; 'drained' drenaj (ve varsa çökme) bitti (akan gri ve inen renkli hücre sayısı).
+ */
+export type CoreEvent =
+  | { readonly kind: 'seen' | 'fizzled' | 'expired' | 'triggered' }
+  | { readonly kind: 'activated'; readonly row: number; readonly col: number }
+  | { readonly kind: 'drained'; readonly cells: number; readonly moved: number };
+
 export interface GameEvents {
   spawn: void;
   move: void;
@@ -54,6 +68,7 @@ export interface GameEvents {
   roomstart: RoomStartEvent;
   roomclear: RoomClearEvent;
   allclear: AllClearEvent;
+  core: CoreEvent;
 }
 
 export type GameEventName = keyof GameEvents;

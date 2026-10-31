@@ -12,7 +12,7 @@ export type ClearFlavor = 'drain' | 'osmotic' | 'neuro';
 /** `scored` olayından temizleme dili. T-spin satır temizlemesi Nörorefleks, dört satır Ozmotik, diğerleri drenaj. */
 export function flavorOf(e: Pick<ScoredEvent, 'n' | 'tspin'>): ClearFlavor {
   if (e.tspin && e.n > 0) return 'neuro';
-  if (e.n === 4) return 'osmotic';
+  if (e.n >= 4) return 'osmotic'; // çekirdek çökmesi sonrası 4'ten fazla satır da Tetris dili
   return 'drain';
 }
 

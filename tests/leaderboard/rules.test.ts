@@ -22,6 +22,7 @@ const valid = () => ({
   level: 3,
   durationSeconds: 245,
   clientVersion: 'web-ns4-18',
+  ruleset: 'cyclamen-flow-v1',
 });
 
 describe('kurallar oyun sabitleriyle tutarlı', () => {
@@ -107,6 +108,14 @@ describe('skor gövdesi doğrulama', () => {
     ['süre 0', { ...valid(), durationSeconds: 0 }, 'durationSeconds'],
     ['süre 7 sa', { ...valid(), durationSeconds: 7 * 3600 }, 'durationSeconds'],
     ['sürüm', { ...valid(), clientVersion: 'x'.repeat(40) }, 'clientVersion'],
+    [
+      'kural seti yok (eski istemci)',
+      Object.fromEntries(Object.entries(valid()).filter(([k]) => k !== 'ruleset')),
+      'fields',
+    ],
+    ['eski kural seti', { ...valid(), ruleset: 'legacy' }, 'ruleset'],
+    ['bilinmeyen kural seti', { ...valid(), ruleset: 'cyclamen-flow-v2' }, 'ruleset'],
+    ['kural seti sayı', { ...valid(), ruleset: 1 }, 'ruleset'],
     ['seviye satırla tutarsız', { ...valid(), level: 5 }, 'implausible'],
     ['satır için çok kısa süre', { ...valid(), lines: 200, level: 20, durationSeconds: 5 }, 'implausible'],
     ['süreye göre imkânsız skor', { ...valid(), lines: 0, level: 1, durationSeconds: 1, score: 50000 }, 'implausible'],
@@ -119,6 +128,13 @@ describe('skor gövdesi doğrulama', () => {
     expect(minDurationForLines(4)).toBeCloseTo(0.3);
     expect(minDurationForLines(5)).toBeCloseTo(0.6);
     expect(maxPlausibleScore(5000, 20, 21600)).toBe(SCORE_LIMITS.maxScore);
+  });
+  it('sıklamen çekirdeği: drenaj bonusu 0; çökmenin bıraktığı tam sıra + Tetris (tek temizlemede 5 satır) kabul edilir', () => {
+    // seviye 1'de 5 satırlık temizleme Tetris tabanıyla (800) puanlanır; kısa bir oyun yine makul
+    expect(validateScorePayload({ ...valid(), score: 800 + 2 * 40, lines: 5, level: 1, durationSeconds: 20 })).toEqual(
+      expect.objectContaining({ ok: true }),
+    );
+    expect(maxPlausibleScore(5, 1, 20)).toBeGreaterThan(800 + 2 * 40);
   });
   it('NS4-27: hızlı geçilen dört oda (az satır, kısa süre) sınırın içinde kalır', () => {
     // 4 oda × en az 1 satır, seviye 1, 60 sn: yalnızca oda bonusu 1000 × (1+2+3+4) = 10 000

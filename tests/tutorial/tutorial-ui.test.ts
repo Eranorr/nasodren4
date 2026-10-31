@@ -28,7 +28,8 @@ async function load(mode: 'keyboard' | 'touch' = 'keyboard') {
   const { tutorialStore } = await import('../../src/storage/tutorial');
   const screens = await import('../../src/ui/screens');
   screens.initScreens();
-  const g = createGame(1);
+  // tohum: ilk parça dönebilmeli (Döndür adımı); sıklamen çekirdeği torba başına bir rastgele sayı daha çeker
+  const g = createGame(2);
   const tutorialView = createTutorialView({ skip: () => tutorial.skip(), done: () => tutorial.acknowledge() });
   const tutorial = new Tutorial(g, tutorialView, tutorialStore, { mode });
   const lc = createLifecycle({ ...createAppStubs(g).deps, tutorial });

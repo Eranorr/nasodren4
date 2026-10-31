@@ -65,6 +65,16 @@ export interface AnalyticsPayloads {
   final_choice: { choice: 'continue' | 'finish'; dur_s: number };
   /** NS4-22: Tam Ferahlık: satır temizlemesi tahtayı tamamen boşalttı. */
   all_clear: { lines: number; level: number; bonus: number };
+  /**
+   * Sıklamen çekirdeği (kural seti cyclamen-flow-v1): çekirdekli parça oyuna girdi (parça başına bir kez); kilitte
+   * yakınında bulutçuk vardı ve aktifleşti; ömrü tetiklenmeden doldu; satır temizlemesi tetikledi; drenaj (ve varsa
+   * çökme) bitti. Yalnızca sayısal oyun verisi (room: 0 tabanlı).
+   */
+  core_piece_seen: { room: number; level: number };
+  core_activated: { room: number; level: number };
+  core_expired: { room: number; level: number };
+  core_triggered: { room: number; level: number };
+  core_drain_completed: { room: number; level: number; cells: number; moved: number };
   /** Oyun sonu "Tekrar oyna". */
   replay_clicked: NoPayload;
   leaderboard_opened: NoPayload;

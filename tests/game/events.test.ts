@@ -22,6 +22,7 @@ describe('olaylar', () => {
         'allclear',
         'clearend',
         'clearstart',
+        'core',
         'gameover',
         'harddrop',
         'hold',
@@ -71,9 +72,13 @@ describe('olaylar', () => {
     const g = createGame(1);
     const log = recordEvents(g);
     g.reset({ rooms: true }); // NS4-27: oda akışı (roomstart)
+    placePiece(g, PIECE.T, 0, 3, 0); // dönebilen parça (ilk parça tohuma göre O olabilir)
     g.move(1);
     g.rotate(1);
     g.doHold();
+    placePiece(g, PIECE.T, 0, 3, 0); // sıklamen çekirdeği: gri bulutçukların üstüne kilitlenir ('core')
+    g.core = true;
+    g.hardDrop();
     setupWell(g, 4); // gri bulutçuklar silinir: bu temizlemeyle tahta boşalır (allclear) ve oda açılır
     g.lines = 9;
     dropVerticalI(g);
