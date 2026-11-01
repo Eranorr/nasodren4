@@ -16,6 +16,7 @@ export interface FxDemo {
   drain(n?: 1 | 2 | 3): void;
   tetris(): void;
   tspin(n?: 0 | 1 | 2 | 3): void;
+  /** Sıklamen gücü anı (×2 vuruşu; çekirdek drenajı için __fn.core.powerActiveCore()). */
   cyc(): void;
   sneeze(): void;
   /** NS4-22: büyük açılma anı (Tetris / Tam Ferahlık: dört satır temizlemesiyle; oda: "Sinüs açıldı" kutlamasıyla). */
@@ -39,7 +40,7 @@ export function createFxDemo(view: View, game: Game): FxDemo {
     view.syncBoard();
     before?.();
     view.onClearStart({ kind, rows });
-    const dur = kind === 'cyc' ? CFG.drainMs : kind === 'sneeze' ? CFG.sneezeMs : CFG.lineClearMs;
+    const dur = kind === 'sneeze' ? CFG.sneezeMs : CFG.lineClearMs;
     setTimeout(() => {
       game.board.set(snapshot);
       game.boardVer++;
@@ -71,7 +72,9 @@ export function createFxDemo(view: View, game: Game): FxDemo {
           view.onScored({ n, tspin: 2 });
         });
     },
-    cyc: () => run('cyc', rowsFrom(10)),
+    cyc: () => {
+      if (!busy()) view.cycBoost();
+    },
     sneeze: () => run('sneeze', rowsFrom(3)),
     relief: (kind = 'allclear') => {
       if (busy()) return;

@@ -82,7 +82,7 @@ describe('global okuma', () => {
     });
     const [url, init] = f.mock.calls[0];
     expect(url).toBe(
-      'https://abcd.supabase.co/rest/v1/rpc/get_leaderboard?limit_count=10&ruleset_name=cyclamen-flow-v1',
+      'https://abcd.supabase.co/rest/v1/rpc/get_leaderboard?limit_count=10&ruleset_name=cyclamen-flow-v2',
     );
     expect(init?.method).toBe('GET');
     expect(init?.headers).toEqual({ apikey: 'sb_publishable_testkey', Accept: 'application/json' });
@@ -152,7 +152,7 @@ describe('global gönderim', () => {
     expect(JSON.parse(typeof init?.body === 'string' ? init.body : '')).toEqual({
       ...payload,
       clientVersion: 'web-ns4-18',
-      ruleset: 'cyclamen-flow-v1',
+      ruleset: 'cyclamen-flow-v2',
     });
   });
   it.each([

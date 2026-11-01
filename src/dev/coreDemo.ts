@@ -37,6 +37,11 @@ export interface CoreState {
   readonly collapsedCells: number;
   readonly collapseFullRows: number;
   readonly pending: string | null;
+  /** Sıklamen gücü: kullanılabilir mi, kullanıldı mı, sonucu, ×2 kalan saniye. */
+  readonly powerReady: boolean;
+  readonly powerUsed: boolean;
+  readonly powerResult: 'trigger' | 'seed' | null;
+  readonly multSeconds: number;
 }
 
 export interface CoreDemo {
@@ -55,6 +60,10 @@ export interface CoreDemo {
     readonly before: readonly (readonly [number, number])[];
     readonly after: readonly (readonly [number, number])[];
   };
+  /** Yeni oyun, %35 tıkanık tahtada aktif çekirdek; Sıklamen gücü: çekirdek hemen tetiklenir (±4, en çok 9 gri). */
+  powerActiveCore(): CoreState;
+  /** Yeni oyun, %35 tıkanık tahtada aktif çekirdek yok; Sıklamen gücü: sıradaki parça çekirdeklenir. */
+  powerNoCore(): CoreState;
   state(): CoreState;
 }
 
@@ -89,10 +98,24 @@ export function createCoreDemo(game: Game, lifecycle: Pick<Lifecycle, 'start' | 
       collapsedCells: game.collapsedCells,
       collapseFullRows: game.collapseFullRows,
       pending: game.pending?.kind ?? null,
+      powerReady: game.canCyc(),
+      powerUsed: game.cycUsed,
+      powerResult: game.cycSupport,
+      multSeconds: Math.ceil(game.multT / 1000),
     };
   }
   const ensurePlaying = () => {
     if (lifecycle.getState() !== 'playing') lifecycle.start();
+  };
+  /** Yeni oyun (Sıklamen gücü kullanılmamış) ve 15-21. sıralar gri (9. sütun kanal): tıkanıklık %35. */
+  const congested = () => {
+    lifecycle.start();
+    game.board.fill(0);
+    game.plant.fill(0);
+    game.coreLife = 0;
+    game.coreTargetRow = -1;
+    for (let y = ROWS - 7; y < ROWS; y++) for (let x = 0; x < COLS - 1; x++) game.board[y * COLS + x] = PIECE.GARBAGE;
+    game.boardVer++;
   };
   return {
     seedPiece() {
@@ -169,6 +192,26 @@ export function createCoreDemo(game: Game, lifecycle: Pick<Lifecycle, 'start' | 
       game.pending = p;
       game.emit('clearstart', p);
       return { before, after: colored(b2) };
+    },
+    powerActiveCore() {
+      congested();
+      // çekirdekli T 3-5. sütunlara iner: çiçek (4, 13), gri (4, 15) 2 sıra altta → aktif, hedef 15 (±4: 0-8)
+      game.type = PIECE.T;
+      game.rot = 0;
+      game.x = 3;
+      game.y = 0;
+      game.core = true;
+      game.pieceVer++;
+      game.hardDrop();
+      game.useCyc();
+      return state();
+    },
+    powerNoCore() {
+      congested();
+      game.queueCore.fill(false);
+      game.queueVer++;
+      game.useCyc();
+      return state();
     },
     state,
   };

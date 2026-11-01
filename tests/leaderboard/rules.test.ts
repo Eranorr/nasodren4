@@ -22,7 +22,7 @@ const valid = () => ({
   level: 3,
   durationSeconds: 245,
   clientVersion: 'web-ns4-18',
-  ruleset: 'cyclamen-flow-v1',
+  ruleset: 'cyclamen-flow-v2',
 });
 
 describe('kurallar oyun sabitleriyle tutarlı', () => {
@@ -114,7 +114,8 @@ describe('skor gövdesi doğrulama', () => {
       'fields',
     ],
     ['eski kural seti', { ...valid(), ruleset: 'legacy' }, 'ruleset'],
-    ['bilinmeyen kural seti', { ...valid(), ruleset: 'cyclamen-flow-v2' }, 'ruleset'],
+    ['önceki kural seti (sıklamen alt 10 sıra)', { ...valid(), ruleset: 'cyclamen-flow-v1' }, 'ruleset'],
+    ['bilinmeyen kural seti', { ...valid(), ruleset: 'cyclamen-flow-v3' }, 'ruleset'],
     ['kural seti sayı', { ...valid(), ruleset: 1 }, 'ruleset'],
     ['seviye satırla tutarsız', { ...valid(), level: 5 }, 'implausible'],
     ['satır için çok kısa süre', { ...valid(), lines: 200, level: 20, durationSeconds: 5 }, 'implausible'],

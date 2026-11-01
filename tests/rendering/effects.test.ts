@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CFG, COLS, VIS } from '../../src/config/gameConfig';
 import { PIECE } from '../../src/game/pieces';
+import { FLOW } from '../../src/game/cyclamenFlow';
 import type { Game } from '../../src/game/Game';
 import {
   AIRFLOW,
@@ -21,7 +22,6 @@ import {
   glowAlpha,
   holeAlpha,
   motionScale,
-  LIQUID_FX,
 } from '../../src/rendering/effects';
 import type { View } from '../../src/rendering/GameView';
 import {
@@ -86,7 +86,7 @@ describe('efekt tarifleri (saf)', () => {
   });
 
   it('mekanik süreler değişmedi', () => {
-    expect([CFG.lineClearMs, CFG.sneezeMs, CFG.drainMs]).toEqual([300, 650, 800]);
+    expect([CFG.lineClearMs, CFG.sneezeMs]).toEqual([300, 650]);
   });
 });
 
@@ -106,14 +106,13 @@ function wire() {
   g.on('clearstart', (e) => v.onClearStart(e));
   g.on('clearend', () => v.onClearEnd());
   g.on('roomclear', () => v.onRoomClear());
+  g.on('cyclamen', () => v.cycBoost());
 }
 
 /** Görsel durumun tamamen temiz olduğunu doğrular (efekt sonrası temizlik). */
 function expectClean() {
   expect(v.anim).toBeNull();
   expect(v.flashes.every((f) => !f.visible && f.height === v.L.cell)).toBe(true);
-  expect([v.liquid.c.visible, v.liquid.out]).toEqual([false, null]); // NS4-37
-  expect(v.crest.visible).toBe(false);
   expect([v.glow.on, v.glow.s.visible, v.band.on, v.band.s.visible]).toEqual([false, false, false, false]);
   expect(v.glow.edges.every((e) => !e.visible && e.alpha === 0)).toBe(true);
   expect(live()).toHaveLength(0);
@@ -225,40 +224,35 @@ describe('GameView efektleri: başlama, bitiş ve temizlik', () => {
     expectClean();
   });
 
-  it('sıklamen: dalga + tepe şeridi, hücreler çözünür; bitişte ×2 vuruşu, sonra tamamen temiz', () => {
+  it('sıklamen gücü: ×2 vuruşu (tahta ışıması, kabarcıklar); aktif çekirdek yoksa satır silinmez; sonra temiz', () => {
     stackRows(g, 8);
+    const board = g.board.slice();
     expect(g.useCyc()).toBe(true);
-    expect([v.liquid.c.visible, v.crest.visible]).toEqual([true, true]);
-    H.step(CFG.drainMs / 2);
-    // NS4-37: sıvı yükselir; yüzey dalgalı (maske ve parlak çizgi her karede çizilir)
-    expect(v.liquid.top).toBeLessThan(VIS);
-    expect(v.liquid.top).toBeGreaterThan(VIS - 9);
-    expect(v.liquid.front.mask).toBe(v.liquid.frontMask);
-    v.liquid.line.finishPoly(); // Pixi yolu tembel kaydeder
-    expect((v.liquid.line.geometry.graphicsData[0]?.shape as { points: number[] }).points).toHaveLength(2 * 49);
-    H.step(CFG.drainMs / 2);
-    const dissolved = v.anim?.done?.reduce((a, b) => a + b, 0) ?? 0;
-    expect(dissolved).toBeGreaterThan(8 * 8); // sıvıya giren hücreler bir kez parçacık salar
-    expect(v.cells[(VIS - 1) * COLS].tint).not.toBe(0xffffff); // çözünürken pembeleşir (doku aynı)
-    finishClear(g);
-    expect(v.anim).toBeNull();
-    expect(v.liquid.out).toBe(0); // söner (anim yuvasından bağımsız)
+    expect(v.anim).toBeNull(); // drenaj yok (aktif çekirdek yok)
+    expect([...g.board]).toEqual([...board]);
     expect(v.glow.on).toBe(true);
     expect(v.glow.s.tint).toBe(0xff79bd);
+    expect(live().length).toBeGreaterThan(0);
     H.step(2000);
     expectClean();
   });
 
-  it('NS4-37: sıklamenden hemen sonra başka temizleme (oda açılışı) başlasa da sıvı söner, ekranda kalmaz', () => {
-    stackRows(g, 8);
-    g.useCyc();
-    H.step(CFG.drainMs);
+  it('sıklamen gücü aktif çekirdekle: drenaj ve çökme animasyonu, ×2 vuruşu; sonra temiz', () => {
+    clearBoard(g);
+    for (let y = 15; y < 22; y++) fillRow(g, y, PIECE.GARBAGE, [9]);
+    placePiece(g, PIECE.T, 0, 3, 0);
+    g.core = true;
+    g.hardDrop(); // çiçek (4, 13), gri (4, 15): aktif
+    expect(g.useCyc()).toBe(true);
+    expect(v.anim?.kind).toBe('flush');
+    expect(v.glow.on).toBe(true);
+    H.step(FLOW.rowMs);
     finishClear(g);
-    v.onClearStart({ kind: 'room', rows: [] }); // sıvı sönerken oda açılışı: anim yuvası el değiştirir
-    expect(v.anim?.kind).toBe('room');
-    H.step(LIQUID_FX.recedeMs + 50);
-    expect(v.anim?.kind).toBe('room');
-    expect([v.liquid.c.visible, v.liquid.out, v.crest.visible]).toEqual([false, null, false]);
+    expect(v.anim?.kind).toBe('collapse');
+    H.step(FLOW.collapseMs);
+    finishClear(g);
+    H.step(2000);
+    expectClean();
   });
 
   it('resetFx yeni oyunda süren her efekti temizler', () => {
@@ -430,7 +424,7 @@ describe('hava akışı', () => {
 });
 
 describe('performans ve dayanıklılık', () => {
-  it('parçacık havuzu taşmaz: art arda 25 Tetris + hapşırık konfetisi + sıklamen', () => {
+  it('parçacık havuzu taşmaz: art arda 25 Tetris + hapşırık konfetisi + sıklamen vuruşu', () => {
     const nodes = countNodes(v.app.stage);
     for (let i = 0; i < 25; i++) {
       setupWell(g, 4);
@@ -441,19 +435,18 @@ describe('performans ve dayanıklılık', () => {
     }
     stackRows(g, 8);
     g.useCyc();
-    H.step(CFG.drainMs);
+    H.step(300);
     expect(v.parts).toHaveLength(420);
     expect(v.pc.children).toHaveLength(420);
     expect(v.partIdx).toBeGreaterThanOrEqual(0);
     expect(v.partIdx).toBeLessThan(420);
     expect(live().length).toBeLessThanOrEqual(420);
     expect(countNodes(v.app.stage)).toBe(nodes); // sahneye yeni nesne eklenmez
-    finishClear(g);
     H.step(2500);
     expectClean();
   });
 
-  it('aktif efekt sırasında resize güvenli: Tetris ve sıklamen ortasında boyut değişimi', () => {
+  it('aktif efekt sırasında resize güvenli: Tetris ve çekirdek drenajı ortasında boyut değişimi', () => {
     const nodes = countNodes(v.app.stage);
     setupWell(g, 4);
     dropVerticalI(g);
@@ -470,16 +463,22 @@ describe('performans ve dayanıklılık', () => {
     H.step(1500);
     expectClean();
 
-    stackRows(g, 8);
-    g.useCyc();
-    H.step(300);
+    clearBoard(g);
+    for (let y = 15; y < 22; y++) fillRow(g, y, PIECE.GARBAGE, [9]);
+    placePiece(g, PIECE.T, 0, 3, 0);
+    g.core = true;
+    g.hardDrop();
+    g.useCyc(); // aktif çekirdek: drenaj
+    H.step(100);
     H.resize(1920, 1080);
     H.step(16);
-    expect(v.liquid.front.width).toBeCloseTo(COLS * v.L.cell, 6);
-    expect(v.liquid.front.y + v.liquid.front.height).toBeCloseTo(VIS * v.L.cell, 4);
+    expect(v.flashes[0].width).toBeCloseTo(COLS * v.L.cell, 6); // hedef sıra ışığı yeni ölçüde
+    expect(v.flashes[0].y).toBeCloseTo((15 - 2) * v.L.cell, 6);
     H.resize(844, 390);
-    H.step(CFG.drainMs);
-    finishClear(g);
+    while (g.pending) {
+      H.step(200);
+      finishClear(g);
+    }
     H.step(2000);
     expectClean();
     expect(countNodes(v.app.stage)).toBe(nodes);

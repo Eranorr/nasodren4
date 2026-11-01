@@ -282,12 +282,12 @@ describe('tetikleme ve kontrollü drenaj', () => {
     for (let k = 0; k < g.board.length; k++) if (!g.board[k]) expect(g.plant[k]).toBe(0); // board/plant uyumu
   });
 
-  it('hedef sıra güçle silinirse drenaj güvenli biçimde iptal; güçler tetiklemez', () => {
+  it('hedef sıra güçle silinirse drenaj güvenli biçimde iptal; hapşırık tetiklemez', () => {
     const g = coreGame();
     stackRows(g, 8); // 14-21 gri (9. sütun boş), %40: güçler açık
     drop(g, PIECE.T, 0, 3, true); // çiçek 12. sırada, (4, 14) gri: hedef 14
     expect(g.coreTargetRow).toBe(14);
-    g.useCyc(); // alttaki 10 dolu sıra: 14 dahil
+    g.useSneeze(); // en üst 3 dolu sıra: 12-14 (çekirdek ve hedef dahil)
     finishClear(g);
     expect([g.flushes, g.coreTargetRow]).toEqual([0, -1]);
   });
@@ -358,7 +358,7 @@ describe('çekirdek olayları', () => {
     const p = log.payloads('core');
     expect(p.map((e) => e.kind).filter((k) => k !== 'seen')).toEqual(['activated', 'triggered', 'drained']);
     expect(p[0]).toEqual({ kind: 'activated', row: 20, col: 6 });
-    expect(p[2]).toEqual({ kind: 'drained', cells: 5, moved: g.lastCollapseMoves });
+    expect(p[2]).toEqual({ kind: 'drained', cells: 5, moved: g.lastCollapseMoves, power: false });
     log.clear();
     clearBoard(g);
     fillRow(g, 21, PIECE.GARBAGE, [0, 9]);

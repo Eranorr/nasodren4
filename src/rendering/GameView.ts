@@ -14,7 +14,6 @@ import {
   createDropCanvas,
   createHappyCloudCanvas,
   createPetalCanvas,
-  createLiquidCanvas,
   loadBlockArt,
   type BlockArt,
 } from './textures';
@@ -38,7 +37,6 @@ import {
   CYC_TINTS,
   HOLE_FX,
   LINE_FX,
-  LIQUID_FX,
   NEURO_BURST,
   NEURO_TINTS,
   OSMOTIC_TINT,
@@ -85,8 +83,6 @@ interface ClearAnim {
   readonly dur: number;
   /** NS4-15: satır temizlemenin görsel dili ('lines' dışında 'drain'). */
   readonly flavor: ClearFlavor;
-  /** Sıklamen: çözünme parçacığı salınmış hücreler (görünür hücre indeksi). */
-  readonly done?: Uint8Array;
   /** NS4-24: hapşırık patladı mı (hazırlık evresi bitti; konfeti bir kez). */
   burst?: boolean;
   /** Sıklamen çekirdeği 'flush': akan bulutçuklar (görünür hücre indeksi) ve hedef gri sıra (görünür sıra). */
@@ -182,8 +178,6 @@ export class View {
   tex!: TextureMap;
   ghostTex!: TextureMap;
   dropTex!: PIXI.Texture;
-  /** NS4-37: sıklamen sıvısının renk geçişi. */
-  liquidTex!: PIXI.Texture;
   /** NS4-27: temizlenirken gülümseyen gri bulutçuk. */
   happyTex!: PIXI.Texture;
   /** NS4-22: sıklamen yaprağı. */
@@ -203,21 +197,6 @@ export class View {
   readonly fizzle: PIXI.Sprite;
   fizzleT: number;
   fizzleSeen: number;
-  /**
-   * NS4-37: sıklamen özütü sıvısı: arka ve ön katman (renk geçişi + dalgalı yüzey maskesi) ve yüzey çizgisi.
-   * `top`: yüzeyin hücre cinsinden yüksekliği (tahtanın üstünden); `out`: sönme süresi (ms, sönmüyorsa null).
-   */
-  readonly liquid: {
-    readonly c: PIXI.Container;
-    readonly back: PIXI.Sprite;
-    readonly front: PIXI.Sprite;
-    readonly backMask: PIXI.Graphics;
-    readonly frontMask: PIXI.Graphics;
-    readonly line: PIXI.Graphics;
-    top: number;
-    phase: number;
-    out: number | null;
-  };
   readonly cells: PIXI.Sprite[];
   readonly active: PIXI.Sprite[];
   readonly ghost: PIXI.Sprite[];
@@ -242,7 +221,6 @@ export class View {
   lastLock: readonly number[];
   readonly glow: Glow;
   readonly band: Glow;
-  readonly crest: PIXI.Sprite;
   readonly budget: Budget;
   /** layout() ilk kez çağrılana kadar yoktur; sync*() yalnızca layout() sonrasında çağrılır, update() kendi kontrolünü yapar. */
   L!: Layout;
@@ -337,24 +315,7 @@ export class View {
       this.fxLayer.addChild(f);
       this.flashes.push(f);
     }
-    // NS4-37: sıklamen sıvısı (dokusu buildTextures() içinde); en altta, blok parçacıklarının arkasında
-    {
-      const c = new PIXI.Container();
-      const back = new PIXI.Sprite(),
-        front = new PIXI.Sprite(),
-        backMask = new PIXI.Graphics(),
-        frontMask = new PIXI.Graphics(),
-        line = new PIXI.Graphics();
-      back.tint = LIQUID_FX.backTint;
-      back.alpha = LIQUID_FX.backAlpha;
-      back.mask = backMask;
-      front.mask = frontMask;
-      c.addChild(back, backMask, front, frontMask, line);
-      c.visible = false;
-      this.fxLayer.addChildAt(c, 0);
-      this.liquid = { c, back, front, backMask, frontMask, line, top: VIS, phase: 0, out: null };
-    }
-    // NS4-15: dalga tepesi, tahta ışıması ve satır bandı (Texture.WHITE; yeni doku yok)
+    // NS4-15: tahta ışıması ve satır bandı (Texture.WHITE; yeni doku yok)
     const white = () => {
       const s = new PIXI.Sprite(PIXI.Texture.WHITE);
       s.blendMode = PIXI.BLEND_MODES.ADD;
@@ -363,7 +324,6 @@ export class View {
       this.fxLayer.addChild(s);
       return s;
     };
-    this.crest = white();
     this.glow = { s: white(), on: false, t: 0, dur: 1, peak: 0, beats: 1, edges: [0, 1, 2, 3].map(white), edgeK: 0 };
     this.band = { s: white(), on: false, t: 0, dur: 1, peak: 0, beats: 1, edges: [], edgeK: 0 };
     // parçacıklar
@@ -453,7 +413,6 @@ export class View {
       oldPlantBase = this.plantBase,
       oldPlantTex = this.plantTex;
     const oldDrop = this.dropTex,
-      oldLiquid = this.liquidTex,
       oldHappy = this.happyTex,
       oldPetal = this.petalTex,
       oldCore = this.coreTex;
@@ -487,9 +446,6 @@ export class View {
     for (const p of this.petals) p.s.texture = this.petalTex;
     // damlacık
     this.dropTex = PIXI.Texture.from(createDropCanvas(cell, res));
-    // NS4-37: sıvı renk geçişi (iki katman aynı dokuyu kullanır)
-    this.liquidTex = PIXI.Texture.from(createLiquidCanvas());
-    this.liquid.back.texture = this.liquid.front.texture = this.liquidTex;
     for (const p of this.parts) p.s.texture = this.dropTex;
     for (const m of this.air) m.s.texture = this.dropTex;
     for (const h of this.holes) h.texture = this.dropTex;
@@ -503,7 +459,6 @@ export class View {
       if (oldPlantBase) oldPlantBase.destroy();
     }
     if (oldDrop) oldDrop.destroy(true);
-    if (oldLiquid) oldLiquid.destroy(true);
     if (oldHappy) oldHappy.destroy(true);
     if (oldPetal) oldPetal.destroy(true);
     if (oldCore) oldCore.destroy(true);
@@ -523,7 +478,7 @@ export class View {
     this.killParticles();
     this.killAir();
     this.killPetals();
-    this.glow.s.width = this.band.s.width = this.crest.width = COLS * c;
+    this.glow.s.width = this.band.s.width = COLS * c;
     this.glow.s.height = VIS * c;
     this.band.s.height = c;
     this.band.s.y = (VIS - 1) * c;
@@ -897,7 +852,6 @@ export class View {
     this.fizzleSeen = this.game.fizzleVer;
     this.anim = null;
     this.flavor = 'drain';
-    this.hideLiquid();
     for (const f of this.flashes) f.visible = false;
     if (this.L) for (const f of this.flashes) f.height = this.L.cell;
     this.stopGlow(this.glow);
@@ -981,7 +935,6 @@ export class View {
       rows: e.rows.map((r) => r - HIDDEN).filter((r) => r >= 0),
       t: 0,
       dur: {
-        cyc: CFG.drainMs,
         sneeze: CFG.sneezeMs,
         room: CFG.roomClearMs,
         lines: CFG.lineClearMs,
@@ -989,7 +942,6 @@ export class View {
         collapse: FLOW.collapseMs,
       }[e.kind],
       flavor,
-      ...(e.kind === 'cyc' ? { done: new Uint8Array(COLS * VIS) } : {}),
       ...(e.kind === 'flush'
         ? {
             cells: (e.cells ?? []).map((k) => k - HIDDEN * COLS).filter((i) => i >= 0),
@@ -1018,7 +970,7 @@ export class View {
     } else if (e.kind === 'sneeze' || e.kind === 'room') {
       // NS4-24: hazırlık ("ha… ha…") update() içinde; patlama evresinde konfeti ve sarsıntı
       // NS4-27: oda kutlaması onRoomClear() (roomclear olayı, clearstart'tan hemen önce) ve update() içinde
-    } else if (e.kind !== 'cyc') {
+    } else {
       const R = LINE_FX[flavor],
         dw = this.dropTex.orig.width;
       rows.forEach((r, i) => {
@@ -1084,16 +1036,6 @@ export class View {
         }
       if (R.shake) this.kick(R.shake);
       if (R.glow) this.startGlow(this.glow, R.glow, R.glowPeak, flavor === 'osmotic' ? 380 : 300, 1);
-    } else {
-      const lq = this.liquid;
-      lq.out = null;
-      lq.top = VIS;
-      lq.c.alpha = 1;
-      lq.c.visible = true;
-      this.drawLiquid();
-      this.crest.tint = 0xffd6ea;
-      this.crest.alpha = 0;
-      this.crest.visible = true;
     }
   }
 
@@ -1123,76 +1065,11 @@ export class View {
   onClearEnd() {
     for (const f of this.flashes) f.visible = false;
     if (this.L) for (const f of this.flashes) f.height = this.L.cell;
-    const cycDone = this.anim?.kind === 'cyc';
     this.anim = null;
-    // NS4-37: sıvı kendi zamanlayıcısıyla söner (anim yuvasında değil: sonraki temizleme onu yarıda bırakmasın)
-    if (cycDone) this.liquid.out = 0;
     this.syncAll();
-    if (cycDone) this.cycBoost();
   }
 
-  /**
-   * NS4-37: sıvının yüzeyi: iki dalganın toplamı, faz zamanla ilerler. Arka katman biraz daha yüksekte ve ters fazda
-   * (derinlik); ön yüzeyde ince parlak çizgi. Maske ve çizgi her karede yeniden çizilir (yerleşim değişse de doğru).
-   */
-  drawLiquid() {
-    const lq = this.liquid,
-      c = this.L.cell,
-      W = COLS * c,
-      H = VIS * c,
-      k = this.reducedMotion ? LIQUID_FX.reducedScale : 1;
-    const top = lq.top * c,
-      n = 48;
-    const surf = (x: number, phase: number, lift: number) =>
-      top -
-      lift * c +
-      Math.sin((x / W) * Math.PI * 2 * LIQUID_FX.waves + phase) * LIQUID_FX.amp * c * k +
-      Math.sin((x / W) * Math.PI * 2 * LIQUID_FX.waves * 2.3 - phase * 1.7) * LIQUID_FX.amp2 * c * k;
-    const shape = (g: PIXI.Graphics, phase: number, lift: number) => {
-      g.clear();
-      g.beginFill(0xffffff);
-      g.moveTo(0, H);
-      for (let i = 0; i <= n; i++) g.lineTo((i / n) * W, surf((i / n) * W, phase, lift));
-      g.lineTo(W, H);
-      g.closePath();
-      g.endFill();
-    };
-    shape(lq.frontMask, lq.phase, 0);
-    shape(lq.backMask, -lq.phase * 0.8 + 1.3, LIQUID_FX.backLift);
-    // renk geçişi yüzeyin biraz üstünden tahtanın dibine
-    const y0 = top - (LIQUID_FX.backLift + LIQUID_FX.amp + LIQUID_FX.amp2) * c;
-    for (const s of [lq.back, lq.front]) {
-      s.position.set(0, y0);
-      s.width = W;
-      s.height = Math.max(1, H - y0);
-    }
-    const ln = lq.line;
-    ln.clear();
-    ln.lineStyle({
-      width: Math.max(1, LIQUID_FX.line * c),
-      color: 0xffffff,
-      alpha: LIQUID_FX.lineAlpha,
-      cap: PIXI.LINE_CAP.ROUND,
-    });
-    for (let i = 0; i <= n; i++) {
-      const x = (i / n) * W,
-        y = surf(x, lq.phase, 0);
-      if (i) ln.lineTo(x, y);
-      else ln.moveTo(x, y);
-    }
-  }
-
-  /** NS4-37: sıvıyı ve tepe ışığını gizler (sönme bitti ya da yeni oyun). */
-  hideLiquid() {
-    const lq = this.liquid;
-    lq.c.visible = false;
-    lq.c.alpha = 1;
-    lq.out = null;
-    lq.top = VIS;
-    this.crest.visible = false;
-  }
-
-  /** Sıklamen bitti, ×2 başladı: tek, yumuşak pembe vuruş ve alttan yükselen pembe/turkuaz kabarcıklar. */
+  /** Sıklamen gücü kullanıldı, ×2 başladı: tek, yumuşak pembe vuruş ve alttan yükselen pembe/turkuaz kabarcıklar. */
   cycBoost() {
     const c = this.L.cell,
       dw = this.dropTex.orig.width;
@@ -1323,78 +1200,12 @@ export class View {
       }
     }
 
-    // NS4-37: sıklamen sıvısı: yükselirken ve bitince sönerken dalgalanır; sönme anim yuvasından bağımsız
-    const lq = this.liquid;
-    if (lq.c.visible) {
-      lq.phase += dt * LIQUID_FX.speed * (this.reducedMotion ? LIQUID_FX.reducedScale : 1);
-      if (lq.out != null) {
-        lq.out += dt;
-        const q = Math.min(1, lq.out / LIQUID_FX.recedeMs);
-        lq.c.alpha = 1 - q;
-        this.crest.alpha = 0.4 * (1 - q) * this.motion.glow;
-        if (q >= 1) this.hideLiquid();
-      }
-      if (lq.c.visible) this.drawLiquid();
-    }
-
     // temizleme animasyonu
     const a = this.anim;
     const m = this.motion;
     if (a) {
       a.t += dt;
-      if (a.kind === 'cyc') {
-        const p = Math.min(1, a.t / a.dur),
-          e = 1 - Math.pow(1 - p, 3);
-        const top = a.rows.length ? Math.min(...a.rows) : VIS;
-        const h = (VIS - top) * c * e + c * 0.6;
-        // NS4-37: yüzey hücre cinsinden (yeniden yerleşimde doğru kalır); çizim aşağıda, sıvı adımında
-        this.liquid.top = VIS - h / c;
-        const surfaceY = this.liquid.top * c;
-        // dalga tepesi: yüzeyin üstünde yumuşak pembe ışık
-        this.crest.height = c * 0.32;
-        this.crest.y = surfaceY - c * 0.2;
-        this.crest.alpha = (0.45 - 0.2 * p) * m.glow;
-        const dw = this.dropTex.orig.width;
-        for (const r of a.rows)
-          for (let col = 0; col < COLS; col++) {
-            const i = r * COLS + col,
-              s = this.cells[i];
-            if (!s.visible) continue;
-            if (s.y > surfaceY) {
-              // sıvıya giren hücre bir kez çözünme parçacığı salar, sonra pembeleşerek erir ve hafifçe yükselir
-              if (a.done && !a.done[i]) {
-                a.done[i] = 1;
-                for (let k = 0, n = this.count(2); k < n; k++)
-                  this.emitDrop(
-                    s.x + (Math.random() - 0.5) * c * 0.6,
-                    s.y,
-                    CYC_TINTS[(col + k) % CYC_TINTS.length],
-                    (Math.random() - 0.5) * c * 0.8,
-                    -c * (1.2 + Math.random() * 1.5),
-                    520 + Math.random() * 300,
-                    -c * 1.5,
-                    ((0.3 + Math.random() * 0.2) * c) / dw,
-                  );
-              }
-              s.alpha = Math.max(0, s.alpha - dt / 260);
-              s.scale.set((c / s.texture.orig.width) * (0.6 + 0.4 * s.alpha));
-              s.y -= dt * c * 0.0012;
-              const q = 1 - s.alpha;
-              s.tint = (255 << 16) | (Math.round(255 - 61 * q) << 8) | Math.round(255 - 31 * q);
-            }
-          }
-        if (Math.random() < (dt / 16) * m.particles)
-          this.emitDrop(
-            Math.random() * COLS * c,
-            VIS * c - Math.random() * h,
-            0xffffff,
-            (Math.random() - 0.5) * c,
-            -c * (2 + Math.random() * 3),
-            700,
-            -c * 2,
-            ((0.25 + Math.random() * 0.3) * c) / dw,
-          );
-      } else if (a.kind === 'collapse') {
+      if (a.kind === 'collapse') {
         this.placeDrops(a, Math.min(1, a.t / a.dur));
       } else if (a.kind === 'flush') {
         // bulutçuklar gülümseyip yerlerinden yukarı süzülerek söner (reduced motion: yerinde söner)

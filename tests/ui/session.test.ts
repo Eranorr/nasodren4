@@ -16,8 +16,7 @@ async function busySession() {
   lc.start();
   stackRows(g, 7);
   frame(); // sıklamen hazır toast'u
-  g.useCyc();
-  finishClear(g);
+  g.useCyc(); // ×2 hemen (aktif çekirdek yok)
   stackRows(g, 7);
   g.useSneeze();
   finishClear(g);

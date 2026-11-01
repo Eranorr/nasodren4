@@ -277,23 +277,3 @@ export function createDropCanvas(cell: number, res: number): HTMLCanvasElement {
   y.fillRect(0, 0, ds, ds);
   return cv;
 }
-
-/**
- * NS4-37: sıklamen özütü sıvısının renk geçişi (dikey; yatayda esnetilir, yüzey dalgası GameView'de maskeyle çizilir).
- * Üstte açık sıklamen pembesi, ortada sıklamen, dipte turkuaz. Eski 256×128 döşenen dalga dokusu esnetilince
- * testere dişi gibi görünüyordu.
- */
-export function createLiquidCanvas(): HTMLCanvasElement {
-  const cv = document.createElement('canvas');
-  cv.width = 4;
-  cv.height = 256;
-  const x = context2d(cv);
-  const g = x.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, 'rgba(255,196,224,.96)');
-  g.addColorStop(0.08, 'rgba(250,130,186,.9)');
-  g.addColorStop(0.45, 'rgba(222,78,152,.78)');
-  g.addColorStop(1, 'rgba(70,196,198,.62)');
-  x.fillStyle = g;
-  x.fillRect(0, 0, 4, 256);
-  return cv;
-}

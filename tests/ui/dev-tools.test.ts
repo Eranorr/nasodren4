@@ -1,18 +1,30 @@
-// Sıklamen çekirdeği kalıcı kural seti: prototip anahtarı, varyantlar ve skor kapatma katmanı kaldırıldı; geliştirme
-// araçları (__fn.*) yalnızca import.meta.env.DEV dalında dinamik olarak yüklenir (production paketine girmez).
+// Kalıcı kural seti: prototip anahtarları, varyantlar ve skor kapatma katmanları kaldırıldı (sıklamen çekirdeği V3,
+// Sıklamen gücü çekirdek desteği); geliştirme araçları (__fn.*) yalnızca import.meta.env.DEV dalında dinamik olarak
+// yüklenir (production paketine girmez).
 import { describe, expect, it } from 'vitest';
 import bootstrapSrc from '../../src/app/bootstrap.ts?raw';
 
 const sources = import.meta.glob<string>('../../src/**/*.ts', { query: '?raw', import: 'default', eager: true });
 
 describe('prototip ve varyant kalıntısı yok', () => {
-  it('URL anahtarı, varyant ayrımı ve prototipe özel skor katmanı kaynakta yok', () => {
-    expect(Object.keys(sources).some((f) => f.endsWith('/app/prototype.ts'))).toBe(false);
-    expect(Object.keys(sources).some((f) => f.endsWith('/dev/flowDemo.ts'))).toBe(false);
+  it('URL anahtarları, varyant ayrımları ve prototipe özel skor katmanı kaynakta yok', () => {
+    for (const gone of [
+      '/app/prototype.ts',
+      '/dev/flowDemo.ts',
+      '/app/cyclamenPowerSwitch.ts',
+      '/dev/cyclamenPowerDemo.ts',
+    ])
+      expect(
+        Object.keys(sources).some((f) => f.endsWith(gone)),
+        gone,
+      ).toBe(false);
     for (const [file, src] of Object.entries(sources)) {
-      expect(src, file).not.toMatch(/prototype=|cyclamen-flow&|FlowVariant|guardLeaderboard|switchFromSearch/);
+      expect(src, file).not.toMatch(/prototype=|cyclamen-flow&|FlowVariant|switchFromSearch|guardLeaderboard/);
       expect(src, file).not.toMatch(/\bflow\s*[:=]\s*['"]v[123]['"]|game\.flow\b|g\.flow\b/);
-      expect(src, file).not.toMatch(/__fn\.prototype/);
+      expect(src, file).not.toMatch(/__fn\.prototype|__fn\.cyclamenPower/);
+      // Sıklamen gücü: tek kalıcı davranış (legacy alt 10 sıra ve ±2/±4 varyantları kaldırıldı)
+      expect(src, file).not.toMatch(/cyclamen-power|core-support|cycPower|CyclamenPower|nonEmptyBottomRows|drainMs/);
+      expect(src, file).not.toMatch(/Alt satırlar temizleniyor/);
     }
   });
 

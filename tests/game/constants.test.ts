@@ -15,7 +15,6 @@ describe('mekanik sabitler', () => {
       lockDelay: 500,
       maxLockResets: 15,
       lineClearMs: 300,
-      drainMs: 800,
       softDropFactor: 20,
       maxLevel: 20,
       linesPerLevel: 10,

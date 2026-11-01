@@ -2,7 +2,7 @@ import html from '../../index.html?raw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAppStubs } from '../helpers/appStubs';
 import { installFakeDom, type FakeDom } from '../helpers/fakeDom';
-import { createGame, finishClear, stackRows } from '../helpers/gameHelpers';
+import { createGame, stackRows } from '../helpers/gameHelpers';
 
 // Modül durumu (HUD önbelleği, ekran yığını) testler arasında taşınmasın diye her testte yeniden yüklenir.
 async function load() {
@@ -68,8 +68,7 @@ describe('efekt rozeti (×2)', () => {
   /** Sıklamen: ×2 sayacı çalışır. NS4-24: Rebound rozeti kaldırıldı. */
   function activateEffects(g: ReturnType<typeof createGame>) {
     stackRows(g, 7);
-    g.useCyc();
-    finishClear(g);
+    g.useCyc(); // ×2 hemen
     expect(g.multT).toBeGreaterThan(0);
   }
 

@@ -17,7 +17,6 @@ export interface GameConfig {
   readonly maxLockResets: number;
   /** Temizleme animasyon süreleri (ms). */
   readonly lineClearMs: number;
-  readonly drainMs: number;
   readonly softDropFactor: number;
   readonly maxLevel: number;
   readonly linesPerLevel: number;
@@ -42,7 +41,6 @@ export const CFG = {
   lockDelay: 500,
   maxLockResets: 15,
   lineClearMs: 300,
-  drainMs: 800,
   softDropFactor: 20,
   maxLevel: 20,
   linesPerLevel: 10,

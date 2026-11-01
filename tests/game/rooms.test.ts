@@ -178,13 +178,20 @@ describe('geçme şartı: bütün gri bulutçuklar temizlenir', () => {
     expect([g.room, g.type]).toEqual([3, active]);
   });
 
-  it('sıklamen drenajı alttaki bulutçukları eritip odayı açabilir', () => {
+  it('sıklamen gücü aktif çekirdekle odanın son bulutçuklarını akıtıp odayı açabilir', () => {
     const g = createGame(1);
     g.reset({ rooms: true });
-    g.enterRoom(2); // 8 sıra gri, %40
+    g.enterRoom(2);
+    clearBoard(g);
+    fillRow(g, 21, PIECE.GARBAGE, [9]); // son 9 bulutçuk
+    for (let y = 14; y < 21; y++) g.board[y * COLS + 9] = PIECE.S; // tıkanıklık %40 (9. sütunda kule)
+    g.boardVer++;
+    placePiece(g, PIECE.T, 0, 3, 0);
+    g.core = true;
+    g.hardDrop(); // çiçek (4, 19), gri (4, 21): aktif, hedef 21, sütun 4 ± 4
     const log = recordEvents(g, ['roomclear']);
     expect(g.useCyc()).toBe(true);
-    finishClear(g);
+    while (g.pending && g.pending.kind !== 'room') finishClear(g);
     expect(log.payloads('roomclear')).toEqual([{ room: 2, bonus: CFG.roomBonus * 3 }]);
   });
 });

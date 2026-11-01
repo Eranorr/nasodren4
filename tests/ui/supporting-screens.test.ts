@@ -46,7 +46,7 @@ describe('NS4-15 izinsiz metni kaldırıldı', () => {
     expect(html).not.toMatch(/Puan ×2|tek kullanımlık/);
   });
   it('onaylı sıklamen başlangıç popup’ı ve ×2 rozeti metni duruyor', () => {
-    expect(sources['../../src/app/events.ts']).toContain("popup('Sıklamen özütü', 'Alt satırlar temizleniyor', 'cyc')");
+    expect(sources['../../src/app/events.ts']).toContain("popup('Sıklamen özütü', undefined, 'cyc')"); // alt metin yok
     expect(sources['../../src/ui/hud.ts']).toContain('`Ferah nefes ×2 · ${m} sn`');
   });
 });
@@ -66,7 +66,7 @@ describe('görünür metinler değişmedi (a67fe7f)', () => {
     [
       'scr-how',
       how,
-      'Nasıl oynanır Dokunmatik Sağa-sola sürükle Bloğu kaydır Dokun Döndür (tahtanın sol üçte biri: ters yön) Aşağı sürükle Yavaşça indir Aşağı fırlat Anında bırak Yukarı fırlat Beklet Klavye ← → Kaydır ↑ / X · Z Döndür · ters döndür ↓ · Boşluk Yavaş indir · anında bırak C / Shift Beklet 1 · 2 Sıklamen özütü · hapşırık Esc / P Duraklat Oyun alanı bir sinüs boşluğu Düşen bloklar burnunda biriken tıkanıklık; alan dolarsa sinüs tamamen tıkanır. Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla başlar; parlayan boşlukları doldurup hepsini uçurunca sinüs açılır. Dördü de açılınca ister serbest nefese devam et, ister bitir. Bir satırı tamamen doldurunca satır silinir. Dört satırı birden silersen TETRİS. T bloğunu döndürüp dar bir boşluğa sokarsan T-spin: ekstra puan. Tahtayı tamamen boşaltırsan Tam Ferahlık bonusu. Tıkanıklık yükselince iki destek açılır. Sıklamen özütü oyunda bir kez kullanılır, alt yarıyı yavaşça boşaltır ve 30 sn puanları ikiye katlar. Hapşırık tıkanıklığın en üstteki 3 sırasını savurur. 20 blok yerleştirince yeniden dolar. Tamam Öğreticiyle oyna',
+      'Nasıl oynanır Dokunmatik Sağa-sola sürükle Bloğu kaydır Dokun Döndür (tahtanın sol üçte biri: ters yön) Aşağı sürükle Yavaşça indir Aşağı fırlat Anında bırak Yukarı fırlat Beklet Klavye ← → Kaydır ↑ / X · Z Döndür · ters döndür ↓ · Boşluk Yavaş indir · anında bırak C / Shift Beklet 1 · 2 Sıklamen özütü · hapşırık Esc / P Duraklat Oyun alanı bir sinüs boşluğu Düşen bloklar burnunda biriken tıkanıklık; alan dolarsa sinüs tamamen tıkanır. Oyun dört sinüs odasından geçer: yanak, gözler arası, alın ve kafa tabanı. Her oda gri bulutçuklarla başlar; parlayan boşlukları doldurup hepsini uçurunca sinüs açılır. Dördü de açılınca ister serbest nefese devam et, ister bitir. Bir satırı tamamen doldurunca satır silinir. Dört satırı birden silersen TETRİS. T bloğunu döndürüp dar bir boşluğa sokarsan T-spin: ekstra puan. Tahtayı tamamen boşaltırsan Tam Ferahlık bonusu. Tıkanıklık yükselince iki destek açılır. Sıklamen özütü oyunda bir kez kullanılır ve 30 sn puanları ikiye katlar. Hapşırık tıkanıklığın en üstteki 3 sırasını savurur. 20 blok yerleştirince yeniden dolar. Tamam Öğreticiyle oyna',
     ],
   ])('%s', (_id, sec, expected) => {
     // NS4-18: oyun sonundaki global gönderim formu ayrı testte sabitlenir; mevcut metinler aynı kalmalı

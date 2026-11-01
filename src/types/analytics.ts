@@ -24,7 +24,8 @@ export interface AnalyticsPayloads {
   // ---- NS4-01..NS4-18 (korunur) ----
   game_start: { best: number };
   powerup_use:
-    { kind: 'siklamen'; level: number; congestion: number } | { kind: 'hapsirik'; uses: number; level: number };
+    | { kind: 'siklamen'; level: number; congestion: number; core: boolean }
+    | { kind: 'hapsirik'; uses: number; level: number };
   level_up: { level: number };
   badge: { id: BadgeId };
   game_over: {
@@ -66,7 +67,7 @@ export interface AnalyticsPayloads {
   /** NS4-22: Tam Ferahlık: satır temizlemesi tahtayı tamamen boşalttı. */
   all_clear: { lines: number; level: number; bonus: number };
   /**
-   * Sıklamen çekirdeği (kural seti cyclamen-flow-v1): çekirdekli parça oyuna girdi (parça başına bir kez); kilitte
+   * Sıklamen çekirdeği: çekirdekli parça oyuna girdi (parça başına bir kez); kilitte
    * yakınında bulutçuk vardı ve aktifleşti; ömrü tetiklenmeden doldu; satır temizlemesi tetikledi; drenaj (ve varsa
    * çökme) bitti. Yalnızca sayısal oyun verisi (room: 0 tabanlı).
    */
@@ -74,7 +75,7 @@ export interface AnalyticsPayloads {
   core_activated: { room: number; level: number };
   core_expired: { room: number; level: number };
   core_triggered: { room: number; level: number };
-  core_drain_completed: { room: number; level: number; cells: number; moved: number };
+  core_drain_completed: { room: number; level: number; cells: number; moved: number; power: boolean };
   /** Oyun sonu "Tekrar oyna". */
   replay_clicked: NoPayload;
   leaderboard_opened: NoPayload;

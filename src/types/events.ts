@@ -20,8 +20,10 @@ export interface ScoredEvent {
   readonly pts: number;
 }
 
-export type PowerDoneEvent =
-  { readonly kind: 'cyc'; readonly n: number } | { readonly kind: 'sneeze'; readonly n: number };
+export interface PowerDoneEvent {
+  readonly kind: 'sneeze';
+  readonly n: number;
+}
 
 /** NS4-27: oda olayları (room: ROOMS indeksi; ROOMS.length = Serbest nefes). */
 export interface RoomStartEvent {
@@ -48,7 +50,7 @@ export interface AllClearEvent {
 export type CoreEvent =
   | { readonly kind: 'seen' | 'fizzled' | 'expired' | 'triggered' }
   | { readonly kind: 'activated'; readonly row: number; readonly col: number }
-  | { readonly kind: 'drained'; readonly cells: number; readonly moved: number };
+  | { readonly kind: 'drained'; readonly cells: number; readonly moved: number; readonly power: boolean };
 
 export interface GameEvents {
   spawn: void;
@@ -69,6 +71,8 @@ export interface GameEvents {
   roomclear: RoomClearEvent;
   allclear: AllClearEvent;
   core: CoreEvent;
+  /** Sıklamen gücü kullanıldı: aktif çekirdek vardı (hemen tetiklendi) ya da yoktu (sıradaki parça çekirdeklendi). */
+  cyclamen: { readonly core: boolean };
 }
 
 export type GameEventName = keyof GameEvents;

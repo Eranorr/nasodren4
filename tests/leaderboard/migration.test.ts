@@ -6,6 +6,7 @@ import envExample from '../../.env.example?raw';
 import gitignore from '../../.gitignore?raw';
 import indexTs from '../../supabase/functions/submit-score/index.ts?raw';
 import rulesetSql from '../../supabase/migrations/20261031000000_cyclamen_flow_ruleset.sql?raw';
+import rulesetV2Sql from '../../supabase/migrations/20261101000000_cyclamen_flow_v2_ruleset.sql?raw';
 import { RULESET } from '../../supabase/functions/_shared/scoreRules.ts';
 
 const sources = import.meta.glob<string>('../../src/**/*.ts', { query: '?raw', import: 'default', eager: true });
@@ -82,12 +83,39 @@ describe('migration: kural seti (cyclamen-flow-v1)', () => {
   const rs = rulesetSql.replace(/--.*$/gm, '').replace(/\s+/g, ' '); // yorumlar hariç, tek boşluk
   it('ruleset sütunu (eski satırlar legacy), izinli değerler kısıtı ve kural seti içinde sıralama indexi', () => {
     expect(rs).toContain("add column if not exists ruleset text not null default 'legacy'");
-    expect(rs).toContain(`check (ruleset in ('legacy', '${RULESET}'))`);
+    expect(rs).toContain("check (ruleset in ('legacy', 'cyclamen-flow-v1'))");
     expect(rs).toContain('on public.leaderboard_scores (ruleset, score desc, created_at asc, id asc)');
-    expect(RULESET).toBe('cyclamen-flow-v1');
   });
   it('okuma tek kural setinden: eski tek parametreli fonksiyon kaldırılır; alanlar ve üst sınır aynı', () => {
     expect(rs).toContain('drop function if exists public.get_leaderboard(integer);');
+    expect(rs).toContain(
+      "create or replace function public.get_leaderboard( limit_count integer default 10, ruleset_name text default 'cyclamen-flow-v1' )",
+    );
+    expect(rs).toContain('returns table (rank bigint, nickname text, score integer, lines integer, level smallint)');
+    expect(rs).toContain("security definer set search_path = ''");
+    const fn = rs.slice(rs.indexOf('as $$'), rs.lastIndexOf('$$'));
+    expect(fn).toContain('where s.ruleset = ruleset_name');
+    expect(fn).toContain('limit least(greatest(coalesce(limit_count, 10), 1), 50)');
+    expect(fn).not.toMatch(/game_hash|duration_seconds|client_version|s\.id,|s\.created_at,/);
+    expect(rs).toContain('revoke all on function public.get_leaderboard(integer, text) from public;');
+    expect(rs).toContain(
+      'grant execute on function public.get_leaderboard(integer, text) to anon, authenticated, service_role;',
+    );
+    expect(rs).not.toMatch(/grant [^;]*(insert|update|delete)[^;]* to [^;]*(anon|authenticated)/i);
+    expect(rulesetSql).toContain('Geri alma (rollback)');
+  });
+});
+
+describe('migration: kural seti cyclamen-flow-v2 (Sıklamen gücü çekirdek desteği)', () => {
+  const rs = rulesetV2Sql.replace(/--.*$/gm, '').replace(/\s+/g, ' ');
+  it('kısıt v2 de kabul eder; legacy ve v1 satırları silinmez', () => {
+    expect(RULESET).toBe('cyclamen-flow-v2');
+    expect(rs).toContain('drop constraint if exists leaderboard_scores_ruleset_chk;');
+    expect(rs).toContain("check (ruleset in ('legacy', 'cyclamen-flow-v1', 'cyclamen-flow-v2'))");
+    expect(rs).not.toMatch(/\bdelete\b|\bupdate\b|\btruncate\b/i);
+  });
+  it('okuma varsayılanı güncel kural seti; alanlar, güvenli arama yolu ve üst sınır aynı; yetkiler', () => {
+    expect(rs).toContain('drop function if exists public.get_leaderboard(integer, text);');
     expect(rs).toContain(
       `create or replace function public.get_leaderboard( limit_count integer default 10, ruleset_name text default '${RULESET}' )`,
     );
@@ -102,7 +130,7 @@ describe('migration: kural seti (cyclamen-flow-v1)', () => {
       'grant execute on function public.get_leaderboard(integer, text) to anon, authenticated, service_role;',
     );
     expect(rs).not.toMatch(/grant [^;]*(insert|update|delete)[^;]* to [^;]*(anon|authenticated)/i);
-    expect(rulesetSql).toContain('Geri alma (rollback)');
+    expect(rulesetV2Sql).toContain('Geri alma (rollback)');
   });
 });
 

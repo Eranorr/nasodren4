@@ -43,17 +43,15 @@ describe('efekt bağlantıları', () => {
 
   // NS4-16: NS4-15'te izinsiz eklenen "Puan ×2 · 30 sn · sıklamen tek kullanımlık" popup'ı kaldırıldı.
   // ×2 başlangıcı onaylı rozet/sayaç ve görsel vuruşla (GameView.cycBoost) anlaşılır.
-  it('sıklamen: onaylı başlangıç popup’ı kalır, bitişte yeni metin yok; ×2 rozeti ve sayacı çalışır', async () => {
+  it('sıklamen: onaylı başlangıç başlığı (alt metin yok), yeni metin yok; ×2 vuruşu; ×2 rozeti ve sayacı çalışır', async () => {
     const { g, lc, frame, calls } = await loadUi();
     lc.start();
     stackRows(g, 8);
-    expect(g.useCyc()).toBe(true);
-    expect(popups()).toEqual([['Sıklamen özütü', 'Alt satırlar temizleniyor']]);
     calls.length = 0;
-    finishClear(g);
-    expect(popups()).toEqual([['Sıklamen özütü', 'Alt satırlar temizleniyor']]); // bitişte popup eklenmez
-    expect(JSON.stringify(popups())).not.toMatch(/Puan ×2|tek kullanımlık/);
-    expect(calls).toContain('view.onClearEnd'); // görsel ×2 vuruşu GameView'de
+    expect(g.useCyc()).toBe(true);
+    expect(popups()).toEqual([['Sıklamen özütü']]);
+    expect(JSON.stringify(popups())).not.toMatch(/Puan ×2|tek kullanımlık|Alt satırlar/);
+    expect(calls).toContain('view.cycBoost'); // görsel ×2 vuruşu GameView'de
     expect(g.multT).toBe(CFG.cycMultMs);
     frame();
     const badge = dom.el('badge-mult');

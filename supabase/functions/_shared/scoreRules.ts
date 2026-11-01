@@ -21,10 +21,8 @@ export const GAME_RULES = {
   /** Bir temizleme animasyonu (sn) ve tek seferde en çok satır. */
   lineClearSeconds: 0.3,
   maxLinesPerClear: 4,
-  /** Sıklamen ×2 çarpanı ve tek kullanımlık drenajın satır başı bonusu (150 × satır × seviye, en çok 20 satır). */
+  /** Sıklamen gücünün ×2 çarpanı (30 sn; güç oyun başına bir kez, kendisi puan vermez: drenaj bonusu 0). */
   cycMult: 2,
-  cycBonusPerRow: 150,
-  cycMaxRows: 20,
   /** NS4-24: Hapşırık (sentetik açıcının yerine): 50 × satır × seviye, 3 üst sıra (gameConfig sneezeRows). */
   sneezeBonusPerRow: 50,
   sneezeRows: 3,
@@ -51,11 +49,13 @@ export const SCORE_LIMITS = {
 export const CLIENT_VERSION_MAX = 32;
 
 /**
- * Oyun kural seti (sıklamen çekirdeği kalıcı oldu; bkz. docs/CYCLAMEN-CORE-V3-FINAL.md). Skorlar yalnızca aynı kural
- * setiyle karşılaştırılır: yerel liste ve global tablo bu değere göre ayrılır; gönderimde yalnızca bu değer kabul edilir.
- * Kural seti alanı olmayan (önceki sürümden kalan) kayıtlar LEGACY_RULESET sayılır ve silinmez.
+ * Oyun kural seti. Skorlar yalnızca aynı kural setiyle karşılaştırılır: yerel liste ve global tablo bu değere göre
+ * ayrılır; gönderimde yalnızca bu değer kabul edilir. Eski kural setlerinin kayıtları silinmez.
+ *   cyclamen-flow-v1: sıklamen çekirdeği kalıcı (docs/CYCLAMEN-CORE-V3-FINAL.md); Sıklamen gücü alttaki 10 sırayı siler.
+ *   cyclamen-flow-v2: Sıklamen gücü çekirdeği destekler (docs/CYCLAMEN-POWER-CORE-SUPPORT-FINAL.md).
+ * Kural seti alanı olmayan (NS4-18'den kalan) kayıtlar LEGACY_RULESET sayılır.
  */
-export const RULESET = 'cyclamen-flow-v1';
+export const RULESET = 'cyclamen-flow-v2';
 export const LEGACY_RULESET = 'legacy';
 /** Kural seti adı biçimi (veritabanı kısıtıyla aynı). */
 export const RULESET_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;
@@ -103,7 +103,7 @@ export function minDurationForLines(lines: number): number {
  * Satır başına en yüksek taban T-spin tekli (800) × seviye × art arda 1,5 × sıklamen 2; kombo terimi en çok
  * 50 × kombo × seviye × 2 her temizlemede; parça başına T-spin (satırsız, 400) + hard drop + hapşırık bonusu (gerçekte 20 parçada bir;
  * cömert kalsın diye her parçada sayılır);
- * tek seferlik sıklamen drenajı; dört oda bonusu (NS4-27); her temizlenen satır Tam Ferahlık'ın satır başına en yüksek
+ * dört oda bonusu (NS4-27); her temizlenen satır Tam Ferahlık'ın satır başına en yüksek
  * payıyla (tekli: 800; NS4-22). Seviye son seviyedir (seviye yalnızca artar).
  */
 export function maxPlausibleScore(lines: number, level: number, durationSeconds: number): number {
@@ -113,10 +113,9 @@ export function maxPlausibleScore(lines: number, level: number, durationSeconds:
   const comboPts = ((50 * level * lines * (lines + 1)) / 2) * R.cycMult;
   const piecePts =
     pieces * (400 * level * R.cycMult + R.hardDropPerRow * R.boardRows + R.sneezeBonusPerRow * R.sneezeRows * level);
-  const cycPts = R.cycBonusPerRow * R.cycMaxRows * level;
   const roomPts = ((R.roomBonus * R.rooms * (R.rooms + 1)) / 2) * level;
   const allClearPts = lines * Math.max(...R.allClearBonus.map((b, n) => (n ? b / n : 0))) * level;
-  return Math.min(SCORE_LIMITS.maxScore, Math.floor(linePts + comboPts + piecePts + cycPts + roomPts + allClearPts));
+  return Math.min(SCORE_LIMITS.maxScore, Math.floor(linePts + comboPts + piecePts + roomPts + allClearPts));
 }
 
 /** Global gönderim gövdesi (istemci → Edge Function). */

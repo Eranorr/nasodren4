@@ -1,6 +1,6 @@
 /* =====================================================================
-   SIKLAMEN ÇEKİRDEĞİ (kural seti cyclamen-flow-v1; bkz.
-   docs/CYCLAMEN-CORE-V3-FINAL.md). Her 7'li torbada bir parçanın çiçek
+   SIKLAMEN ÇEKİRDEĞİ (bkz. docs/CYCLAMEN-CORE-V3-FINAL.md; Sıklamen gücü
+   desteği: docs/CYCLAMEN-POWER-CORE-SUPPORT-FINAL.md). Her 7'li torbada bir parçanın çiçek
    hücresi çekirdek taşır; bit, hücrenin bitki baytının boş 7. bitidir
    (plants.ts 0-6. bitleri kullanır), satırlarla birlikte kayar.
    Çekirdek kilitlenince yakınında (sütun ±FLOW.nearCols, sıra
@@ -29,6 +29,8 @@ export const FLOW = {
   nearCols: 1,
   nearRows: 2,
   span: 2,
+  /** Sıklamen gücüyle tetiklenen aktif çekirdeğin drenaj genişliği (sütun ±; en çok 9 gri; normal drenaj ±span kalır). */
+  supportSpan: 4,
   /** Son bu kadar parçada aktif çekirdeğin işareti hafifçe söner (görünüm). */
   coreFadeAt: 2,
   /** Drenaj puanı (0: drenaj puan vermez). */

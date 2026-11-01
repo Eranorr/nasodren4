@@ -23,6 +23,7 @@ describe('olaylar', () => {
         'clearend',
         'clearstart',
         'core',
+        'cyclamen',
         'gameover',
         'harddrop',
         'hold',
@@ -87,6 +88,8 @@ describe('olaylar', () => {
     stackRows(g, 7);
     g.useSneeze();
     finishClear(g);
+    stackRows(g, 7); // Sıklamen gücü: aktif çekirdek yok → sıradaki parça çekirdeklenir ('cyclamen')
+    g.useCyc();
     // görünür alan dolu: gizli satırlarda kilitlenen parça → oyun sonu (lockout)
     placePiece(g, PIECE.O, 0, 3, 0);
     stackRows(g, 20);

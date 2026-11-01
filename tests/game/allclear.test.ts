@@ -81,14 +81,15 @@ describe('Tam Ferahlık', () => {
     expect(g.allClears).toBe(0);
   });
 
-  it('sıklamenin boşalttığı tahta sayılmaz (yalnızca satır temizlemesi)', () => {
+  it('güçler (sıklamen, hapşırık) Tam Ferahlık üretmez (yalnızca satır temizlemesi)', () => {
     const g = createGame(1);
     const log = recordEvents(g, ['allclear']);
     stackRows(g, 8);
-    g.useCyc();
+    g.useCyc(); // aktif çekirdek yok: sıradaki parça çekirdeklenir
+    g.useSneeze();
     finishClear(g);
-    expect(g.board.every((v) => v === 0)).toBe(true);
     expect(log.count('allclear')).toBe(0);
+    expect(g.allClears).toBe(0);
   });
 
   it('yeni oyunda sayaç sıfırlanır', () => {

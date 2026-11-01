@@ -73,11 +73,7 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
       reliefFlash(relief);
     }
     relief = null;
-    if (e.kind === 'cyc') {
-      sound.cyc();
-      buzz(HAPTIC.cyc);
-      popup('Sıklamen özütü', 'Alt satırlar temizleniyor', 'cyc');
-    } else if (e.kind === 'sneeze') {
+    if (e.kind === 'sneeze') {
       sound.sneeze();
       buzz(HAPTIC.sneeze);
       popup('HAPŞUU!', 'Çok yaşa!', 'sneeze');
@@ -88,9 +84,7 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
   // NS4-03: powerup_use analitiği Game.useCyc/useSyn içinden buraya taşındı. Orijinalde track() emit('clearstart')
   // çağrısından hemen sonra çalışıyordu; bu işleyici yukarıdakinden sonra kaydedildiği için sıra ve payload aynıdır.
   game.on('clearstart', (e) => {
-    if (e.kind === 'cyc')
-      track('powerup_use', { kind: 'siklamen', level: game.level, congestion: +game.congestion().toFixed(2) });
-    else if (e.kind === 'sneeze') track('powerup_use', { kind: 'hapsirik', uses: game.sneezeUses, level: game.level });
+    if (e.kind === 'sneeze') track('powerup_use', { kind: 'hapsirik', uses: game.sneezeUses, level: game.level });
   });
   game.on('clearend', () => view.onClearEnd());
   game.on('scored', (e) => {
@@ -139,6 +133,20 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
   game.on('powerdone', (e) => {
     if (e.kind === 'sneeze' && game.sneezeUses >= 3) award('hapsu');
   });
+  // Sıklamen gücü: Sıklamen anı (ses, titreşim, başlık, ×2 vuruşu; alt metin yok). Analitik: aktif çekirdek vardı mı;
+  // akan gri ve inen hücre sayısı core_drain_completed (power: true) ile gelir.
+  game.on('cyclamen', (e) => {
+    sound.cyc();
+    buzz(HAPTIC.cyc);
+    popup('Sıklamen özütü', undefined, 'cyc');
+    view.cycBoost();
+    track('powerup_use', {
+      kind: 'siklamen',
+      level: game.level,
+      congestion: +game.congestion().toFixed(2),
+      core: e.core,
+    });
+  });
   // Sıklamen çekirdeği: her durum geçişi Game'de bir kez yayılır (görünüm Game alanlarını kendisi okur)
   game.on('core', (e) => {
     const at = { room: game.room, level: game.level };
@@ -146,7 +154,8 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
     else if (e.kind === 'activated') track('core_activated', at);
     else if (e.kind === 'expired') track('core_expired', at);
     else if (e.kind === 'triggered') track('core_triggered', at);
-    else if (e.kind === 'drained') track('core_drain_completed', { ...at, cells: e.cells, moved: e.moved });
+    else if (e.kind === 'drained')
+      track('core_drain_completed', { ...at, cells: e.cells, moved: e.moved, power: e.power });
   });
   // NS4-27: Sinüs Odaları
   game.on('roomstart', (e) => {

@@ -26,7 +26,7 @@ describe('tıkanıklık (congestion)', () => {
   });
 });
 
-describe('siklamen (cyc)', () => {
+describe('siklamen (cyc): çekirdek desteği (kural seti cyclamen-flow-v2; ayrıntı: tests/game/cyclamenPower.test.ts)', () => {
   it('%35 altındaki tıkanıklıkta açılmaz', () => {
     const g = createGame(1);
     stackRows(g, 6); // 0.30
@@ -41,32 +41,27 @@ describe('siklamen (cyc)', () => {
     expect(g.canSneeze()).toBe(true);
   });
 
-  it('alt bölgedeki (satır 12..21) dolu satırları drenajla temizler; puan ve 30 sn ×2 verir', () => {
+  it('aktif çekirdek yokken satır silmez, puan vermez; sıradaki parçayı çekirdekler; 30 sn ×2 hemen başlar', () => {
     const g = createGame(1);
     stackRows(g, 10); // satır 12..21
-    setCell(g, 2, 11, PIECE.L); // pencerenin (satır 12+) dışında
-    const log = recordEvents(g, ['clearstart', 'powerdone', 'clearend']);
+    setCell(g, 2, 11, PIECE.L);
+    g.queueCore.fill(false);
+    const board = g.board.slice();
+    const log = recordEvents(g, ['clearstart', 'powerdone', 'clearend', 'cyclamen']);
     expect(g.useCyc()).toBe(true);
-    const rows = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
-    expect(g.state).toBe('draining');
-    expect(log.payloads('clearstart')).toEqual([{ rows, kind: 'cyc' }]);
-    g.update(CFG.drainMs - 1);
-    expect(g.state).toBe('draining');
-    g.update(1);
-    expect(g.state).toBe('play');
-    expect(log.payloads('powerdone')).toEqual([{ kind: 'cyc', n: 10 }]);
-    expect(log.payloads('clearend')).toEqual([{ rows, kind: 'cyc' }]);
-    expect(g.score).toBe(150 * 10);
-    expect(g.multT).toBe(CFG.cycMultMs);
-    expect(getCell(g, 2, 21)).toBe(PIECE.L); // 10 satır aşağı kaydı
-    expect(rowCells(g, 20)).toEqual(new Array<number>(COLS).fill(0));
+    expect([g.state, g.pending, g.score, g.multT]).toEqual(['play', null, 0, CFG.cycMultMs]);
+    expect(log.names()).toEqual(['cyclamen']);
+    expect(log.payloads('cyclamen')).toEqual([{ core: false }]);
+    expect(g.queueCore[0]).toBe(true);
+    expect([...g.board]).toEqual([...board]); // alttaki sıralar silinmedi
+    expect(getCell(g, 2, 11)).toBe(PIECE.L);
+    expect(rowCells(g, 21).filter(Boolean)).toHaveLength(COLS - 1);
   });
 
   it('yalnızca bir kez kullanılabilir', () => {
     const g = createGame(1);
     stackRows(g, 7);
     expect(g.useCyc()).toBe(true);
-    finishClear(g);
     stackRows(g, 7);
     expect(g.canCyc()).toBe(false);
     expect(g.useCyc()).toBe(false);
@@ -77,8 +72,7 @@ describe('siklamen (cyc)', () => {
     const g = createGame(1);
     const log = recordEvents(g, ['scored']);
     stackRows(g, 7);
-    g.useCyc();
-    finishClear(g);
+    g.useCyc(); // ×2 hemen (aktif çekirdek yok: drenaj yok)
     setupWell(g, 1);
     dropVerticalI(g);
     finishClear(g); // multT 30000 - 300

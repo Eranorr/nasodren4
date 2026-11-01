@@ -30,10 +30,7 @@ describe('sıklamen butonu', () => {
     stackRows(g, 7); // %35
     frame();
     expect(btn('btn-cyc')).toEqual({ state: 'ready', text: 'Hazır · oyunda 1 kez', disabled: false, ready: true });
-    g.useCyc();
-    frame(); // drenaj sürerken
-    expect(btn('btn-cyc')).toEqual({ state: 'used', text: 'Bu oyunda kullanıldı', disabled: true, ready: false });
-    finishClear(g);
+    g.useCyc(); // ×2 kullanıldığı anda başlar
     frame();
     expect(btn('btn-cyc')).toEqual({ state: 'active', text: 'Kullanıldı · ×2 etkin', disabled: true, ready: false });
     expect(dom.el('badge-mult').style['display']).toBe('block');
@@ -49,7 +46,6 @@ describe('sıklamen butonu', () => {
     lc.start();
     stackRows(g, 7);
     g.useCyc();
-    finishClear(g);
     frame();
     g.update(CFG.cycMultMs - 1000);
     frame();

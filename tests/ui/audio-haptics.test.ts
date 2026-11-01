@@ -120,8 +120,7 @@ describe('olay → ses ve haptik (her önemli olay bir kez)', () => {
     stackRows(g, 8);
     rec.log.length = 0;
     buzz.mockClear();
-    g.useCyc();
-    finishClear(g);
+    g.useCyc(); // aktif çekirdek yok: drenaj yok
     expect(rec.count('cyc')).toBe(1);
     expect(rec.log.map(([n]) => n).filter((n) => n !== 'setMusic')).toEqual(['cyc']);
     expect(buzz.mock.calls).toEqual([[HAPTIC.cyc]]);

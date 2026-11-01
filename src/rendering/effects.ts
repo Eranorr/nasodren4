@@ -183,22 +183,3 @@ export class Budget {
     this.acc = 0;
   }
 }
-
-/**
- * NS4-37: sıklamen özütü sıvısı. Yüzey iki dalganın toplamı (genlik hücre oranı, tahta boyunca dalga sayısı, faz
- * hızı rad/ms); arkada daha yüksekte ikinci, koyu katman. Bitince recedeMs içinde söner (temizleme animasyonundan
- * bağımsız: oda açılışı ya da satır temizlemesi araya girse de söner). Hareketi azalt: genlik ve hız düşer.
- */
-export const LIQUID_FX = {
-  amp: 0.14,
-  amp2: 0.06,
-  waves: 1.4,
-  speed: 0.0024,
-  backLift: 0.22,
-  backTint: 0xc0508f,
-  backAlpha: 0.55,
-  line: 0.07,
-  lineAlpha: 0.8,
-  recedeMs: 520,
-  reducedScale: 0.35,
-} as const;

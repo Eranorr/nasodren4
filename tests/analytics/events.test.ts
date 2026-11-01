@@ -25,7 +25,13 @@ type Kind = 'number' | 'boolean' | readonly string[];
 const STATES = ['menu', 'playing', 'paused', 'over'] as const;
 const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
   game_start: { best: 'number' },
-  powerup_use: { kind: ['siklamen', 'hapsirik'], level: 'number', congestion: 'number', uses: 'number' },
+  powerup_use: {
+    kind: ['siklamen', 'hapsirik'],
+    level: 'number',
+    congestion: 'number',
+    uses: 'number',
+    core: 'boolean',
+  },
   level_up: { level: 'number' },
   badge: { id: ['ozmotik', 'noro', 'akis', 'hapsu', 'derin'] },
   game_over: {
@@ -56,7 +62,7 @@ const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
   core_activated: { room: 'number', level: 'number' },
   core_expired: { room: 'number', level: 'number' },
   core_triggered: { room: 'number', level: 'number' },
-  core_drain_completed: { room: 'number', level: 'number', cells: 'number', moved: 'number' },
+  core_drain_completed: { room: 'number', level: 'number', cells: 'number', moved: 'number', power: 'boolean' },
   final_choice: { choice: ['continue', 'finish'], dur_s: 'number' },
   replay_clicked: {},
   leaderboard_opened: {},
@@ -277,9 +283,9 @@ describe('oyun hunisi: her olay doğru anda bir kez', () => {
     expect(count('powerup_use')).toBe(3);
     expect(last('powerup_use')).toMatchObject({ kind: 'hapsirik', uses: 3 });
     stackRows(g, 8);
-    g.useCyc();
-    finishClear(g);
+    g.useCyc(); // aktif çekirdek yok: drenaj yok, ×2 hemen
     frame();
+    expect(last('powerup_use')).toMatchObject({ kind: 'siklamen', core: false });
     expect([count('cyclamen_available'), count('sneeze_available')]).toEqual([1, 1]);
     // yeni oyunda yeniden bir kez
     lc.start();
@@ -466,7 +472,7 @@ describe('skor tablosu ve global gönderim olayları; kişisel veri yok', () => 
       durationSeconds: 90,
       recordedAt: 1,
       submitted: false,
-      ruleset: 'cyclamen-flow-v1',
+      ruleset: 'cyclamen-flow-v2',
     });
     const input = dom.el('nick-input') as unknown as { value: string };
     input.value = '<x>';

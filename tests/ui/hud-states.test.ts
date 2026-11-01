@@ -35,19 +35,19 @@ describe('kısa durum etiketi ve erişilebilir ad', () => {
     stackRows(g, 7);
     frame();
     expect(read('btn-cyc')).toEqual({ state: 'ready', chip: 'Hazır', label: 'Sıklamen özütü: Hazır · oyunda 1 kez' });
-    g.useCyc();
-    frame();
-    expect(read('btn-cyc')).toEqual({
-      state: 'used',
-      chip: 'Kullanıldı',
-      label: 'Sıklamen özütü: Bu oyunda kullanıldı',
-    });
-    finishClear(g);
+    g.useCyc(); // ×2 kullanıldığı anda başlar
     frame();
     expect(read('btn-cyc')).toEqual({
       state: 'active',
       chip: '×2 etkin',
       label: 'Sıklamen özütü: Kullanıldı · ×2 etkin',
+    });
+    g.update(CFG.cycMultMs);
+    frame();
+    expect(read('btn-cyc')).toEqual({
+      state: 'used',
+      chip: 'Kullanıldı',
+      label: 'Sıklamen özütü: Bu oyunda kullanıldı',
     });
   });
 

@@ -99,7 +99,6 @@ export function finishClear(g: Game): void {
   const ms = {
     lines: CFG.lineClearMs,
     sneeze: CFG.sneezeMs,
-    cyc: CFG.drainMs,
     room: CFG.roomClearMs,
     flush: FLOW.rowMs,
     collapse: FLOW.collapseMs,
@@ -124,6 +123,7 @@ const EVENT_FLAGS: Record<GameEventName, true> = {
   roomclear: true,
   allclear: true,
   core: true,
+  cyclamen: true,
 };
 /** GameEvents içindeki tüm olay adları (Record tipi eksik/fazla adı derleme hatası yapar). */
 export const ALL_EVENTS = Object.keys(EVENT_FLAGS) as GameEventName[];
