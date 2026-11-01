@@ -74,7 +74,10 @@ describe('görünür metinler değişmedi (a67fe7f)', () => {
   });
   it('NS4-18 oyun sonu gönderim formu: yalnızca görevin istediği metinler', () => {
     const form = FORM_RE.exec(over)?.[0] ?? '';
-    expect(text(form)).toBe('Takma ad Global tabloya gönder 3–16 karakter: harf, rakam, boşluk, - _ .');
+    // herkese açık tablo: gizlilik notu takma ad ipucunda
+    expect(text(form)).toBe(
+      'Takma ad Global tabloya gönder 3–16 karakter: harf, rakam, boşluk, - _ . Takma adın ve skorun herkese açık skor tablosunda görünür; gerçek adını yazma.',
+    );
     // ana eylemlerden (Tekrar oyna / Ana menü) sonra gelir: hiyerarşi değişmez
     expect(at(over, 'id="b-menu"')).toBeLessThan(at(over, 'id="submit-score"'));
     expect(at(over, 'id="submit-score"')).toBeLessThan(at(over, 'id="tip-over"'));

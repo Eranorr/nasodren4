@@ -1,8 +1,10 @@
 /* =====================================================================
-   NS4-18: global skor yapılandırması (Vite ortam değişkenleri).
+   Supabase yapılandırması (Vite ortam değişkenleri). Sitedeki bütün oyunlar
+   tek bir Supabase projesini paylaşır; bu oyunun öneki `tetris`
+   (tablo: tetris_scores, oda kanalı: tetris:room:<KOD>).
    Tarayıcıya yalnızca public proje URL'si ve publishable/anon anahtar
-   girer. Değerler eksik veya geçersizse global skor kontrollü biçimde
-   devre dışıdır (oyun ve yerel tablo etkilenmez).
+   girer. Değerler eksik veya geçersizse global skor ve çok oyunculu
+   kontrollü biçimde kapalıdır (oyun ve yerel tablo etkilenmez).
    ===================================================================== */
 
 export interface LeaderboardConfig {
@@ -11,11 +13,17 @@ export interface LeaderboardConfig {
   readonly key: string;
 }
 
-/** Edge Function adı (supabase/functions/submit-score). */
-export const SUBMIT_FUNCTION = 'submit-score';
-/** Okuma RPC'si (supabase/migrations: public.get_leaderboard). */
-export const READ_RPC = 'get_leaderboard';
-export const CLIENT_VERSION = 'web-ns4-18';
+/** Oyunun ortak projedeki öneki. */
+export const PREFIX = 'tetris';
+/** Skor gönderimi (Edge Function; tarayıcı tabloya yazamaz). */
+export const SUBMIT_FUNCTION = `${PREFIX}-submit-score`;
+/** Oda üyeliği (Edge Function). */
+export const ROOM_FUNCTION = `${PREFIX}-room`;
+/** Okuma RPC'si (yalnızca gerekli sütunlar, en çok 10 satır). */
+export const READ_RPC = `${PREFIX}_get_leaderboard`;
+export const CLIENT_VERSION = 'web-tetris-1';
+/** Çok oyunculu oda kanalı öneki (Supabase Realtime). */
+export const ROOM_TOPIC = `${PREFIX}:room:`;
 
 /** Service role / secret anahtar biçimleri: yanlışlıkla verilirse yapılandırma reddedilir. */
 function looksSecret(key: string): boolean {
@@ -30,13 +38,18 @@ function looksSecret(key: string): boolean {
   }
 }
 
-/** Ortamdan yapılandırma; eksik/geçersizse null (global devre dışı). */
+/**
+ * Ortamdan yapılandırma; eksik/geçersizse null (global skor ve çok oyunculu kapalı).
+ * Anahtar adı VITE_SUPABASE_PUBLISHABLE_KEY. Geçici uyumluluk: yalnızca eski VITE_SUPABASE_ANON_KEY tanımlıysa o
+ * okunur (ortak rehberi izleyen kurulumlar); yeni kurulumlar yalnızca PUBLISHABLE adını kullanır.
+ */
 export function leaderboardConfigFrom(env: {
   readonly VITE_SUPABASE_URL?: string | undefined;
   readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string | undefined;
+  readonly VITE_SUPABASE_ANON_KEY?: string | undefined;
 }): LeaderboardConfig | null {
   const rawUrl = (env.VITE_SUPABASE_URL ?? '').trim();
-  const key = (env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '').trim();
+  const key = (env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_ANON_KEY || '').trim();
   if (!rawUrl || !key || looksSecret(key)) return null;
   let u: URL;
   try {

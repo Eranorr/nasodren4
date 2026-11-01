@@ -73,6 +73,9 @@ const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
   score_submit_failed: {
     code: ['nickname', 'duplicate', 'rejected', 'rate_limited', 'offline', 'timeout', 'server', 'disabled'],
   },
+  mp_room: { action: ['create', 'join'] },
+  mp_round_start: { players: 'number', round: 'number' },
+  mp_round_end: { players: 'number', round: 'number', rank: 'number' },
 };
 const EVENTS = Object.keys(SCHEMA) as AnalyticsEvent[];
 
@@ -298,7 +301,7 @@ describe('oyun hunisi: her olay doğru anda bir kez', () => {
     const { g, lc } = await loadGame();
     const { bindUiAnalytics } = await import('../../src/analytics/funnel');
     bindUiAnalytics({ getState: lc.getState, getScore: () => g.score, getLevel: () => g.level });
-    dom.el('b-again').addEventListener('click', lc.start); // bootstrap sırası: analitik dinleyici önce
+    dom.el('b-again').addEventListener('click', () => lc.start()); // bootstrap sırası: analitik dinleyici önce
     lc.start();
     g.score = 4321;
     lc.pause();
@@ -438,9 +441,13 @@ describe('skor tablosu ve global gönderim olayları; kişisel veri yok', () => 
     const { createScoresView } = await import('../../src/ui/scoresView');
     const { createSubmitPanel } = await import('../../src/ui/submitScore');
     const fetchTop = vi.fn(() => Promise.resolve({ ok: false as const, reason: 'error' as const }));
-    const results = [{ ok: false, reason: 'offline' }, { ok: false, reason: 'rate_limited' }, { ok: true }] as const;
+    const ok = {
+      ok: true,
+      entry: { id: 1, rank: 1, nickname: 'GizliTakmaAd', score: 777, lines: 12, level: 2 },
+    } as const;
+    const results = [{ ok: false, reason: 'offline' }, { ok: false, reason: 'invalid' }, ok] as const;
     let i = 0;
-    const submit = vi.fn(() => Promise.resolve(results[i++] ?? { ok: true as const }));
+    const submit = vi.fn(() => Promise.resolve(results[i++] ?? ok));
     const client = { enabled: true, fetchTop, submit };
     const v = createScoresView({ client, loadLocal: () => [] });
     v.open(); // varsayılan Yerel: olay yok
@@ -494,9 +501,7 @@ describe('skor tablosu ve global gönderim olayları; kişisel veri yok', () => 
       ['started', undefined],
       ['failed', 'offline'],
       ['started', undefined],
-      ['failed', 'rate_limited'],
-      ['started', undefined],
-      ['succeeded', undefined],
+      ['failed', 'rejected'],
     ]);
     const all = JSON.stringify(records());
     expect(all).not.toContain(NICK);

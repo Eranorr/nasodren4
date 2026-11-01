@@ -1,20 +1,23 @@
 /* =====================================================================
    NS4-18: oyun sonu global gönderim paneli. Skor yalnızca kullanıcı
    "Global tabloya gönder" dediğinde ağa gider (otomatik gönderim yok).
-   Durumlar: hazır → gönderiliyor → gönderildi / hata. Başarılı (veya
-   sunucunun "zaten gönderildi" dediği) oyun tekrar gönderilemez. Ağ hatası
-   oyunu ve yerel kaydı etkilemez; kullanıcı tekrar deneyebilir.
+   Durumlar: hazır → gönderiliyor → gönderildi / hata. Başarılı oyun tekrar
+   gönderilemez (yerel kayıtta işaretlenir). Ağ hatası oyunu ve yerel kaydı
+   etkilemez; kullanıcı tekrar deneyebilir. Gönderilince tablodaki sıra
+   gösterilir ve Skorlar ekranında kendi satırı vurgulanır.
    ===================================================================== */
 import { $ } from './dom';
 import { track } from '../analytics/analytics';
 import type { SubmitFailCode } from '../types/analytics';
 import { validateNickname } from '../../supabase/functions/_shared/scoreRules.ts';
-import type { LeaderboardClient, SubmitResult } from '../leaderboard/globalClient';
+import type { GlobalEntry, LeaderboardClient, SubmitResult } from '../leaderboard/globalClient';
 import type { LocalScore } from '../leaderboard/localScores';
 
 export const SUBMIT_TEXT = {
   sending: 'Gönderiliyor…',
   sent: 'Global tabloya gönderildi',
+  /** {n}: tablodaki sıra. */
+  sentRank: 'Global tabloya gönderildi · Sıran: {n}.',
   duplicate: 'Bu oyun zaten gönderilmiş',
   invalidNick: 'Takma ad geçersiz',
   rejected: 'Bu skor gönderilemedi',
@@ -41,6 +44,8 @@ export interface SubmitPanelDeps {
   readonly loadNickname: () => string;
   readonly saveNickname: (n: string) => void;
   readonly updateLocal: (id: string, patch: { nickname?: string; submitted?: boolean }) => void;
+  /** Gönderilen satır (Skorlar ekranında vurgulanır; ilk 10'da değilse sırasıyla altta). */
+  readonly onSubmitted?: (entry: GlobalEntry) => void;
 }
 export interface SubmitPanel {
   /** Yeni oyun sonu: paneli bu oyun için hazırlar. */
@@ -49,7 +54,13 @@ export interface SubmitPanel {
   readonly state: () => SubmitState;
 }
 
-export function createSubmitPanel({ client, loadNickname, saveNickname, updateLocal }: SubmitPanelDeps): SubmitPanel {
+export function createSubmitPanel({
+  client,
+  loadNickname,
+  saveNickname,
+  updateLocal,
+  onSubmitted,
+}: SubmitPanelDeps): SubmitPanel {
   const form = $('submit-score');
   const input = $('nick-input', HTMLInputElement);
   const button = $('b-submit', HTMLButtonElement);
@@ -100,14 +111,17 @@ export function createSubmitPanel({ client, loadNickname, saveNickname, updateLo
     } catch {
       r = { ok: false, reason: 'error' };
     }
+    // sunucunun "zaten gönderildi" dediği oyun da gönderilmiş sayılır (aynı oyun ikinci kez gönderilemez)
     if (r.ok || r.reason === 'duplicate') {
       sentIds.add(e.id);
       updateLocal(e.id, { submitted: true });
     }
+    if (r.ok) onSubmitted?.(r.entry);
     if (r.ok) track('score_submit_succeeded', {});
     else track('score_submit_failed', { code: FAIL_CODE[r.reason] });
     if (entry !== e) return; // bu arada yeni oyun başladı; panel artık başka oyunu gösteriyor
-    if (r.ok) set('sent', SUBMIT_TEXT.sent);
+    if (r.ok)
+      set('sent', r.entry.rank > 0 ? SUBMIT_TEXT.sentRank.replace('{n}', String(r.entry.rank)) : SUBMIT_TEXT.sent);
     else if (r.reason === 'duplicate') set('sent', SUBMIT_TEXT.duplicate);
     else if (r.reason === 'disabled') set('disabled', SUBMIT_TEXT.disabled);
     else if (r.reason === 'invalid')

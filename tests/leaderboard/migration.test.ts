@@ -1,160 +1,144 @@
-// NS4-18: SQL migration, function yapılandırması ve secret hijyeni için statik sözleşme testleri.
+// Migration zinciri (ileri yönlü), yetkiler / RLS, Edge Function kaynağı ve secret hijyeni için statik sözleşme testleri.
 import { describe, expect, it } from 'vitest';
-import sql from '../../supabase/migrations/20261018000000_ns4_18_leaderboard.sql?raw';
-import toml from '../../supabase/config.toml?raw';
-import envExample from '../../.env.example?raw';
+import baseline from '../../supabase/migrations/20261101000000_tetris_scores_baseline.sql?raw';
+import secure from '../../supabase/migrations/20261101120000_tetris_secure_scores_and_rooms.sql?raw';
+import envProduction from '../../.env.production?raw';
+import envExample from '../../.env.local.example?raw';
 import gitignore from '../../.gitignore?raw';
-import indexTs from '../../supabase/functions/submit-score/index.ts?raw';
-import rulesetSql from '../../supabase/migrations/20261031000000_cyclamen_flow_ruleset.sql?raw';
-import rulesetV2Sql from '../../supabase/migrations/20261101000000_cyclamen_flow_v2_ruleset.sql?raw';
-import { RULESET } from '../../supabase/functions/_shared/scoreRules.ts';
+import pkg from '../../package.json';
+import submitIndex from '../../supabase/functions/tetris-submit-score/index.ts?raw';
+import roomIndex from '../../supabase/functions/tetris-room/index.ts?raw';
 
 const sources = import.meta.glob<string>('../../src/**/*.ts', { query: '?raw', import: 'default', eager: true });
-const code = sql.replace(/--.*$/gm, ''); // yorumlar hariç
+const migrations = import.meta.glob<string>('../../supabase/migrations/*.sql', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+const sql = (s: string) => s.replace(/--.*$/gm, '').replace(/\s+/g, ' '); // yorumlar hariç, tek boşluk
+const code = sql(secure);
+const FUNCS = [
+  'tetris_score_rank(text, integer, bigint)',
+  'tetris_rate_hit(text, text, integer, integer)',
+  'tetris_room_create(text, text, text, text)',
+  'tetris_room_join(text, text, text, text)',
+  'tetris_room_member_key(uuid, uuid)',
+  'tetris_room_roster(uuid, uuid)',
+  'tetris_room_leave(uuid, uuid)',
+];
 
-describe('migration: tablo, kısıtlar, index', () => {
-  it('gerekli sütunlar ve tekrar gönderimi engelleyen benzersiz özet', () => {
-    for (const col of [
-      'id',
-      'nickname',
-      'score',
-      'lines',
-      'level',
-      'duration_seconds',
-      'game_hash',
-      'client_version',
-      'created_at',
-    ])
-      expect(code).toMatch(new RegExp(`\\n\\s+${col}\\s`));
-    expect(code).toMatch(/unique \(game_hash\)/);
-    expect(code).toMatch(/game_hash ~ '\^\[0-9a-f\]\{64\}\$'/);
+describe('migration zinciri', () => {
+  it('yalnızca iki dosya, sıralı; tek kaynak schema.sql yok', () => {
+    expect(Object.keys(migrations).map((f) => f.split('/').pop())).toEqual([
+      '20261101000000_tetris_scores_baseline.sql',
+      '20261101120000_tetris_secure_scores_and_rooms.sql',
+    ]);
+  });
+  it('veri kaybı yok: DROP TABLE / TRUNCATE / DELETE FROM tetris_scores kullanılmaz', () => {
+    for (const s of [sql(baseline), code]) {
+      expect(s).not.toMatch(/drop table|truncate/i);
+      expect(s).not.toMatch(/delete from public\.tetris_scores/i);
+    }
+  });
+  it('baseline canlıda elle uygulanan kurulumdur ve güvenli olmadığı işaretlidir; ileri migration geri alma notu içerir', () => {
+    expect(baseline).toMatch(/SQL Editor ile canlı/);
+    expect(baseline).toMatch(/GÜVENLİ DEĞİL/);
+    expect(secure).toMatch(/Geri alma \(rollback/);
+  });
+});
+
+describe('tetris_scores: tarayıcı yazamaz, okuma yalnızca RPC', () => {
+  it('RLS açık ve zorunlu; tarayıcı politikaları kaldırılır; anon/authenticated tüm yetkiler geri alınır', () => {
+    expect(code).toContain('alter table public.tetris_scores force row level security;');
+    expect(code).toContain('drop policy if exists "tetris_scores_insert_anyone" on public.tetris_scores;');
+    expect(code).toContain('drop policy if exists "tetris_scores_select_all" on public.tetris_scores;');
+    expect(code).toContain('revoke all on table public.tetris_scores from public, anon, authenticated;');
+    expect(code).toContain('revoke all on sequence public.tetris_scores_id_seq from public, anon, authenticated;');
+    expect(code).toContain('grant select, insert on table public.tetris_scores to service_role;');
+    expect(code).not.toMatch(/create policy/i);
+    expect(code).not.toMatch(/grant [^;]*(insert|update|delete|all)[^;]* to [^;]*(anon|authenticated)/i);
+  });
+  it('tekrar gönderim engeli: game_hash benzersiz ve biçimli', () => {
+    expect(code).toContain(
+      'create unique index if not exists tetris_scores_game_hash_key on public.tetris_scores (game_hash);',
+    );
+    expect(code).toContain("game_hash ~ '^[0-9a-f]{64}$'");
+  });
+  it('okuma RPC: security definer, boş arama yolu, yalnızca gerekli sütunlar, en çok 10, kural seti varsayılanı v2', () => {
+    expect(code).toContain(
+      "create or replace function public.tetris_get_leaderboard( limit_count integer default 10, ruleset_name text default 'cyclamen-flow-v2' )",
+    );
+    expect(code).toContain(
+      'returns table (id bigint, rank bigint, name text, score integer, lines integer, level smallint)',
+    );
+    const fn = /tetris_get_leaderboard\([\s\S]*?\$\$([\s\S]*?)\$\$/.exec(code)?.[1] ?? '';
+    expect(fn).toContain('where s.ruleset = ruleset_name');
+    expect(fn).toContain('limit least(greatest(coalesce(limit_count, 10), 1), 10)');
+    expect(fn).not.toMatch(/game_hash|duration_seconds|client_version|created_at/);
+    expect(code).toContain(
+      'grant execute on function public.tetris_get_leaderboard(integer, text) to anon, authenticated, service_role;',
+    );
+  });
+  it('diğer bütün fonksiyonlar yalnızca service_role (anon/authenticated geri alınır); hepsi security definer + search_path', () => {
+    for (const f of FUNCS) {
+      expect(code, f).toContain(`revoke all on function public.${f} from public, anon, authenticated;`);
+      expect(code, f).toContain(`grant execute on function public.${f} to service_role;`);
+    }
+    const defs = code.match(/create or replace function/g) ?? [];
+    expect((code.match(/security definer set search_path = ''/g) ?? []).length).toBe(defs.length);
+  });
+  it('oda ve hız sınırı tabloları: RLS zorunlu, tarayıcı yetkisi yok, politika yok', () => {
+    for (const t of ['tetris_rate_limits', 'tetris_rooms', 'tetris_room_members']) {
+      expect(code, t).toContain(`alter table public.${t} force row level security;`);
+      expect(code, t).toContain(`revoke all on table public.${t} from public, anon, authenticated;`);
+    }
+  });
+  it('oda üyeliği: satır kilidi, en çok 3 etkin üye, benzersiz renk, 75 sn nabız', () => {
+    expect(code).toContain('for update');
+    expect(code).toContain("if n >= 3 then return jsonb_build_object('status', 'full');");
+    expect(code).toContain('select min(g)::smallint into c from generate_series(0, 2) g');
+    expect(code).toContain("seen_at > now() - interval '75 seconds'");
   });
   it('kişisel veri sütunu yok (IP, user-agent, e-posta, hesap)', () => {
-    expect(code).not.toMatch(/\b(ip|ip_address|user_agent|email|user_id|auth\.)/i);
-  });
-  it('istemci ve function sınırlarıyla aynı kısıtlar', () => {
-    expect(code).toMatch(/char_length\(nickname\) between 3 and 16/);
-    expect(code).toMatch(/score between 0 and 10000000/);
-    expect(code).toMatch(/lines between 0 and 5000/);
-    expect(code).toMatch(/level between 1 and 20/);
-    expect(code).toMatch(/level = least\(20, 1 \+ lines \/ 10\)/);
-    expect(code).toMatch(/duration_seconds between 1 and 21600/);
-  });
-  it('skor azalan sıralama indexi (eşitlikte önce ulaşan)', () => {
-    expect(code).toMatch(
-      /create index if not exists leaderboard_scores_rank_idx\s+on public\.leaderboard_scores \(score desc, created_at asc, id asc\)/,
-    );
+    expect(code).not.toMatch(/\b(ip|ip_address|user_agent|email|user_id)\b/i);
   });
 });
 
-describe('migration: RLS ve yetkiler', () => {
-  it('RLS etkin ve zorunlu; hiçbir politika yok (istemci doğrudan okuyamaz/yazamaz)', () => {
-    expect(code).toMatch(/alter table public\.leaderboard_scores enable row level security;/);
-    expect(code).toMatch(/alter table public\.leaderboard_scores force row level security;/);
-    expect(code).not.toMatch(/create policy/i);
-  });
-  it('anon/authenticated tablo yetkileri geri alınır; yazma yalnızca service_role', () => {
-    expect(code).toMatch(/revoke all on table public\.leaderboard_scores from public, anon, authenticated;/);
-    expect(code).toMatch(/grant select, insert on table public\.leaderboard_scores to service_role;/);
-    expect(code).not.toMatch(/grant [^;]*(insert|update|delete)[^;]* to [^;]*(anon|authenticated)/i);
-  });
-  it('okuma yalnızca get_leaderboard: güvenli arama yolu, yalnızca gerekli alanlar, üst sınır', () => {
-    expect(code).toMatch(/create or replace function public\.get_leaderboard\(limit_count integer default 10\)/);
-    expect(code).toMatch(/returns table \(rank bigint, nickname text, score integer, lines integer, level smallint\)/);
-    expect(code).toMatch(/security definer\s+set search_path = ''/);
-    expect(code).toMatch(/limit least\(greatest\(coalesce\(limit_count, 10\), 1\), 50\)/);
-    const fn = /as \$\$([\s\S]*?)\$\$/.exec(code)?.[1] ?? '';
-    expect(fn).not.toMatch(/game_hash|duration_seconds|client_version|s\.id,|s\.created_at,/);
-    expect(code).toMatch(/revoke all on function public\.get_leaderboard\(integer\) from public;/);
-    expect(code).toMatch(
-      /grant execute on function public\.get_leaderboard\(integer\) to anon, authenticated, service_role;/,
-    );
-  });
-  it('rollback notu ve kurulum açıklaması var', () => {
-    expect(sql).toMatch(/Geri alma \(rollback\)/);
-    expect(sql).toMatch(/drop table if exists public\.leaderboard_scores;/);
-    expect(sql).toMatch(/drop function if exists public\.get_leaderboard\(integer\);/);
-    expect(sql).toMatch(/supabase db push/);
-    expect(sql).toMatch(/supabase functions deploy submit-score/);
+describe('Edge Function kaynakları', () => {
+  it('service role yalnızca function ortamından; yazma tetris_scores ve RPC ile', () => {
+    for (const s of [submitIndex, roomIndex]) {
+      expect(s).toMatch(/Deno\.env\.get\('SUPABASE_SERVICE_ROLE_KEY'\)/);
+      expect(s).not.toMatch(/console\.(log|error)/);
+    }
+    expect(submitIndex).toContain("db.rest('tetris_scores?select=id'");
   });
 });
 
-describe('migration: kural seti (cyclamen-flow-v1)', () => {
-  const rs = rulesetSql.replace(/--.*$/gm, '').replace(/\s+/g, ' '); // yorumlar hariç, tek boşluk
-  it('ruleset sütunu (eski satırlar legacy), izinli değerler kısıtı ve kural seti içinde sıralama indexi', () => {
-    expect(rs).toContain("add column if not exists ruleset text not null default 'legacy'");
-    expect(rs).toContain("check (ruleset in ('legacy', 'cyclamen-flow-v1'))");
-    expect(rs).toContain('on public.leaderboard_scores (ruleset, score desc, created_at asc, id asc)');
+describe('ortam dosyaları ve secret hijyeni', () => {
+  const vars = (s: string) => [...s.matchAll(/^([A-Z_]+)=(.*)$/gm)].map((m) => [m[1], m[2]]);
+  it('.env.production: yalnızca URL ve publishable anahtar (tek standart ad)', () => {
+    const v = vars(envProduction);
+    expect(v.map((x) => x[0])).toEqual(['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY']);
+    expect(v[0]?.[1]).toMatch(/^https:\/\/[a-z0-9]+\.supabase\.co$/);
+    expect(v[1]?.[1]).toMatch(/^sb_publishable_/);
+    expect(envProduction).not.toMatch(/sb_secret_|service_role|eyJ|password|JWT_SECRET/i);
   });
-  it('okuma tek kural setinden: eski tek parametreli fonksiyon kaldırılır; alanlar ve üst sınır aynı', () => {
-    expect(rs).toContain('drop function if exists public.get_leaderboard(integer);');
-    expect(rs).toContain(
-      "create or replace function public.get_leaderboard( limit_count integer default 10, ruleset_name text default 'cyclamen-flow-v1' )",
-    );
-    expect(rs).toContain('returns table (rank bigint, nickname text, score integer, lines integer, level smallint)');
-    expect(rs).toContain("security definer set search_path = ''");
-    const fn = rs.slice(rs.indexOf('as $$'), rs.lastIndexOf('$$'));
-    expect(fn).toContain('where s.ruleset = ruleset_name');
-    expect(fn).toContain('limit least(greatest(coalesce(limit_count, 10), 1), 50)');
-    expect(fn).not.toMatch(/game_hash|duration_seconds|client_version|s\.id,|s\.created_at,/);
-    expect(rs).toContain('revoke all on function public.get_leaderboard(integer, text) from public;');
-    expect(rs).toContain(
-      'grant execute on function public.get_leaderboard(integer, text) to anon, authenticated, service_role;',
-    );
-    expect(rs).not.toMatch(/grant [^;]*(insert|update|delete)[^;]* to [^;]*(anon|authenticated)/i);
-    expect(rulesetSql).toContain('Geri alma (rollback)');
-  });
-});
-
-describe('migration: kural seti cyclamen-flow-v2 (Sıklamen gücü çekirdek desteği)', () => {
-  const rs = rulesetV2Sql.replace(/--.*$/gm, '').replace(/\s+/g, ' ');
-  it('kısıt v2 de kabul eder; legacy ve v1 satırları silinmez', () => {
-    expect(RULESET).toBe('cyclamen-flow-v2');
-    expect(rs).toContain('drop constraint if exists leaderboard_scores_ruleset_chk;');
-    expect(rs).toContain("check (ruleset in ('legacy', 'cyclamen-flow-v1', 'cyclamen-flow-v2'))");
-    expect(rs).not.toMatch(/\bdelete\b|\bupdate\b|\btruncate\b/i);
-  });
-  it('okuma varsayılanı güncel kural seti; alanlar, güvenli arama yolu ve üst sınır aynı; yetkiler', () => {
-    expect(rs).toContain('drop function if exists public.get_leaderboard(integer, text);');
-    expect(rs).toContain(
-      `create or replace function public.get_leaderboard( limit_count integer default 10, ruleset_name text default '${RULESET}' )`,
-    );
-    expect(rs).toContain('returns table (rank bigint, nickname text, score integer, lines integer, level smallint)');
-    expect(rs).toContain("security definer set search_path = ''");
-    const fn = rs.slice(rs.indexOf('as $$'), rs.lastIndexOf('$$'));
-    expect(fn).toContain('where s.ruleset = ruleset_name');
-    expect(fn).toContain('limit least(greatest(coalesce(limit_count, 10), 1), 50)');
-    expect(fn).not.toMatch(/game_hash|duration_seconds|client_version|s\.id,|s\.created_at,/);
-    expect(rs).toContain('revoke all on function public.get_leaderboard(integer, text) from public;');
-    expect(rs).toContain(
-      'grant execute on function public.get_leaderboard(integer, text) to anon, authenticated, service_role;',
-    );
-    expect(rs).not.toMatch(/grant [^;]*(insert|update|delete)[^;]* to [^;]*(anon|authenticated)/i);
-    expect(rulesetV2Sql).toContain('Geri alma (rollback)');
-  });
-});
-
-describe('function yapılandırması ve secret hijyeni', () => {
-  it('submit-score kendi doğrulamasını yapar (verify_jwt=false); service role yalnızca function ortamından', () => {
-    expect(toml).toMatch(/\[functions\.submit-score\]\s+(#.*\n)*verify_jwt = false/);
-    expect(indexTs).toMatch(/Deno\.env\.get\('SUPABASE_SERVICE_ROLE_KEY'\)/);
-    expect(indexTs).toMatch(/\/rest\/v1\/leaderboard_scores/);
-  });
-  it('.env.example yalnızca public VITE_ değişkenleri, boş değerlerle; .env dosyaları yok sayılır', () => {
-    const vars = [...envExample.matchAll(/^([A-Z_]+)=(.*)$/gm)].map((m) => [m[1], m[2]]);
-    expect(vars).toEqual([
-      ['VITE_SUPABASE_URL', ''],
-      ['VITE_SUPABASE_PUBLISHABLE_KEY', ''],
+  it('.env.local.example yer tutucu; .env.local yok sayılır', () => {
+    expect(vars(envExample)).toEqual([
+      ['VITE_SUPABASE_URL', 'https://xxxx.supabase.co'],
+      ['VITE_SUPABASE_PUBLISHABLE_KEY', 'sb_publishable_xxxx'],
     ]);
-    expect(gitignore).toMatch(/^\.env$/m);
     expect(gitignore).toMatch(/^\.env\.\*$/m);
-    expect(gitignore).toMatch(/^!\.env\.example$/m);
+    expect(gitignore).toMatch(/^!\.env\.production$/m);
+    expect(gitignore).toMatch(/^!\.env\.local\.example$/m);
   });
-  it('frontend kaynağında service role, secret anahtar veya tabloya doğrudan yazma yok', () => {
+  it('kaynakta service role / secret anahtar yok; tabloya doğrudan yazma yok; SDK yalnızca dinamik import', () => {
     for (const [file, src] of Object.entries(sources)) {
       expect(src, file).not.toMatch(/SERVICE_ROLE|sb_secret_[A-Za-z0-9]|eyJ[A-Za-z0-9_-]{20,}/);
-      expect(src, file).not.toMatch(/rest\/v1\/leaderboard_scores/);
+      expect(src, file).not.toMatch(/rest\/v1\/tetris_scores|from\(['"`]tetris_scores/);
+      expect(src, file).not.toMatch(/^import \{[^}]*\} from '@supabase\/supabase-js'/m); // değer importu yok (yalnızca tip)
     }
-    expect(sources['../../src/leaderboard/globalClient.ts']).toMatch(/functions\/v1\/\$\{SUBMIT_FUNCTION\}/);
+    expect(sources['../../src/supabase.ts']).toContain("import('@supabase/supabase-js')");
+    expect(pkg.dependencies['@supabase/supabase-js']).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });

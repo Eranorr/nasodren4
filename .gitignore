@@ -20,9 +20,13 @@ pnpm-debug.log*
 # Yerel ortam dosyaları (.env.example gibi örnek dosyalar takip edilebilir)
 .env
 .env.*
-!.env.example
+!.env.production
+!.env.local.example
 
 # İşletim sistemi ve editör
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Edge Function panel paketleri (tools/bundle-functions.mjs)
+supabase/.dashboard/

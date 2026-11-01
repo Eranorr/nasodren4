@@ -21,7 +21,7 @@ const valid = () => ({
   lines: 23,
   level: 3,
   durationSeconds: 245,
-  clientVersion: 'web-ns4-18',
+  clientVersion: 'web-tetris-1',
   ruleset: 'cyclamen-flow-v2',
 });
 

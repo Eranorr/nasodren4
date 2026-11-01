@@ -95,6 +95,9 @@
           </div>
           <div id="popups" class="abs"></div>
           <div id="toast"></div>
+          <!-- çok oyunculu tur: rakiplerin canlı tahtası ve skoru; tıkanınca bekleme notu (multiplayer/versus.ts) -->
+          <div id="mp-opps" class="abs" aria-hidden="true" hidden></div>
+          <div id="mp-wait" class="abs" role="status" hidden></div>
           <button id="btn-hold" class="gbtn" aria-label="Parçayı beklet">
             <svg
               viewBox="0 0 24 24"
@@ -271,6 +274,8 @@
               <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg
             >Oyna
           </button>
+          <!-- çok oyunculu yalnızca Supabase yapılandırılmışsa görünür (bootstrap.ts) -->
+          <button class="btn ghost" id="b-multi" hidden>Çok oyunculu</button>
           <!-- NS4-41: üç ikincil eylem eşit karolar (ikon + kısa ad); NS4-18 Skorlar artık ayrı satırda değil -->
           <div class="start-actions">
             <button class="btn ghost tile" id="b-how">
@@ -438,7 +443,10 @@
                 />
                 <button class="btn ghost" id="b-submit" type="submit">Global tabloya gönder</button>
               </div>
-              <small class="submit-hint" id="nick-hint">3–16 karakter: harf, rakam, boşluk, - _ .</small>
+              <small class="submit-hint" id="nick-hint"
+                >3–16 karakter: harf, rakam, boşluk, - _ . Takma adın ve skorun herkese açık skor tablosunda görünür;
+                gerçek adını yazma.</small
+              >
               <p class="submit-status" id="submit-status" role="status" aria-live="polite"></p>
             </form>
             <div class="tip" id="tip-over"></div>
@@ -528,6 +536,84 @@
           </div>
           <div class="sheet-actions">
             <button class="btn primary" data-back>Tamam</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Çok oyunculu: oda kur / koda katıl; odadaki oyuncular ve tur başlatma -->
+      <section id="scr-mp" class="screen screen-dim" aria-label="Çok oyunculu">
+        <div class="sheet sheet-scroll">
+          <div class="sheet-body">
+            <h2>Çok oyunculu</h2>
+            <div id="mp-join">
+              <p class="lead">2–3 kişi aynı parçalarla oynar; en yüksek skor turu kazanır.</p>
+              <label class="mp-field" for="mp-name"
+                >Takma ad
+                <input
+                  id="mp-name"
+                  type="text"
+                  autocomplete="nickname"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  maxlength="32"
+                  aria-describedby="mp-name-hint"
+                  data-focus
+              /></label>
+              <small class="submit-hint" id="mp-name-hint"
+                >Takma adın odadaki oyunculara görünür; gerçek adını yazma.</small
+              >
+              <button class="btn primary" id="b-mp-create" type="button">Oda kur</button>
+              <div class="mp-joinrow">
+                <input
+                  id="mp-code"
+                  type="text"
+                  inputmode="text"
+                  maxlength="4"
+                  autocomplete="off"
+                  autocapitalize="characters"
+                  spellcheck="false"
+                  placeholder="KOD"
+                  aria-label="Oda kodu"
+                />
+                <button class="btn ghost" id="b-mp-join" type="button">Odaya katıl</button>
+              </div>
+            </div>
+            <div id="mp-room" hidden>
+              <p class="mp-roomcode">
+                <span>Oda kodu</span><b id="mp-code-show">----</b><span>Arkadaşların bu kodla katılır</span>
+              </p>
+              <ul class="mp-list" id="mp-list"></ul>
+              <p class="mp-note" id="mp-lobby-wait"></p>
+              <button class="btn primary" id="b-mp-start" type="button" hidden>Turu başlat</button>
+            </div>
+            <p class="mp-err" id="mp-err" role="alert"></p>
+          </div>
+          <div class="sheet-actions">
+            <button class="btn ghost" id="b-mp-back" type="button">Geri</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Çok oyunculu tur başı: geri sayım (herkes aynı anda başlar) -->
+      <section id="scr-mpgo" class="screen screen-dim" aria-label="Tur başlıyor">
+        <div class="sheet sheet-mpgo">
+          <p class="mp-kicker" id="mpgo-kicker"></p>
+          <div class="mp-count" id="mp-count" aria-live="polite">3</div>
+          <p class="mp-note">Herkes aynı parçalarla başlıyor.</p>
+        </div>
+      </section>
+
+      <!-- Çok oyunculu tur sonucu: sıra, tur puanı, toplam -->
+      <section id="scr-mpres" class="screen screen-dim" aria-label="Tur sonucu">
+        <div class="sheet">
+          <p class="mp-kicker" id="mpres-kicker"></p>
+          <h2 id="mpres-title"></h2>
+          <ol class="mp-list" id="mpres-list"></ol>
+          <div class="mp-totals" id="mpres-total"></div>
+          <p class="mp-note" id="mpres-wait"></p>
+          <div class="over-actions">
+            <button class="btn primary" id="b-mp-next" type="button">Sonraki tur</button>
+            <button class="btn ghost" id="b-mp-leave" type="button">Odadan çık</button>
           </div>
         </div>
       </section>

@@ -1,7 +1,7 @@
 /* =====================================================================
    NS4-18: takma ad (cihazda hatırlanır, fn_nickname). Hesap, e-posta veya
-   başka kişisel bilgi istenmez. Doğrulama kuralları istemci ve Edge
-   Function'da aynıdır (supabase/functions/_shared/scoreRules.ts).
+   başka kişisel bilgi istenmez. Doğrulama kuralları istemcide ve veritabanı
+   tabloda aynıdır (src/leaderboard/rules.ts).
    ===================================================================== */
 import { store } from '../storage/store';
 import { validateNickname } from '../../supabase/functions/_shared/scoreRules.ts';

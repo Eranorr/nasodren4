@@ -139,3 +139,28 @@ export function tutorialRect(L: Layout): TutorialRect {
   }
   return { place: 'board', x: L.board.x + 8, y: L.board.y + L.cell * 4, w: L.board.w - 16, h: L.cell * 11 };
 }
+
+/** Çok oyunculu: rakip kartları için portrede üstte şerit yüksekliği, yatayda sağda sütun genişliği (px). */
+export const MP_STRIP = 76;
+export const MP_SIDE = 156;
+
+/** Yerleşimdeki bütün dikdörtgen ve noktaları dikey kaydırır. */
+function shiftLayout(L: Layout, dy: number, H: number): Layout {
+  const out: Record<string, unknown> = { ...L, H };
+  for (const [k, v] of Object.entries(L))
+    if (typeof v === 'object' && v !== null && 'y' in v) out[k] = { ...v, y: (v as Rect).y + dy };
+  return out as unknown as Layout;
+}
+
+/**
+ * Çok oyunculu tur yerleşimi: oyuncunun kendi tahtası ve HUD'u aynı kurallarla, rakip kartları için ayrılan
+ * alanın dışında hesaplanır. Portrede kartlar üstte bir şeritte (yan yana), yatayda sağda bir sütunda (alt alta).
+ */
+export function versusLayout(W: number, H: number): { readonly L: Layout; readonly opps: Rect } {
+  if (computeLayout(W, H).portrait)
+    return {
+      L: shiftLayout(computeLayout(W, H - MP_STRIP), MP_STRIP, H),
+      opps: { x: 12, y: 8, w: W - 24, h: MP_STRIP - 12 },
+    };
+  return { L: { ...computeLayout(W - MP_SIDE, H), W }, opps: { x: W - MP_SIDE, y: 12, w: MP_SIDE - 12, h: H - 24 } };
+}

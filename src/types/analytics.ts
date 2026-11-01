@@ -84,6 +84,10 @@ export interface AnalyticsPayloads {
   score_submit_started: NoPayload;
   score_submit_succeeded: NoPayload;
   score_submit_failed: { code: SubmitFailCode };
+  /** Çok oyunculu: oda kurma / koda katılma denemesi; tur başladı / bitti (rank: 1 tabanlı sıra). Kod ve ad taşınmaz. */
+  mp_room: { action: 'create' | 'join' };
+  mp_round_start: { players: number; round: number };
+  mp_round_end: { players: number; round: number; rank: number };
 }
 
 export type AnalyticsEvent = keyof AnalyticsPayloads;

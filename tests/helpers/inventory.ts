@@ -25,6 +25,8 @@ import { CYC_NAME, CYC_SHORT, CYC_TEXT, SNEEZE_NAME, SNEEZE_SHORT, SNEEZE_TEXT }
 import { GLOBAL_TEXT, NO_NICKNAME } from '../../src/ui/scoresView';
 import { SUBMIT_TEXT } from '../../src/ui/submitScore';
 import { ROTATE_O_NOTE, STEP_COPY, TUTORIAL_DONE_TEXT } from '../../src/tutorial/steps';
+import { MP_TEXT } from '../../src/multiplayer/versus';
+import { NET_TEXT } from '../../src/multiplayer/net';
 
 export type Area =
   | 'ana_menu'
@@ -41,7 +43,8 @@ export type Area =
   | 'hata_mesajlari'
   | 'cta'
   | 'bildirimler'
-  | 'rozetler';
+  | 'rozetler'
+  | 'cok_oyunculu';
 
 /** Görünür metin: yorum/SVG/etiket atılır, boşluk tekleşir. */
 export function visibleText(s: string): string {
@@ -147,6 +150,12 @@ export const INVENTORY: Readonly<Record<Area, readonly string[]>> = {
     ...blocks(section('scr-final')),
   ],
   saglik_ipuclari: HEALTH_TIPS.flatMap((t) => [t.title, t.text]),
+  cok_oyunculu: [
+    ...blocks(section('scr-mp')),
+    ...blocks(section('scr-mpgo')),
+    ...blocks(section('scr-mpres')),
+    ...Object.values(MP_TEXT),
+  ],
   skor_ekrani: [...blocks(section('scr-scores')), ...Object.values(GLOBAL_TEXT), NO_NICKNAME],
   global_gonderim: [
     ...blocks(/<form class="submit-score"[\s\S]*?<\/form>/.exec(html)?.[0] ?? ''),
@@ -158,8 +167,8 @@ export const INVENTORY: Readonly<Record<Area, readonly string[]>> = {
     SUBMIT_TEXT.failed,
     SUBMIT_TEXT.invalidNick,
     SUBMIT_TEXT.rejected,
-    SUBMIT_TEXT.rate,
     SUBMIT_TEXT.disabled,
+    ...Object.values(NET_TEXT),
     ...[...settingsPanelSrc.matchAll(/textContent = '([^']+)'/g)].map((m) => m[1] ?? ''),
   ],
   cta: [

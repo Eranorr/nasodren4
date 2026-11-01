@@ -5,6 +5,9 @@
    NS4-03: main.ts'ten taşındı; adımların sırası değişmedi.
    NS4-39: müzik: oyunda "Nefes", ana menü / mola / oyun sonunda "Bahçe"
    (molada ayar değişikliği hemen duyulur; oyun sonu sesinden sonra girer).
+   Çok oyunculu tur (start({ seed })): öğretici yok, final ekranı açılmaz
+   (serbest nefese kendiliğinden geçilir), oyun sonu yerel listeye/rekora
+   yazılmaz; sonuç tur ekranında gösterilir (multiplayer/versus.ts).
    ===================================================================== */
 import type * as PIXI from 'pixi.js';
 import type { Game } from '../game/Game';
@@ -43,11 +46,25 @@ export interface LifecycleDeps {
   onGameRecorded?: (entry: LocalScore) => void;
   /** NS4-27: Sinüs Odaları akışı (varsayılan açık; eski davranışı sınayan testler kapatır). */
   rooms?: boolean;
+  /** Çok oyunculu tur: oyun bitti (skor kesin), mola verildi / sürdü. */
+  versus?: {
+    readonly onOver: (r: { score: number; lines: number; level: number }) => void;
+    readonly onPause: (paused: boolean) => void;
+  };
+}
+
+/** Oyun türü: tek oyunculu ya da çok oyunculu tur (aynı tohum). */
+export interface StartOptions {
+  readonly seed?: number;
 }
 
 export interface Lifecycle {
   readonly getState: () => AppState;
-  readonly start: () => void;
+  readonly start: (opts?: StartOptions) => void;
+  /** Çok oyunculu tur oynanıyor mu (start({ seed }) ile başladı, menüye dönülmedi). */
+  readonly isVersus: () => boolean;
+  /** Çok oyunculu tur bitti (sonuç ekranı): süren/molada oyun sessizce kapanır. */
+  readonly endVersus: () => void;
   readonly pause: () => void;
   readonly resume: () => void;
   readonly toMenu: () => void;
@@ -71,6 +88,7 @@ export function createLifecycle({
   tutorial,
   onGameRecorded,
   rooms = true,
+  versus,
 }: LifecycleDeps): Lifecycle {
   let appState: AppState = 'menu';
   /** NS4-18: oyun başına kimlik (yerel kayıt tekrarını ve global tekrar gönderimi engeller). */
@@ -80,8 +98,13 @@ export function createLifecycle({
   let completed = false;
   /** NS4-31: final ekranı açık: yalnızca seçim (devam / bitir) kapatır; resume() dokunmaz. */
   let finalOpen = false;
+  /** Çok oyunculu tur oynanıyor. */
+  let inVersus = false;
 
-  function start() {
+  function start(opts?: StartOptions) {
+    // tıklama olayı da argüman olarak gelebilir: yalnızca sayısal tohum çok oyunculu turdur
+    const seed = typeof opts?.seed === 'number' ? opts.seed : undefined;
+    inVersus = seed !== undefined;
     sound.unlock();
     // NS4-07: önceki oturumdan kalan rozet/toast/popup temizlenir (önceden yalnızca resetHud).
     // NS4-27: reset'ten önce: yeni oyunun ilk oda popup'ı (roomstart) silinmesin.
@@ -89,7 +112,7 @@ export function createLifecycle({
     resetNewBadges();
     completed = false;
     finalOpen = false;
-    game.reset({ rooms }); // NS4-27: Sinüs Odaları
+    game.reset({ rooms, seed }); // NS4-27: Sinüs Odaları; çok oyunculu: herkes aynı tohum
     gameId = newGameId();
     view.resetFx(); // NS4-15: overT, anim, dalga ve flaşlar ile yeni efekt katmanları ve parçacıklar
     view.syncAll();
@@ -97,7 +120,7 @@ export function createLifecycle({
     appState = 'playing';
     show(null);
     sound.setMusic('game');
-    tutorial?.onGameStart();
+    if (!inVersus) tutorial?.onGameStart();
     track('game_start', { best: meta.best });
   }
   function pause() {
@@ -113,6 +136,7 @@ export function createLifecycle({
     hideDanger();
     forgetDanger();
     tutorial?.onPause(); // NS4-12: kart gizlenir, adım korunur
+    if (inVersus) versus?.onPause(true); // odadakiler "ara verdi" görür; tur onlar için sürer
   }
   function resume() {
     if (appState !== 'paused' || finalOpen) return;
@@ -121,9 +145,11 @@ export function createLifecycle({
     show(null);
     sound.setMusic('game');
     tutorial?.onResume();
+    if (inVersus) versus?.onPause(false);
   }
   function toMenu() {
     finalOpen = false;
+    inVersus = false;
     app.ticker.start();
     appState = 'menu';
     setTip('tip-start');
@@ -144,6 +170,8 @@ export function createLifecycle({
    */
   function showFinal() {
     if (appState !== 'playing') return;
+    // çok oyunculu tur sürer: seçim ekranı yok, serbest nefese geçilir
+    if (inVersus) return void popup(FREE_NAME, FREE_GOAL, 'cyc');
     appState = 'paused';
     requestAnimationFrame(() => {
       if (appState === 'paused') app.ticker.stop();
@@ -200,7 +228,32 @@ export function createLifecycle({
    * Gelecekteki global skor gönderimi de buraya (yerel kayıttan sonra, Game'in dışında) bağlanmalıdır.
    * Not: Ana menüye çıkılan yarım oyun için bu akış çalışmaz (NS4-01 Not E, bilerek korunur).
    */
+  function endVersus() {
+    if (!inVersus) return;
+    inVersus = false;
+    finalOpen = false;
+    app.ticker.start();
+    if (appState === 'playing' || appState === 'paused') {
+      appState = 'over';
+      resetInput();
+      hideDanger();
+      forgetDanger();
+      sound.setMusic('menu');
+    }
+  }
   function handleGameOver(reason: GameOverReason) {
+    if (inVersus) {
+      // çok oyunculu: yerel liste, rekor ve rozetler etkilenmez; sonuç tur ekranında
+      view.onGameOver();
+      sound.over();
+      buzz(HAPTIC.over);
+      sound.setMusic('menu', GAME_OVER_MUSIC_DELAY);
+      resetInput();
+      appState = 'over';
+      hideDanger();
+      versus?.onOver({ score: game.score, lines: game.lines, level: game.level });
+      return;
+    }
     // NS4-31: final ekranından bitiş yenilgi değildir: yığın griye dönmez, üzgün ses/titreşim yok
     if (reason === 'complete') sound.level();
     else {
@@ -237,6 +290,8 @@ export function createLifecycle({
   return {
     getState: () => appState,
     start,
+    isVersus: () => inVersus,
+    endVersus,
     pause,
     resume,
     toMenu,

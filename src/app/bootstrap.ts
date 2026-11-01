@@ -9,7 +9,6 @@ import * as PIXI from 'pixi.js';
 import type { Layout } from '../types/layout';
 import { Game } from '../game/Game';
 import { View } from '../rendering/GameView';
-import { computeLayout } from '../rendering/layout';
 import { Sound } from '../audio/SoundManager';
 import { InputController } from '../input/InputController';
 import { createBuzz } from '../haptics/haptics';
@@ -27,8 +26,13 @@ import { TUTORIAL_DONE_TEXT } from '../tutorial/steps';
 import { tutorialStore } from '../storage/tutorial';
 import { initTips, setTip, openSub, bindBackButtons, closeSub, initScreens, renderStartBest } from '../ui/screens';
 import { meta } from '../storage/progress';
+import { loadSupabase } from '../supabase';
 import { leaderboardConfig } from '../leaderboard/config';
-import { createLeaderboardClient } from '../leaderboard/globalClient';
+import { createRoomApi } from '../multiplayer/roomApi';
+import { createLeaderboardClient, type GlobalEntry } from '../leaderboard/globalClient';
+import { createNet } from '../multiplayer/net';
+import { createVersus, type Versus } from '../multiplayer/versus';
+import { computeLayout, versusLayout } from '../rendering/layout';
 import { loadLocalScores, updateLocalScore } from '../leaderboard/localScores';
 import { loadNickname, saveNickname } from '../leaderboard/nickname';
 import { createScoresView } from '../ui/scoresView';
@@ -78,7 +82,12 @@ export function bootstrap(): void {
       H = stageEl.clientHeight;
     if (!W || !H) return;
     app.renderer.resize(W, H);
-    L = computeLayout(W, H);
+    // çok oyunculu tur: rakip kartlarına yer açılır (portrede üst şerit, yatayda sağ sütun)
+    if (versus.active()) {
+      const v = versusLayout(W, H);
+      L = v.L;
+      versus.layout(v.opps);
+    } else L = computeLayout(W, H);
     applyHudLayout(L);
     tutorialView.layout(L);
     // NS4-13: yeniden yerleşimde süren dokunmatik jest iptal edilir (hücre ve tahta konumu değişti)
@@ -107,15 +116,22 @@ export function bootstrap(): void {
     onComplete: () => toast(TUTORIAL_DONE_TEXT),
     track,
   });
-  // NS4-18: yerel + global skor. Ortam değişkenleri yoksa istemci devre dışıdır (oyun ve yerel tablo çalışır).
+  // NS4-18: yerel + global skor (Supabase, tetris_scores). Ortam değişkenleri yoksa istemci devre dışıdır
+  // (oyun ve yerel tablo çalışır, "Çok oyunculu" gizlenir).
   const leaderboard = createLeaderboardClient(leaderboardConfig);
+  let lastSubmitted: GlobalEntry | null = null;
   const submitPanel = createSubmitPanel({
     client: leaderboard,
     loadNickname,
     saveNickname,
     updateLocal: updateLocalScore,
+    onSubmitted: (e) => (lastSubmitted = e),
   });
-  const scoresView = createScoresView({ client: leaderboard, loadLocal: loadLocalScores });
+  const scoresView = createScoresView({
+    client: leaderboard,
+    loadLocal: loadLocalScores,
+    mine: () => lastSubmitted,
+  });
   const lifecycle = createLifecycle({
     game,
     view,
@@ -125,6 +141,17 @@ export function bootstrap(): void {
     resetInput: () => input.reset(),
     tutorial,
     onGameRecorded: (entry) => submitPanel.prepare(entry),
+    versus: { onOver: (r) => versus.onOver(r), onPause: (p) => versus.onPause(p) },
+  });
+  // çok oyunculu: oda kodu ile 2–3 oyuncu (Supabase Realtime; tablo gerekmez)
+  const versus: Versus = createVersus({
+    // Supabase SDK (Realtime) yalnızca çok oyunculu açılınca yüklenir
+    net: createNet({ load: loadSupabase, api: leaderboardConfig && createRoomApi(leaderboardConfig), win: window }),
+    game,
+    lifecycle: () => lifecycle,
+    relayout: queueLayout,
+    loadNickname,
+    saveNickname,
   });
   wireGameEvents({ game, view, sound, buzz, lifecycle });
 
@@ -149,10 +176,16 @@ export function bootstrap(): void {
   initScreens(); // NS4-10: başlangıç ekranı açıkken arka plan inert
   // NS4-19: CTA / Tekrar oyna / Skorlar huni olayları (davranış dinleyicilerinden önce bağlanır)
   bindUiAnalytics({ getState: lifecycle.getState, getScore: () => game.score, getLevel: () => game.level });
-  $('b-play').addEventListener('click', lifecycle.start);
-  $('b-again').addEventListener('click', lifecycle.start);
+  $('b-play').addEventListener('click', () => lifecycle.start());
+  $('b-again').addEventListener('click', () => lifecycle.start());
   $('b-menu').addEventListener('click', lifecycle.toMenu);
-  $('b-quit').addEventListener('click', lifecycle.toMenu);
+  // çok oyunculu turda molada "Ana menü" odadan çıkar
+  $('b-quit').addEventListener('click', () => (versus.inRoom() ? versus.leave() : lifecycle.toMenu()));
+  $('b-multi').hidden = !leaderboardConfig;
+  $('b-multi').addEventListener('click', () => {
+    sound.unlock();
+    versus.open();
+  });
   $('b-resume').addEventListener('click', lifecycle.resume);
   // NS4-31: final ekranı
   $('b-free').addEventListener('click', lifecycle.continueFree);
@@ -195,6 +228,7 @@ export function bootstrap(): void {
     if (lifecycle.getState() === 'playing') {
       input.update(dt);
       game.update(dt);
+      versus.tick(performance.now());
     }
     view.update(dt);
     const appState = lifecycle.getState(); // game.update içinde 'over' olmuş olabilir; orijinaldeki gibi burada okunur

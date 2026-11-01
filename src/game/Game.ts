@@ -40,6 +40,18 @@ import type {
   TetrominoType,
 } from '../types/game';
 
+/** Tohumlu sözde rastgele üreteç (mulberry32): aynı tohum her cihazda aynı diziyi verir. */
+export function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export class Game {
   private readonly handlers: { [K in GameEventName]?: GameEventListener<K>[] };
   /** Hücre değerleri: CellValue (0 boş, 1-7 tetromino, 8 çöp). */
@@ -47,6 +59,8 @@ export class Game {
   /** NS4-34: hücrenin bitki baytı (sap bağlantıları + rol, bkz. plants.ts); tahtayla aynı dizinler. */
   readonly plant: Uint8Array;
   // reset() içinde atanan alanlar (reset() constructor'dan çağrılır)
+  /** Rastgelelik kaynağı (torba, çekirdek konumu, oda dizilimi); tohumsuz oyunda Math.random. */
+  private rand!: () => number;
   state!: GameState;
   type!: PieceSlot;
   rot!: RotationState;
@@ -168,8 +182,12 @@ export class Game {
     return t;
   }
 
-  /** Yeni oyun. `rooms`: Sinüs Odaları akışı (uygulama açar); verilmezse tahta boş başlar (testler ve eski davranış). */
-  reset(opts?: { readonly rooms?: boolean }) {
+  /**
+   * Yeni oyun. `rooms`: Sinüs Odaları akışı (uygulama açar); verilmezse tahta boş başlar (testler ve eski davranış).
+   * `seed`: çok oyunculu tur: aynı tohumla herkes aynı parça sırasını, çekirdekleri ve oda dizilimini alır.
+   */
+  reset(opts?: { readonly rooms?: boolean; readonly seed?: number | undefined }) {
+    this.rand = opts?.seed === undefined ? () => Math.random() : seeded(opts.seed);
     this.board.fill(0);
     this.plant.fill(0);
     this.bag = [];
@@ -264,14 +282,14 @@ export class Game {
       for (let k = 0; k < def.rows; k++) {
         if (k % seg === 0) {
           let c = channel;
-          while (c === channel) c = (Math.random() * COLS) | 0;
+          while (c === channel) c = (this.rand() * COLS) | 0;
           channel = c;
         }
         const y = ROWS - 1 - k,
-          extra = (Math.random() * (def.extraHoles + 1)) | 0;
+          extra = (this.rand() * (def.extraHoles + 1)) | 0;
         for (let x = 0; x < COLS; x++) this.board[y * COLS + x] = x === channel ? 0 : PIECE.GARBAGE;
         for (let h = 0; h < extra;) {
-          const x = (Math.random() * COLS) | 0;
+          const x = (this.rand() * COLS) | 0;
           if (this.board[y * COLS + x]) {
             this.board[y * COLS + x] = 0;
             h++;
@@ -325,14 +343,14 @@ export class Game {
         // 7-bag randomizer
         const b: TetrominoType[] = [1, 2, 3, 4, 5, 6, 7];
         for (let i = 6; i > 0; i--) {
-          const j = (Math.random() * (i + 1)) | 0;
+          const j = (this.rand() * (i + 1)) | 0;
           const t = b[i];
           b[i] = b[j];
           b[j] = t;
         }
         this.bag = b;
         // sıklamen çekirdeği: torbanın bir parçası (karıştırmadan sonra rastgele bir konum)
-        this.bagCore = (Math.random() * 7) | 0;
+        this.bagCore = (this.rand() * 7) | 0;
       }
       const core = this.bag.length - 1 === this.bagCore;
       if (core) this.coresDealt++;

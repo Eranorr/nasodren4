@@ -1,5 +1,7 @@
 # NS4-18 · Supabase kurulumu (global skor tablosu)
 
+> **Geçersiz:** Bu belgedeki NS4-18 kurulumu (`leaderboard_scores`, `submit-score`) canlıya hiç uygulanmadı ve kaldırıldı. Güncel kurulum: `docs/MULTIPLAYER.md` ve `supabase/migrations/` (önek `tetris`).
+
 Bu rehberdeki adımları proje sahibinin yapması gerekir. Bu depoda gerçek bir Supabase projesine migration uygulanmadı ve function deploy edilmedi: bu makinede Supabase CLI ve doğrulanmış bir proje bağlantısı yoktu.
 
 Kurulum yapılana kadar oyun ve cihazdaki yerel skor tablosu tam çalışır; global sekme ve gönderim "Global tablo çevrimdışı" görünür.

@@ -6,30 +6,31 @@ Oyun içi metinler `index.html`, `src/content/` ve `src/ui/` içinde; CTA bağla
 
 ## Teknoloji yığını
 
-| Katman             | Kullanılan                                                                |
-| ------------------ | ------------------------------------------------------------------------- |
-| Build / dev server | [Vite](https://vite.dev/) 8.3.4                                           |
-| Dil                | TypeScript 7.0.2 (`strict`)                                               |
-| Render             | [PixiJS](https://pixijs.com/) **7.4.2** (npm paketi, sürüm bilerek sabit) |
-| UI                 | Framework'süz HTML + CSS (DOM overlay'leri)                               |
-| Ses                | Web Audio API (sentezlenmiş; ses dosyası yok)                             |
-| Kalıcılık          | `localStorage` (`fn_settings`, `fn_meta`, `fn_scores`, `fn_nickname`)     |
-| Global skor        | Supabase (isteğe bağlı; Postgres RPC + Edge Function, SDK yok)            |
-| Fontlar            | Google Fonts (Fredoka, Nunito)                                            |
+| Katman             | Kullanılan                                                                  |
+| ------------------ | --------------------------------------------------------------------------- |
+| Build / dev server | [Vite](https://vite.dev/) 8.3.4                                             |
+| Dil                | TypeScript 7.0.2 (`strict`)                                                 |
+| Render             | [PixiJS](https://pixijs.com/) **7.4.2** (npm paketi, sürüm bilerek sabit)   |
+| UI                 | Framework'süz HTML + CSS (DOM overlay'leri)                                 |
+| Ses                | Web Audio API (sentezlenmiş; ses dosyası yok)                               |
+| Kalıcılık          | `localStorage` (`fn_settings`, `fn_meta`, `fn_scores`, `fn_nickname`)       |
+| Global skor        | Supabase (RPC + Edge Function; çok oyunculu: Realtime, SDK tembel yüklenir) |
+| Fontlar            | Google Fonts (Fredoka, Nunito)                                              |
 
-Runtime bağımlılığı yalnızca `pixi.js`'tir. Tüm sürümler `package.json` içinde tam sürüm olarak sabitlenmiştir.
+Runtime bağımlılıkları `pixi.js` ve `@supabase/supabase-js`'tir. Tüm sürümler `package.json` içinde tam sürüm olarak sabitlenmiştir.
 
-## Global skor tablosu (isteğe bağlı)
+## Skor tablosu ve çok oyunculu (Supabase)
 
-Oyun ve cihazdaki yerel skor listesi Supabase olmadan tam çalışır; global sekme o durumda "çevrimdışı" görünür. Kurulum sırası (ayrıntı: `docs/NS4-18-SUPABASE-SETUP.md`):
+Sitedeki bütün oyunlar tek bir Supabase projesini paylaşır; bu oyunun öneki `tetris`. Tarayıcı tablolara yazamaz:
 
-1. Supabase projesi oluşturun; `supabase login` ve `supabase link --project-ref <ref>`.
-2. `supabase db push` (migration: `supabase/migrations/`).
-3. `supabase secrets set SCORE_HASH_PEPPER=<rastgele>` (isteğe bağlı `ALLOWED_ORIGINS`).
-4. `supabase functions deploy submit-score`.
-5. `.env.example` dosyasını `.env.local` olarak kopyalayın; `VITE_SUPABASE_URL` ve `VITE_SUPABASE_PUBLISHABLE_KEY` (publishable/anon) değerlerini girin.
+- skor gönderimi `tetris-submit-score` Edge Function'ından geçer;
+- okuma `tetris_get_leaderboard` RPC'si iledir;
+- çok oyunculu oda üyeliği `tetris-room` Edge Function'ındadır;
+- oyun iletileri imzalıdır.
 
-Service role anahtarı yalnızca function ortamındadır; frontend'e veya depoya konmaz.
+Kurulum, tehdit modeli ve sınırlar: `docs/MULTIPLAYER.md`. Çok oyunculu istemci otoriteli bir eğlence modudur ve kalıcı rekabetçi sonuç üretmez; global skor doğrulaması tam anti-cheat değildir. **Yayın öncesi:** canlı site adresi belli olunca Edge Function secret'ı `ALLOWED_ORIGINS` güncellenmelidir. Migration'lar: `supabase/migrations/`. Panel için tek dosya paketleri: `node tools/bundle-functions.mjs`.
+
+Değerler (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) `.env.production` dosyasındadır; yerelde `.env.local.example` → `.env.local`. Değerler yoksa oyun ve yerel skor listesi çalışır, global sekme "çevrimdışı" görünür ve "Çok oyunculu" gizlenir.
 
 ## Gereksinimler
 

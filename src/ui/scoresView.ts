@@ -6,6 +6,9 @@
      Kullanıcı verisi yalnızca textContent ile yazılır (HTML yok).
    - Global: ekran açılıp Global sekmesi seçilince bir kez ve kullanıcı
      "Yenile"/"Tekrar dene" dediğinde yüklenir. Polling/realtime yoktur.
+     Herkese açık tablonun ilk 10'u; az önce gönderilen skor vurgulanır, ilk
+     10'da değilse sırasıyla altta gösterilir. Tabloya ulaşılamazsa bu
+     cihazdaki liste gösterilir.
    ===================================================================== */
 import { $ } from './dom';
 import { fmt } from './hud';
@@ -19,6 +22,8 @@ interface Row {
   readonly nickname: string;
   readonly score: number;
   readonly lines: number;
+  /** Bu cihazdan az önce gönderilen skor (vurgulanır). */
+  readonly me?: boolean;
 }
 
 export const GLOBAL_TEXT = {
@@ -27,6 +32,8 @@ export const GLOBAL_TEXT = {
   disabled: 'Global tablo çevrimdışı',
   offline: 'Global tablo çevrimdışı',
   failed: 'Global tablo yüklenemedi',
+  public: 'Herkese açık skor tablosu · ilk 10',
+  fallback: 'Bağlantı kurulamadı: bu cihazdaki skorlar gösteriliyor.',
 } as const;
 /** Takma adı olmayan yerel kayıt. */
 export const NO_NICKNAME = '—';
@@ -34,6 +41,8 @@ export const NO_NICKNAME = '—';
 export interface ScoresViewDeps {
   readonly client: LeaderboardClient;
   readonly loadLocal: () => LocalScore[];
+  /** Bu oturumda global tabloya gönderilen son skor (yoksa null). */
+  readonly mine?: () => GlobalEntry | null;
 }
 
 export interface ScoresView {
@@ -50,6 +59,7 @@ function fillTable(table: HTMLElement, rows: readonly Row[]): void {
   body.replaceChildren();
   for (const r of rows) {
     const tr = document.createElement('tr');
+    if (r.me) tr.className = 'me';
     const cells: [string, string][] = [
       ['rank', String(r.rank)],
       ['nick', r.nickname || NO_NICKNAME],
@@ -67,7 +77,7 @@ function fillTable(table: HTMLElement, rows: readonly Row[]): void {
   }
 }
 
-export function createScoresView({ client, loadLocal }: ScoresViewDeps): ScoresView {
+export function createScoresView({ client, loadLocal, mine = () => null }: ScoresViewDeps): ScoresView {
   let current: ScoresTab = 'local';
   let globalLoadedThisOpen = false;
   let token = 0;
@@ -78,8 +88,10 @@ export function createScoresView({ client, loadLocal }: ScoresViewDeps): ScoresV
   const refresh = $('b-global-refresh', HTMLButtonElement);
   const gTable = $('table-global');
 
+  const localRows = (): Row[] =>
+    loadLocal().map((e, i) => ({ rank: i + 1, nickname: e.nickname, score: e.score, lines: e.lines }));
   function renderLocal(): void {
-    const rows = loadLocal().map((e, i) => ({ rank: i + 1, nickname: e.nickname, score: e.score, lines: e.lines }));
+    const rows = localRows();
     fillTable($('table-local'), rows);
     $('table-local').hidden = rows.length === 0;
     $('local-empty').hidden = rows.length > 0;
@@ -96,23 +108,31 @@ export function createScoresView({ client, loadLocal }: ScoresViewDeps): ScoresV
       return;
     }
     if (r.ok) {
-      const rows = r.entries.map((e: GlobalEntry) => ({ ...e }));
+      const own = mine();
+      const rows: Row[] = r.entries.map((e: GlobalEntry) => ({ ...e, me: own?.id === e.id }));
+      // çevrim içi listede yalnızca ilk 10 gelir: kendi satırı ilk 10'da değilse sırasıyla altta
+      if (own && own.rank > rows.length && !rows.some((e) => e.me)) rows.push({ ...own, me: true });
       fillTable(gTable, rows);
       gTable.hidden = rows.length === 0;
-      status.textContent = rows.length === 0 ? GLOBAL_TEXT.empty : '';
-      status.hidden = rows.length > 0;
+      status.textContent = rows.length === 0 ? GLOBAL_TEXT.empty : GLOBAL_TEXT.public;
+      status.hidden = false;
       retry.hidden = true;
       refresh.hidden = false;
       return;
     }
-    gTable.hidden = true;
+    // tabloya ulaşılamadı: bu cihazdaki liste
+    const local = r.reason === 'disabled' ? [] : localRows();
+    fillTable(gTable, local);
+    gTable.hidden = local.length === 0;
     status.hidden = false;
     status.textContent =
       r.reason === 'disabled'
         ? GLOBAL_TEXT.disabled
-        : r.reason === 'offline'
-          ? GLOBAL_TEXT.offline
-          : GLOBAL_TEXT.failed;
+        : local.length
+          ? GLOBAL_TEXT.fallback
+          : r.reason === 'offline'
+            ? GLOBAL_TEXT.offline
+            : GLOBAL_TEXT.failed;
     retry.hidden = r.reason === 'disabled'; // yapılandırma yoksa tekrar denemek anlamsız
     refresh.hidden = true;
   }

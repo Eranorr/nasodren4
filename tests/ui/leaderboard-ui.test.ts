@@ -1,7 +1,7 @@
 // NS4-18: Skorlar ekranı (sekmeler, tablolar, global durumlar), oyun sonu gönderim paneli ve oyun sonu akışı.
 // Sahte DOM; ağ katmanı taklit edilir (gerçek Supabase'e bağlanılmaz).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FetchResult, LeaderboardClient, SubmitResult } from '../../src/leaderboard/globalClient';
+import type { FetchResult, GlobalEntry, LeaderboardClient, SubmitResult } from '../../src/leaderboard/globalClient';
 import type { LocalScore } from '../../src/leaderboard/localScores';
 import { createAppStubs } from '../helpers/appStubs';
 import { installFakeDom, type FakeDom, type FakeElement } from '../helpers/fakeDom';
@@ -45,9 +45,9 @@ const rows = (id: string) =>
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
 describe('Skorlar ekranı', () => {
-  async function view(local: LocalScore[], client = fakeClient().c) {
+  async function view(local: LocalScore[], client = fakeClient().c, mine: GlobalEntry | null = null) {
     const { createScoresView } = await import('../../src/ui/scoresView');
-    return createScoresView({ client, loadLocal: () => local });
+    return createScoresView({ client, loadLocal: () => local, mine: () => mine });
   }
   it('Yerel: sıra, takma ad (yoksa —), skor, drenaj; en çok 10 satır; boş liste durumu', async () => {
     const v = await view([entry(1, 12345, 'Ferah'), entry(2, 900)]);
@@ -95,14 +95,15 @@ describe('Skorlar ekranı', () => {
     v.select('global');
     expect(dom.el('global-status').textContent).toBe('Yükleniyor…');
     expect(dom.el('panel-global').getAttribute('aria-busy')).toBe('true');
-    f.fetches[0]?.({ ok: true, entries: [{ rank: 1, nickname: 'Nefes', score: 5000, lines: 30, level: 4 }] });
+    f.fetches[0]?.({ ok: true, entries: [{ id: 3, rank: 1, nickname: 'Nefes', score: 5000, lines: 30, level: 4 }] });
     await flush();
     expect(rows('table-global')).toEqual([['1', 'Nefes', '5.000', '30']]);
     expect([dom.el('table-global').hidden, dom.el('global-status').hidden, dom.el('b-global-refresh').hidden]).toEqual([
       false,
-      true,
+      false,
       false,
     ]);
+    expect(dom.el('global-status').textContent).toBe('Herkese açık skor tablosu · ilk 10');
     v.select('local');
     v.select('global');
     await vi.advanceTimersByTimeAsync(10 * 60_000);
@@ -138,11 +139,61 @@ describe('Skorlar ekranı', () => {
     await flush();
     dom.el('b-global-retry').click();
     dom.el('b-global-refresh').click(); // gizli olsa da: iki istek uçuşta
-    f.fetches[2]?.({ ok: true, entries: [{ rank: 1, nickname: 'Yeni', score: 2, lines: 0, level: 1 }] });
+    f.fetches[2]?.({ ok: true, entries: [{ id: 2, rank: 1, nickname: 'Yeni', score: 2, lines: 0, level: 1 }] });
     await flush();
-    f.fetches[1]?.({ ok: true, entries: [{ rank: 1, nickname: 'Eski', score: 1, lines: 0, level: 1 }] });
+    f.fetches[1]?.({ ok: true, entries: [{ id: 1, rank: 1, nickname: 'Eski', score: 1, lines: 0, level: 1 }] });
     await flush();
     expect(rows('table-global')).toEqual([['1', 'Yeni', '2', '0']]);
+  });
+  it('tabloya ulaşılamazsa bu cihazdaki liste gösterilir (yapılandırma yoksa gösterilmez)', async () => {
+    for (const [reason, shown] of [
+      ['offline', true],
+      ['timeout', true],
+      ['error', true],
+      ['disabled', false],
+    ] as const) {
+      const f = fakeClient();
+      const v = await view([entry(1, 900, 'Ferah')], f.c);
+      v.open();
+      v.select('global');
+      f.fetches[0]?.({ ok: false, reason });
+      await flush();
+      expect(dom.el('table-global').hidden, reason).toBe(!shown);
+      expect(dom.el('global-status').textContent, reason).toBe(
+        shown ? 'Bağlantı kurulamadı: bu cihazdaki skorlar gösteriliyor.' : 'Global tablo çevrimdışı',
+      );
+      if (shown) expect(rows('table-global')).toEqual([['1', 'Ferah', '900', '12']]);
+    }
+  });
+  it('az önce gönderilen skor vurgulanır; ilk 10da değilse sırasıyla altta', async () => {
+    const top = Array.from({ length: 10 }, (_, i) => ({
+      id: i + 1,
+      rank: i + 1,
+      nickname: `Oyuncu ${i + 1}`,
+      score: 9000 - i,
+      lines: 10,
+      level: 2,
+    }));
+    const inTop = await view([], fakeClient().c);
+    const f1 = fakeClient();
+    const v1 = await view([], f1.c, top[2] ?? null);
+    v1.open();
+    v1.select('global');
+    f1.fetches[0]?.({ ok: true, entries: top });
+    await flush();
+    const body = () => dom.el('table-global').children[0]?.children ?? [];
+    expect(body().map((tr) => tr.className)).toEqual(['', '', 'me', '', '', '', '', '', '', '']);
+    const mine: GlobalEntry = { id: 99, rank: 37, nickname: 'Ben', score: 10, lines: 0, level: 1 };
+    const f2 = fakeClient();
+    const v2 = await view([], f2.c, mine);
+    v2.open();
+    v2.select('global');
+    f2.fetches[0]?.({ ok: true, entries: top });
+    await flush();
+    expect(rows('table-global')).toHaveLength(11);
+    expect(rows('table-global')[10]).toEqual(['37', 'Ben', '10', '0']);
+    expect(body()[10]?.className).toBe('me');
+    expect(inTop).toBeDefined();
   });
   it('Skorlar alt ekran: ilk odak Yerel sekmesi; Escape/geri açan butona döner', async () => {
     const screens = await import('../../src/ui/screens');
@@ -164,12 +215,13 @@ describe('oyun sonu global gönderim paneli', () => {
     const { createSubmitPanel } = await import('../../src/ui/submitScore');
     const saveNickname = vi.fn();
     const updateLocal = vi.fn();
-    const p = createSubmitPanel({ client, loadNickname: () => nick, saveNickname, updateLocal });
+    const onSubmitted = vi.fn();
+    const p = createSubmitPanel({ client, loadNickname: () => nick, saveNickname, updateLocal, onSubmitted });
     const submit = () => {
       dom.el('submit-score').dispatch('submit');
       return flush();
     };
-    return { p, saveNickname, updateLocal, submit };
+    return { p, saveNickname, updateLocal, onSubmitted, submit };
   }
   const input = () => dom.el('nick-input') as FakeElement & { value: string };
   it('env yoksa çevrimdışı: buton ve giriş kapalı, ağa gidilmez', async () => {
@@ -203,7 +255,7 @@ describe('oyun sonu global gönderim paneli', () => {
   });
   it('başarı: gönderiliyor → gönderildi; takma ad hatırlanır, yerel kayıt işaretlenir; tekrar gönderilemez', async () => {
     const f = fakeClient();
-    const { p, submit, saveNickname, updateLocal } = await panel(f.c);
+    const { p, submit, saveNickname, updateLocal, onSubmitted } = await panel(f.c);
     p.prepare(entry(1, 4321));
     input().value = '  Ferah   Nefes ';
     await submit();
@@ -223,14 +275,16 @@ describe('oyun sonu global gönderim paneli', () => {
       level: 2,
       durationSeconds: 90,
     });
-    f.submits[0]?.({ ok: true });
+    const sent: GlobalEntry = { id: 5, rank: 12, nickname: 'Ferah Nefes', score: 4321, lines: 12, level: 2 };
+    f.submits[0]?.({ ok: true, entry: sent });
     await flush();
     expect([p.state(), dom.el('submit-status').textContent, dom.el('b-submit').disabled, input().disabled]).toEqual([
       'sent',
-      'Global tabloya gönderildi',
+      'Global tabloya gönderildi · Sıran: 12.',
       true,
       true,
     ]);
+    expect(onSubmitted).toHaveBeenCalledWith(sent);
     expect(saveNickname).toHaveBeenCalledWith('Ferah Nefes');
     expect(updateLocal).toHaveBeenCalledWith(entry(1, 0).id, { nickname: 'Ferah Nefes' });
     expect(updateLocal).toHaveBeenCalledWith(entry(1, 0).id, { submitted: true });
@@ -245,6 +299,12 @@ describe('oyun sonu global gönderim paneli', () => {
     [{ ok: false, reason: 'offline' }, 'failed', 'Gönderilemedi, tekrar dene', false],
     [{ ok: false, reason: 'rate_limited' }, 'failed', 'Çok sık gönderim, biraz sonra tekrar dene', false],
     [{ ok: false, reason: 'duplicate' }, 'sent', 'Bu oyun zaten gönderilmiş', true],
+    [
+      { ok: true, entry: { id: 1, rank: 0, nickname: 'Ferah', score: 500, lines: 12, level: 2 } },
+      'sent',
+      'Global tabloya gönderildi',
+      true,
+    ],
     [{ ok: false, reason: 'invalid' }, 'sent', 'Bu skor gönderilemedi', true],
   ])('sonuç %j → %s', async (result, state, text, locked) => {
     const f = fakeClient();
@@ -269,7 +329,7 @@ describe('oyun sonu global gönderim paneli', () => {
     p.prepare(entry(1, 500));
     await submit();
     p.prepare(entry(2, 800));
-    f.submits[0]?.({ ok: true });
+    f.submits[0]?.({ ok: true, entry: { id: 1, rank: 1, nickname: 'Ferah', score: 500, lines: 12, level: 2 } });
     await flush();
     expect([p.state(), dom.el('submit-status').textContent]).toEqual(['idle', '']);
     expect(updateLocal).toHaveBeenCalledWith(entry(1, 0).id, { submitted: true });

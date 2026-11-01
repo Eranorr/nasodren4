@@ -2627,3 +2627,266 @@ input:focus-visible {
     opacity: 0.5;
   }
 }
+
+/* ---------- çok oyunculu (multiplayer/versus.ts) ---------- */
+#mp-opps[hidden],
+#mp-wait[hidden],
+#mp-join[hidden],
+#mp-room[hidden],
+#b-multi[hidden],
+#b-mp-start[hidden],
+#b-mp-next[hidden] {
+  display: none !important;
+}
+.mp-field {
+  display: block;
+  font-weight: 800;
+  font-size: calc(var(--fs-caption) * var(--ui-scale));
+  color: var(--color-text-muted);
+}
+.mp-field input,
+.mp-joinrow input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  border: 1.5px solid var(--color-border-strong);
+  background: var(--color-btn-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  font-size: calc(var(--fs-body) * var(--ui-scale));
+  user-select: text;
+  -webkit-user-select: text;
+}
+.mp-joinrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 10px;
+}
+.mp-joinrow input {
+  margin-top: 0;
+  min-height: 52px;
+  text-align: center;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+.mp-joinrow .btn {
+  width: auto;
+  margin-top: 0;
+  padding: 0 16px;
+}
+.mp-roomcode {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 10px;
+  border-radius: var(--radius-control);
+  background: var(--color-cyclamen-soft);
+  font-size: calc(var(--fs-caption) * var(--ui-scale));
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.mp-roomcode b {
+  font-family: var(--font-display);
+  font-size: calc(36px * var(--ui-scale));
+  letter-spacing: 0.18em;
+  color: var(--color-cyclamen-strong);
+}
+.mp-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.mp-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: calc(var(--fs-body) * var(--ui-scale));
+}
+.mp-list li:last-child {
+  border-bottom: 0;
+}
+.mp-list li.me b {
+  color: var(--color-cyclamen-strong);
+}
+.mp-list li.empty {
+  color: var(--color-text-muted);
+  font-weight: 700;
+  font-size: calc(var(--fs-caption) * var(--ui-scale));
+}
+.mp-list b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-list small {
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+.mp-list .rk {
+  font-family: var(--font-display);
+  width: 1.4em;
+  color: var(--color-text-muted);
+}
+.mp-total {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.mp-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.mp-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 10px;
+  font-weight: 700;
+  font-size: calc(var(--fs-caption) * var(--ui-scale));
+  color: var(--color-text-muted);
+}
+.mp-totals span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.mp-totals b {
+  color: var(--color-text);
+}
+.mp-note {
+  color: var(--color-text-muted);
+  font-weight: 700;
+  font-size: calc(var(--fs-caption) * var(--ui-scale)) !important;
+}
+.mp-note:empty,
+.mp-err:empty {
+  display: none;
+}
+.mp-err {
+  margin: 10px 0 0 !important;
+  font-weight: 800;
+  color: var(--color-danger-strong);
+  font-size: calc(var(--fs-body) * var(--ui-scale)) !important;
+}
+.mp-kicker {
+  margin: 0 0 4px !important;
+  font-weight: 800;
+  color: var(--color-cyclamen-strong);
+  font-size: calc(var(--fs-caption) * var(--ui-scale)) !important;
+}
+.sheet-mpgo {
+  text-align: center;
+}
+.mp-count {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(88px * var(--ui-scale));
+  line-height: 1;
+  color: var(--color-cyclamen);
+  margin: 6px 0 10px;
+}
+#b-multi {
+  margin-top: 10px;
+}
+/* rakip kartları: portrede üstte yan yana, yatayda sağda alt alta */
+#mp-opps {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  pointer-events: none;
+}
+#mp-opps.row {
+  flex-direction: row;
+  justify-content: center;
+}
+.mp-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-strong) 82%, transparent);
+  border: 2px solid var(--mp-color, var(--color-border));
+  color: var(--color-text);
+  min-width: 0;
+}
+#mp-opps.row .mp-card {
+  flex-direction: row;
+  padding: 2px 8px 2px 2px;
+  max-width: 50%;
+}
+/* #stage canvas (Pixi) kuralı tam ekran mutlak konum verir: rakip tahtası kartın içinde akışta kalır */
+#stage .mp-card canvas {
+  position: static;
+  inset: auto;
+  flex: none;
+  display: block;
+  border-radius: 3px;
+}
+.mp-meta {
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+  line-height: 1.15;
+  font-size: calc(12px * var(--hud-scale));
+}
+#mp-opps.row .mp-meta {
+  justify-items: start;
+}
+.mp-meta b {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mp-color);
+}
+.mp-score {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(15px * var(--hud-scale));
+  font-variant-numeric: tabular-nums;
+}
+.mp-meta small {
+  font-weight: 800;
+  color: var(--color-text-muted);
+}
+.mp-card.fin,
+.mp-card.away {
+  opacity: 0.7;
+}
+#mp-wait {
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  padding: 10px 16px;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-strong) 90%, transparent);
+  color: var(--color-text);
+  font-weight: 800;
+  font-size: calc(15px * var(--hud-scale));
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* ev sahibi değilse "Sonraki tur" gizli: "Odadan çık" tam genişlik */
+#b-mp-next[hidden] + #b-mp-leave {
+  grid-column: 1 / -1;
+}
+/* Skorlar: bu cihazdan az önce gönderilen skor */
+.score-table tbody tr.me th,
+.score-table tbody tr.me td {
+  background: var(--color-cyclamen-soft);
+  color: var(--color-cyclamen-strong);
+}

@@ -5,6 +5,8 @@ import { defineConfig } from 'vitest/config';
 // build ayarlarını etkilemez.
 // NS4-06: UI modülleri (hud, screens, InputController, lifecycle) tests/helpers/fakeDom.ts ile test edilir.
 export default defineConfig({
+  // .env.local / .env.production okunmaz: testler gerçek Supabase projesine bağlanmaz (global skor ve çok oyunculu kapalı)
+  envDir: 'tests/env',
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
