@@ -88,8 +88,9 @@ describe('olaylar', () => {
     stackRows(g, 7);
     g.useSneeze();
     finishClear(g);
-    stackRows(g, 7); // Sıklamen gücü: aktif çekirdek yok → sıradaki parça çekirdeklenir ('cyclamen')
+    stackRows(g, 7); // Sıklamen gücü: aktif çekirdek yok → en alttaki 3 gri sıra akar ('cyclamen')
     g.useCyc();
+    while (g.pending) finishClear(g);
     // görünür alan dolu: gizli satırlarda kilitlenen parça → oyun sonu (lockout)
     placePiece(g, PIECE.O, 0, 3, 0);
     stackRows(g, 20);

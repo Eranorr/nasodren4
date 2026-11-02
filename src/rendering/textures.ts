@@ -14,32 +14,32 @@ import type { BlockId, TetrominoType } from '../types/game';
 /** Atlas sütun sırası (Object.keys(COLORS) ile aynı: 1..8 artan). */
 export const BLOCK_IDS = [1, 2, 3, 4, 5, 6, 7, 8] as const satisfies readonly BlockId[];
 
-/** NS4-32: 1-7 sıklamen karolarının kenar rengine yakın (hayalet çerçevesi, sıçrayan damla tint'i). */
+/** 1-7: parçanın sıklamen görselinin baskın taç yaprağı rengi (hayalet çerçevesi, sıçrayan damla tint'i). */
 export const COLORS: Readonly<Record<BlockId, string>> = {
-  1: '#5cc9c4',
-  2: '#ffcf5a',
-  3: '#e44d97',
-  4: '#7cc47e',
-  5: '#f4869f',
-  6: '#b45cf2',
-  7: '#f9a184',
+  1: '#f8f5f3',
+  2: '#f955ae',
+  3: '#e4085c',
+  4: '#ca41b9',
+  5: '#ec4a93',
+  6: '#b51943',
+  7: '#dd263c',
   8: '#8e93a6',
 };
 
 /**
- * NS4-32: sıklamen blok görselleri, `public/images/bloklar/<ad>.webp`. Kaynak `art/bloklar/`; kırpma, küçültme ve
- * "göz yormasın" ayarı (doygunluk, kontrast, parlaklık) `tools/blocks/prepare_blocks.py` ile yapılır. I için görsel
- * yoktu: turkuaz karo yeşil karodan üretilir. NS4-34: karolar çiçeksizdir (düz jöle); parça başına tek sıklamen
- * üstlerine ayrı katmanda çizilir (rendering/plants.ts).
+ * Sıklamen blok görselleri, `public/images/bloklar/<ad>.webp`: her parçanın kendi renginde bir sıklamen (çiçek, sap,
+ * yaprak; arka planı saydam). Kaynak `art/bloklar/siklamen (1..7).png`; kırpma ve kareye sığdırma
+ * `tools/blocks/prepare_blocks.py` ile yapılır. Görsel hücrenin karesine sığar, kare karo çizilmez.
+ *   L: siklamen (1)  J: siklamen (2)  Z: siklamen (3)  S: siklamen (4)  I: siklamen (5)  O: siklamen (6)  T: siklamen (7)
  */
 export const BLOCK_ART: Readonly<Record<TetrominoType, string>> = {
-  1: 'turkuaz',
-  2: 'sari',
-  3: 'fusya',
-  4: 'yesil',
-  5: 'pembe',
-  6: 'mor',
-  7: 'seftali',
+  1: 'siklamen-beyaz',
+  2: 'siklamen-acik-pembe',
+  3: 'siklamen-alaca',
+  4: 'siklamen-mor',
+  5: 'siklamen-pembe',
+  6: 'siklamen-bordo',
+  7: 'siklamen-kirmizi',
 };
 export type BlockArt = Readonly<Record<TetrominoType, CanvasImageSource>>;
 const TETROMINO_IDS = [1, 2, 3, 4, 5, 6, 7] as const satisfies readonly TetrominoType[];

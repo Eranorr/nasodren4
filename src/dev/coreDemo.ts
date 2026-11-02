@@ -40,7 +40,7 @@ export interface CoreState {
   /** Sıklamen gücü: kullanılabilir mi, kullanıldı mı, sonucu, ×2 kalan saniye. */
   readonly powerReady: boolean;
   readonly powerUsed: boolean;
-  readonly powerResult: 'trigger' | 'seed' | null;
+  readonly powerResult: 'trigger' | 'rows' | null;
   readonly multSeconds: number;
 }
 

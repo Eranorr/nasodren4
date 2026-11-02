@@ -123,3 +123,32 @@ describe('işaretleme ve stiller', () => {
     expect(mediaBlock('@media (prefers-reduced-motion: reduce)')).toMatch(/\.gbtn\.ready/);
   });
 });
+
+describe('aktif çekirdek: Sıklamen düğmesi altın parlar', () => {
+  it('güç hazır + tahtada aktif çekirdek → core sınıfı; çekirdek gidince ya da güç kullanılınca kalkar', async () => {
+    const { g, lc, frame } = await loadUi();
+    lc.start();
+    stackRows(g, 7);
+    frame();
+    const btn = dom.el('btn-cyc');
+    expect([btn.classList.contains('ready'), btn.classList.contains('core')]).toEqual([true, false]);
+    g.coreLife = 5; // tahtada aktif çekirdek
+    frame();
+    expect(btn.classList.contains('core')).toBe(true);
+    g.coreLife = 0;
+    frame();
+    expect(btn.classList.contains('core')).toBe(false);
+    g.coreLife = 5;
+    frame();
+    g.useCyc();
+    while (g.pending) finishClear(g);
+    frame();
+    expect([btn.classList.contains('ready'), btn.classList.contains('core')]).toEqual([false, false]);
+  });
+  it('CSS: altın kenar ve parıltı; hareketi azalt tercihinde animasyon yok, sabit halka', () => {
+    expect(rule('#btn-cyc.ready.core')).toMatch(/animation:\s*coreGlow/);
+    const reduced = mediaBlock('@media (prefers-reduced-motion: reduce)');
+    expect(reduced).toMatch(/#btn-cyc\.ready\.core,/); // animasyon kapatılan seçicilerde
+    expect(rule('#btn-cyc.ready.core', reduced)).toMatch(/box-shadow/);
+  });
+});

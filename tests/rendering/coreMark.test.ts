@@ -11,7 +11,7 @@ import type { View } from '../../src/rendering/GameView';
 import { clearBoard, createGame, fillRow, finishClear, idx, placePiece } from '../helpers/gameHelpers';
 import type { ViewHarness } from '../helpers/pixiView';
 
-type S = { visible: boolean; children: S[]; scale: { x: number }; alpha: number };
+type S = { visible: boolean; children: S[]; scale: { x: number }; alpha: number; tint: number };
 const mark = (s: unknown) => (s as S).children[2];
 const marked = (list: readonly unknown[]) => list.filter((s) => (s as S).visible && mark(s)?.visible).length;
 
@@ -133,21 +133,29 @@ describe('drenaj görünümü', () => {
     H.step(16);
   }
 
-  it('aktif çekirdek tahtada işaretli; son iki parçada işaret hafifçe söner (nabız yok, reduced motion)', () => {
+  it('aktif çekirdek tahtada büyük ve altın; hedef sırası şeritle aydınlanır; son iki parçada söner (reduced motion)', () => {
     v.reducedMotion = true;
     armAndClear();
     const cell = () => mark(v.cells[(18 - HIDDEN) * COLS + 6]);
     H.step(16);
-    expect([cell()?.visible, cell()?.alpha]).toEqual([true, 1]);
+    expect([cell()?.visible, cell()?.alpha, cell()?.tint]).toEqual([true, 1, CORE_FX.activeTint]);
+    expect(cell()?.scale.x).toBe(CORE_FX.activeScale);
+    expect([v.coreLane.visible, v.coreLane.y, v.coreLane.alpha]).toEqual([
+      true,
+      (g.coreTargetRow - HIDDEN) * v.L.cell,
+      CORE_FX.laneAlpha,
+    ]);
+    expect(v.coreLane.width).toBeCloseTo(COLS * v.L.cell, 6);
     g.coreLife = FLOW.coreFadeAt;
     H.step(16);
     expect(cell()?.alpha).toBeCloseTo(CORE_FX.fadeAlpha, 6);
-    expect(cell()?.scale.x).toBe(1);
+    expect(cell()?.scale.x).toBe(CORE_FX.activeScale);
     g.coreLife = 0; // sönmüş: bit kalkınca işaret gider
     g.clearCore();
     g.boardVer++;
     H.step(16);
     expect(cell()?.visible).toBe(false);
+    expect(v.coreLane.visible).toBe(false); // aktif çekirdek yok: şerit yok
   });
 
   it('drenaj 300 ms; hedef sıra yatay parlar, bulutçuklar yerinden yukarı süzülür; ışık geri alınır', () => {
@@ -276,7 +284,7 @@ describe('aday, aktif, sönen çekirdek', () => {
     fillRow(g, 21, PIECE.GARBAGE, [0]);
   });
 
-  it('aktif çekirdek tahtada sabit (nabız yok); aday çekirdek (düşen parça) nabızlı', () => {
+  it('aktif çekirdek (tahta) altın ve adaydan büyük, kendi ritmiyle; aday çekirdek (düşen parça) beyaz, nabızlı', () => {
     placePiece(g, PIECE.T, 0, 3, 0);
     g.core = true;
     g.hardDrop(); // çiçek (4, 19): gri (4, 21) 2 sıra altta → aktif
@@ -290,10 +298,13 @@ describe('aday, aktif, sönen çekirdek', () => {
     const seen = new Set<number>();
     for (let t = 0; t < CORE_FX.period; t += 100) {
       H.step(100, 100);
-      expect([board?.scale.x, board?.alpha]).toEqual([1, 1]);
+      expect([board?.alpha, board?.tint, cand()?.tint]).toEqual([1, CORE_FX.activeTint, 0xffffff]);
+      expect(board?.scale.x ?? 0).toBeGreaterThanOrEqual(CORE_FX.activeScale);
+      expect(board?.scale.x ?? 0).toBeGreaterThan(cand()?.scale.x ?? 0);
       seen.add(Math.round((cand()?.scale.x ?? 0) * 1000));
     }
     expect(seen.size).toBeGreaterThan(3);
+    expect(v.coreLane.visible).toBe(true);
   });
 
   it('yakınlık sağlanamazsa kısa sönme efekti oynar ve biter; işaret tahtada kalmaz', () => {

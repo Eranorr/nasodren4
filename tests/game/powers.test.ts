@@ -26,7 +26,7 @@ describe('tıkanıklık (congestion)', () => {
   });
 });
 
-describe('siklamen (cyc): çekirdek desteği (kural seti cyclamen-flow-v2; ayrıntı: tests/game/cyclamenPower.test.ts)', () => {
+describe('siklamen (cyc): basınca 3 gri sıra (kural seti cyclamen-flow-v3; ayrıntı: tests/game/cyclamenPower.test.ts)', () => {
   it('%35 altındaki tıkanıklıkta açılmaz', () => {
     const g = createGame(1);
     stackRows(g, 6); // 0.30
@@ -41,27 +41,30 @@ describe('siklamen (cyc): çekirdek desteği (kural seti cyclamen-flow-v2; ayrı
     expect(g.canSneeze()).toBe(true);
   });
 
-  it('aktif çekirdek yokken satır silmez, puan vermez; sıradaki parçayı çekirdekler; 30 sn ×2 hemen başlar', () => {
+  it('aktif çekirdek yokken en alttaki 3 gri sıra hemen akar; puan vermez; sıradaki parçalar değişmez; 30 sn ×2', () => {
     const g = createGame(1);
     stackRows(g, 10); // satır 12..21
     setCell(g, 2, 11, PIECE.L);
     g.queueCore.fill(false);
-    const board = g.board.slice();
     const log = recordEvents(g, ['clearstart', 'powerdone', 'clearend', 'cyclamen']);
     expect(g.useCyc()).toBe(true);
-    expect([g.state, g.pending, g.score, g.multT]).toEqual(['play', null, 0, CFG.cycMultMs]);
-    expect(log.names()).toEqual(['cyclamen']);
+    expect([g.state, g.pending?.kind, g.score, g.multT]).toEqual(['draining', 'flush', 0, CFG.cycMultMs]);
+    expect(log.names()).toEqual(['cyclamen', 'clearstart']);
     expect(log.payloads('cyclamen')).toEqual([{ core: false }]);
-    expect(g.queueCore[0]).toBe(true);
-    expect([...g.board]).toEqual([...board]); // alttaki sıralar silinmedi
+    expect(g.queueCore.every((c) => !c)).toBe(true);
+    while (g.pending) finishClear(g);
+    // 19-21 boşaldı; 12-18 gri sıraları yerinde (griler çökmez); L griye yaslı kalır
+    for (const y of [19, 20, 21]) expect(rowCells(g, y).filter(Boolean), `sıra ${y}`).toHaveLength(0);
+    expect(rowCells(g, 18).filter((c) => c === PIECE.GARBAGE)).toHaveLength(COLS - 1);
     expect(getCell(g, 2, 11)).toBe(PIECE.L);
-    expect(rowCells(g, 21).filter(Boolean)).toHaveLength(COLS - 1);
+    expect(g.score).toBe(0);
   });
 
   it('yalnızca bir kez kullanılabilir', () => {
     const g = createGame(1);
     stackRows(g, 7);
     expect(g.useCyc()).toBe(true);
+    while (g.pending) finishClear(g);
     stackRows(g, 7);
     expect(g.canCyc()).toBe(false);
     expect(g.useCyc()).toBe(false);
@@ -72,7 +75,9 @@ describe('siklamen (cyc): çekirdek desteği (kural seti cyclamen-flow-v2; ayrı
     const g = createGame(1);
     const log = recordEvents(g, ['scored']);
     stackRows(g, 7);
-    g.useCyc(); // ×2 hemen (aktif çekirdek yok: drenaj yok)
+    g.useCyc(); // ×2 hemen; alttaki gri sıralar akar
+    while (g.pending) finishClear(g);
+    g.multT = CFG.cycMultMs; // drenaj süresi sayılmasın: ×2 penceresi buradan ölçülür
     setupWell(g, 1);
     dropVerticalI(g);
     finishClear(g); // multT 30000 - 300

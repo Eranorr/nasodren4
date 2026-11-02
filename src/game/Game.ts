@@ -12,7 +12,7 @@
    Sıklamen çekirdeği (bkz. cyclamenFlow.ts ve docs/CYCLAMEN-CORE-V3-FINAL.md):
    torba başına bir çekirdekli parça, yakınlıkla aktifleşme, sonraki satır
    temizlemesinde kontrollü drenaj ve drenajın dokunduğu sütunlarda renkli
-   hücre çökmesi. Sıklamen gücü çekirdeği destekler (useCyc).
+   hücre çökmesi. Sıklamen gücü basınca hemen 3 gri sıra siler (useCyc; aktif çekirdek varsa onun hizasından).
    ===================================================================== */
 import { COLS, ROWS, HIDDEN, VIS, CFG, ROOMS } from '../config/gameConfig';
 import { PIECE, SHAPES, KICK_JLSTZ, KICK_I, kickKey, nextRotation } from './pieces';
@@ -25,6 +25,7 @@ import {
   grayCellsInSpan,
   hasCore,
   nearGrayRow,
+  powerRows,
   shiftedRow,
   withCore,
 } from './cyclamenFlow';
@@ -87,9 +88,12 @@ export class Game {
   softDrop!: boolean;
   lastRot!: boolean;
   lastKick!: number;
-  /** Sıklamen gücü kullanıldı mı (oyun başına bir kez) ve sonucu ('trigger' aktif çekirdek, 'seed' sıradaki parça). */
+  /**
+   * Sıklamen gücü kullanıldı mı (oyun başına bir kez) ve hangi sıraları sildi ('trigger': aktif çekirdeğin hedefine
+   * en yakın sıralar, 'rows': en alttaki gri sıralar).
+   */
   cycUsed!: boolean;
-  cycSupport!: 'trigger' | 'seed' | null;
+  cycSupport!: 'trigger' | 'rows' | null;
   /** Süren (ya da son) çekirdek drenajını Sıklamen gücü mü başlattı (analitik). */
   flushByPower!: boolean;
   /** NS4-24: bu oyundaki hapşırık sayısı ve son hapşırıktan beri kilitlenen parça (CFG.sneezePieces'te dolu). */
@@ -736,23 +740,20 @@ export class Game {
     if (!this.canCyc()) return false;
     this.cycUsed = true;
     this.multT = CFG.cycMultMs;
+    // cyclamen-flow-v3: basınca hemen FLOW.powerRows gri sıra akar. Aktif çekirdek varsa hedef sırasına en yakın
+    // sıralar (çekirdek tüketilir), yoksa en alttakiler. Gri kalmadıysa (serbest nefes) yalnızca ×2.
     const core = this.coreLife > 0 ? findCore(this.board, this.plant) : -1;
+    const target = core >= 0 ? this.coreTargetRow : -1;
     if (core >= 0) {
       this.cycSupport = 'trigger';
       this.coreLife = 0;
-      this.flushFrom = core;
       this.emit('cyclamen', { core: true });
       this.emit('core', { kind: 'triggered' });
-      this.beginFlush(FLOW.supportSpan, true); // hedefte gri kalmadıysa drenaj olmaz; çekirdek yine tüketilir
     } else {
-      this.cycSupport = 'seed';
-      const i = this.queueCore.findIndex((c) => !c);
-      if (i >= 0) {
-        this.queueCore[i] = true;
-        this.queueVer++;
-      }
+      this.cycSupport = 'rows';
       this.emit('cyclamen', { core: false });
     }
+    this.beginPowerFlush(powerRows(this.board, target, FLOW.powerRows));
     return true;
   }
 
@@ -845,6 +846,31 @@ export class Game {
     this.flushedCells += cells.length;
     this.lastFlush = cells.length;
     this.flushCol = this.coreTargetCol;
+    const p = { kind: 'flush', rows: [], cells } as const;
+    this.state = 'draining';
+    this.stateT = FLOW.rowMs;
+    this.pending = p;
+    this.emit('clearstart', p);
+    return true;
+  }
+
+  /**
+   * Sıklamen gücü: verilen sıraların bütün grileri tek drenajla akar (ardından çökme; satır, seviye, kombo sayılmaz).
+   * Düşen parça sürer. Tahtadaki çekirdek (varsa) tüketilir. Gri yoksa false.
+   */
+  beginPowerFlush(rows: readonly number[]): boolean {
+    this.flushFrom = -1;
+    this.flushByPower = true;
+    this.clearCore();
+    this.coreTargetRow = -1;
+    this.boardVer++;
+    const cells = rows.flatMap((r) => grayCellsInSpan(this.board, r, 0, COLS));
+    if (!cells.length) return false;
+    this.flushRow = rows[rows.length - 1] ?? -1;
+    this.flushCol = -1;
+    this.flushes++;
+    this.flushedCells += cells.length;
+    this.lastFlush = cells.length;
     const p = { kind: 'flush', rows: [], cells } as const;
     this.state = 'draining';
     this.stateT = FLOW.rowMs;

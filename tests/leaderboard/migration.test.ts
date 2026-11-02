@@ -2,6 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import baseline from '../../supabase/migrations/20261101000000_tetris_scores_baseline.sql?raw';
 import secure from '../../supabase/migrations/20261101120000_tetris_secure_scores_and_rooms.sql?raw';
+import v3 from '../../supabase/migrations/20261102000000_tetris_ruleset_v3.sql?raw';
+import { RULESET } from '../../supabase/functions/_shared/scoreRules.ts';
 import envProduction from '../../.env.production?raw';
 import envExample from '../../.env.local.example?raw';
 import gitignore from '../../.gitignore?raw';
@@ -28,14 +30,29 @@ const FUNCS = [
 ];
 
 describe('migration zinciri', () => {
-  it('yalnızca iki dosya, sıralı; tek kaynak schema.sql yok', () => {
+  it('ileri yönlü zincir, sıralı; tek kaynak schema.sql yok', () => {
     expect(Object.keys(migrations).map((f) => f.split('/').pop())).toEqual([
       '20261101000000_tetris_scores_baseline.sql',
       '20261101120000_tetris_secure_scores_and_rooms.sql',
+      '20261102000000_tetris_ruleset_v3.sql',
     ]);
   });
+  it('v3: okuma RPC varsayılanı güncel kural seti; yetkiler aynı; veri silinmez', () => {
+    const c = sql(v3);
+    expect(RULESET).toBe('cyclamen-flow-v3');
+    expect(c).toContain(
+      `create or replace function public.tetris_get_leaderboard( limit_count integer default 10, ruleset_name text default '${RULESET}' )`,
+    );
+    expect(c).toContain("security definer set search_path = ''");
+    expect(c).toContain('limit least(greatest(coalesce(limit_count, 10), 1), 10)');
+    expect(c).toContain(
+      'revoke all on function public.tetris_get_leaderboard(integer, text) from public, anon, authenticated;',
+    );
+    expect(c).not.toMatch(/drop table|truncate|delete from|grant [^;]*(insert|update|delete)/i);
+    expect(v3).toContain('Geri alma (rollback)');
+  });
   it('veri kaybı yok: DROP TABLE / TRUNCATE / DELETE FROM tetris_scores kullanılmaz', () => {
-    for (const s of [sql(baseline), code]) {
+    for (const s of [sql(baseline), code, sql(v3)]) {
       expect(s).not.toMatch(/drop table|truncate/i);
       expect(s).not.toMatch(/delete from public\.tetris_scores/i);
     }

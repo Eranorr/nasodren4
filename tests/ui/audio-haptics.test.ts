@@ -114,15 +114,15 @@ describe('olay → ses ve haptik (her önemli olay bir kez)', () => {
     g.hardDrop();
     expect(rec.args('clear')).toEqual([[2, 2]]);
   });
-  it('sıklamen: cyc sesi ve deseni bir kez; bitişte ek ses yok', async () => {
+  it('sıklamen: cyc sesi ve deseni bir kez; drenaj sesi bir kez (alttaki gri sıralar akar)', async () => {
     const { g, lc, rec, buzz } = await wire();
     lc.start();
     stackRows(g, 8);
     rec.log.length = 0;
     buzz.mockClear();
-    g.useCyc(); // aktif çekirdek yok: drenaj yok
+    g.useCyc(); // aktif çekirdek yok: en alttaki 3 gri sıra akar
     expect(rec.count('cyc')).toBe(1);
-    expect(rec.log.map(([n]) => n).filter((n) => n !== 'setMusic')).toEqual(['cyc']);
+    expect(rec.log.map(([n]) => n).filter((n) => n !== 'setMusic')).toEqual(['cyc', 'clear']);
     expect(buzz.mock.calls).toEqual([[HAPTIC.cyc]]);
   });
   it('hapşırık: her kullanımda sneeze sesi ve deseni bir kez; uyarı/ceza sesi yok', async () => {

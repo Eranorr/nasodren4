@@ -29,8 +29,12 @@ export const FLOW = {
   nearCols: 1,
   nearRows: 2,
   span: 2,
-  /** Sıklamen gücüyle tetiklenen aktif çekirdeğin drenaj genişliği (sütun ±; en çok 9 gri; normal drenaj ±span kalır). */
-  supportSpan: 4,
+  /**
+   * Sıklamen gücü (cyclamen-flow-v3): basınca hemen bu kadar gri sıra (sıranın bütün grileri) akar. Aktif çekirdek
+   * varsa hedef sırasına en yakın sıralar, yoksa en alttakiler. En küçük oda 4 sıra olduğu için dolu bir oda tek
+   * basışta açılmaz (son oda 10 sıra: 7'si kalır).
+   */
+  powerRows: 3,
   /** Son bu kadar parçada aktif çekirdeğin işareti hafifçe söner (görünüm). */
   coreFadeAt: 2,
   /** Drenaj puanı (0: drenaj puan vermez). */
@@ -83,6 +87,25 @@ export function nearGrayRow(board: Uint8Array, k: number): number {
 }
 
 /** `row` sırasında `col` ± `span` sütunlarındaki gri hücreler (tahta sınırında kırpılır; soldan sağa). */
+/**
+ * Sıklamen gücünün sileceği sıralar: gri içeren sıralardan en çok `n` tanesi. `target` (aktif çekirdeğin hedef sırası)
+ * verilirse ona en yakınlar (eşit uzaklıkta alttaki önce), verilmezse (-1) en alttakiler. Sıralar küçükten büyüğe.
+ */
+export function powerRows(board: Uint8Array, target: number, n: number): number[] {
+  const rows: number[] = [];
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++)
+      if (board[y * COLS + x] === PIECE.GARBAGE) {
+        rows.push(y);
+        break;
+      }
+  const key = (y: number) => (target >= 0 ? Math.abs(y - target) * 2 + (y > target ? 0 : 1) : ROWS - y);
+  return rows
+    .sort((a, b) => key(a) - key(b))
+    .slice(0, Math.max(0, n))
+    .sort((a, b) => a - b);
+}
+
 export function grayCellsInSpan(board: Uint8Array, row: number, col: number, span: number): number[] {
   const out: number[] = [];
   for (let x = Math.max(0, col - span); x <= Math.min(COLS - 1, col + span); x++)

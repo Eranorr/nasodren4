@@ -22,7 +22,7 @@ const valid = () => ({
   level: 3,
   durationSeconds: 245,
   clientVersion: 'web-tetris-1',
-  ruleset: 'cyclamen-flow-v2',
+  ruleset: 'cyclamen-flow-v3',
 });
 
 describe('kurallar oyun sabitleriyle tutarlı', () => {
@@ -115,7 +115,8 @@ describe('skor gövdesi doğrulama', () => {
     ],
     ['eski kural seti', { ...valid(), ruleset: 'legacy' }, 'ruleset'],
     ['önceki kural seti (sıklamen alt 10 sıra)', { ...valid(), ruleset: 'cyclamen-flow-v1' }, 'ruleset'],
-    ['bilinmeyen kural seti', { ...valid(), ruleset: 'cyclamen-flow-v3' }, 'ruleset'],
+    ['bilinmeyen kural seti', { ...valid(), ruleset: 'cyclamen-flow-v4' }, 'ruleset'],
+    ['önceki kural seti (çekirdek desteği ±4)', { ...valid(), ruleset: 'cyclamen-flow-v2' }, 'ruleset'],
     ['kural seti sayı', { ...valid(), ruleset: 1 }, 'ruleset'],
     ['seviye satırla tutarsız', { ...valid(), level: 5 }, 'implausible'],
     ['satır için çok kısa süre', { ...valid(), lines: 200, level: 20, durationSeconds: 5 }, 'implausible'],

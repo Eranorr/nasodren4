@@ -21,6 +21,16 @@ export const CORE_FX = {
   fizzleMs: 360,
   fizzleTint: 0xb8b0bc,
   tint: 0xfff1f8,
+  /**
+   * Tahtadaki AKTİF çekirdek: aday işaretinden büyük ve altın renkli, ayrı bir ritimle parlar; hedef sırası tahtanın
+   * arkasında altın bir şeritle aydınlanır (Sıklamen gücü bu hizadan 3 sıra siler).
+   */
+  activeScale: 1.3,
+  activePulse: 0.1,
+  activeTint: 0xffd166,
+  laneTint: 0xffd166,
+  laneAlpha: 0.2,
+  laneAlphaMin: 0.1,
 } as const;
 
 /** px × px (2 px kenar boşluğu dahil değil) halka + yıldız. */
@@ -61,6 +71,16 @@ export function createCoreMarkCanvas(px: number): HTMLCanvasElement {
   x.stroke();
   x.fill();
   return cv;
+}
+
+/** Aktif çekirdeğin ölçeği ve hedef şeridinin alpha'sı (t ms). Reduced motion: sabit. */
+export function activeCorePulse(t: number, reduced: boolean): { readonly scale: number; readonly lane: number } {
+  if (reduced) return { scale: CORE_FX.activeScale, lane: CORE_FX.laneAlpha };
+  const k = 0.5 - 0.5 * Math.cos((t / CORE_FX.period) * Math.PI * 2);
+  return {
+    scale: CORE_FX.activeScale * (1 + CORE_FX.activePulse * k),
+    lane: CORE_FX.laneAlphaMin + (CORE_FX.laneAlpha - CORE_FX.laneAlphaMin) * k,
+  };
 }
 
 /** İşaretin o anki ölçek çarpanı ve alpha'sı (t ms). Reduced motion: sabit (1, 1). */

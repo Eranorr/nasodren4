@@ -224,15 +224,18 @@ describe('GameView efektleri: başlama, bitiş ve temizlik', () => {
     expectClean();
   });
 
-  it('sıklamen gücü: ×2 vuruşu (tahta ışıması, kabarcıklar); aktif çekirdek yoksa satır silinmez; sonra temiz', () => {
+  it('sıklamen gücü: ×2 vuruşu (tahta ışıması, kabarcıklar); aktif çekirdek yoksa alttaki 3 gri sıra akar; sonra temiz', () => {
     stackRows(g, 8);
-    const board = g.board.slice();
     expect(g.useCyc()).toBe(true);
-    expect(v.anim).toBeNull(); // drenaj yok (aktif çekirdek yok)
-    expect([...g.board]).toEqual([...board]);
+    expect(v.anim?.kind).toBe('flush'); // en alttaki 3 gri sıra
+    expect(v.anim?.cells).toHaveLength(27);
     expect(v.glow.on).toBe(true);
     expect(v.glow.s.tint).toBe(0xff79bd);
     expect(live().length).toBeGreaterThan(0);
+    while (g.pending) {
+      H.step(FLOW.rowMs);
+      finishClear(g);
+    }
     H.step(2000);
     expectClean();
   });
@@ -442,6 +445,7 @@ describe('performans ve dayanıklılık', () => {
     expect(v.partIdx).toBeLessThan(420);
     expect(live().length).toBeLessThanOrEqual(420);
     expect(countNodes(v.app.stage)).toBe(nodes); // sahneye yeni nesne eklenmez
+    while (g.pending) finishClear(g);
     H.step(2500);
     expectClean();
   });
@@ -473,7 +477,7 @@ describe('performans ve dayanıklılık', () => {
     H.resize(1920, 1080);
     H.step(16);
     expect(v.flashes[0].width).toBeCloseTo(COLS * v.L.cell, 6); // hedef sıra ışığı yeni ölçüde
-    expect(v.flashes[0].y).toBeCloseTo((15 - 2) * v.L.cell, 6);
+    expect(v.flashes[0].y).toBeCloseTo((17 - 2) * v.L.cell, 6); // gücün sildiği en alt sıra (15-17)
     H.resize(844, 390);
     while (g.pending) {
       H.step(200);

@@ -53,9 +53,11 @@ export const CLIENT_VERSION_MAX = 32;
  * ayrılır; gönderimde yalnızca bu değer kabul edilir. Eski kural setlerinin kayıtları silinmez.
  *   cyclamen-flow-v1: sıklamen çekirdeği kalıcı (docs/CYCLAMEN-CORE-V3-FINAL.md); Sıklamen gücü alttaki 10 sırayı siler.
  *   cyclamen-flow-v2: Sıklamen gücü çekirdeği destekler (docs/CYCLAMEN-POWER-CORE-SUPPORT-FINAL.md).
+ *   cyclamen-flow-v3: Sıklamen gücü basınca hemen 3 gri sıra siler; aktif çekirdek varsa onun hizasından
+ *                     (docs/CYCLAMEN-POWER-V3.md). Drenaj puan vermez: skor üst sınırı değişmez.
  * Kural seti alanı olmayan (NS4-18'den kalan) kayıtlar LEGACY_RULESET sayılır.
  */
-export const RULESET = 'cyclamen-flow-v2';
+export const RULESET = 'cyclamen-flow-v3';
 export const LEGACY_RULESET = 'legacy';
 /** Kural seti adı biçimi (veritabanı kısıtıyla aynı). */
 export const RULESET_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;

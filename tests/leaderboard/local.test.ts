@@ -21,7 +21,7 @@ const entry = (n: number, score: number, at = 1000 + n, extra: Record<string, un
   durationSeconds: 60,
   recordedAt: at,
   submitted: false,
-  ruleset: 'cyclamen-flow-v2',
+  ruleset: 'cyclamen-flow-v3',
   ...extra,
 });
 
@@ -98,7 +98,7 @@ describe('bozuk storage güvenle filtrelenir', () => {
   });
 });
 
-describe('kural seti (cyclamen-flow-v2)', () => {
+describe('kural seti (cyclamen-flow-v3; v2 ve v1 kayıtları korunur)', () => {
   /** Kural seti alanı olmayan eski (NS4-18) kayıt. */
   const legacy = (n: number, score: number) =>
     Object.fromEntries(Object.entries(entry(n, score)).filter(([k]) => k !== 'ruleset'));
@@ -134,18 +134,28 @@ describe('kural seti (cyclamen-flow-v2)', () => {
     expect(m.loadLocalScores()[0]?.score).toBe(1200);
     const all = m.normalizeAllLocalScores(JSON.parse(data.get('fn_scores') ?? '{}'));
     expect(all.filter((e) => e.ruleset === 'legacy')).toHaveLength(10);
-    expect(all.filter((e) => e.ruleset === 'cyclamen-flow-v2')).toHaveLength(10);
+    expect(all.filter((e) => e.ruleset === 'cyclamen-flow-v3')).toHaveLength(10);
   });
 
   it('önceki kural seti (cyclamen-flow-v1) kayıtları silinmez, kendi kural setinde kalır; listede görünmez', async () => {
-    data.set('fn_scores', JSON.stringify({ v: 1, entries: [entry(1, 7000, 1, { ruleset: 'cyclamen-flow-v1' })] }));
+    data.set(
+      'fn_scores',
+      JSON.stringify({
+        v: 1,
+        entries: [
+          entry(1, 7000, 1, { ruleset: 'cyclamen-flow-v1' }),
+          entry(4, 6000, 1, { ruleset: 'cyclamen-flow-v2' }),
+        ],
+      }),
+    );
     const m = await mod();
     expect(m.loadLocalScores()).toEqual([]);
     m.addLocalScore(entry(2, 10));
     expect(m.loadLocalScores().map((e) => e.id)).toEqual([id(2)]);
     expect(stored().entries.map((e) => [e['id'], e['ruleset']])).toEqual([
       [id(1), 'cyclamen-flow-v1'],
-      [id(2), 'cyclamen-flow-v2'],
+      [id(4), 'cyclamen-flow-v2'],
+      [id(2), 'cyclamen-flow-v3'],
     ]);
   });
 
@@ -154,7 +164,7 @@ describe('kural seti (cyclamen-flow-v2)', () => {
     expect(m.normalizeLocalScore({ ...entry(1, 5), ruleset: '<b>' })?.ruleset).toBe('legacy');
     expect(m.normalizeLocalScore(legacy(2, 5))?.ruleset).toBe('legacy');
     m.addLocalScore(entry(3, 7));
-    expect(stored().entries[0]).toMatchObject({ ruleset: 'cyclamen-flow-v2' });
+    expect(stored().entries[0]).toMatchObject({ ruleset: 'cyclamen-flow-v3' });
   });
 });
 

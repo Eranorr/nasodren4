@@ -3,7 +3,6 @@
 // boydan doldurur; sap ve sivri uç karodaki bordo sap renklerinde çizilir.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LINK, PLANTS, ROLE, plantCode } from '../../src/game/plants';
-import { BLOCK_ART } from '../../src/rendering/textures';
 import {
   STEM_COLORS,
   PLANT,
@@ -14,6 +13,7 @@ import {
   bloomRotation,
   createPlantAtlas,
   leafPlace,
+  PLANT_ART_NAMES,
   loadPlantArt,
   plantArtUrl,
   stemIndex,
@@ -79,7 +79,7 @@ describe('NS4-34: bitki karoları', () => {
   });
 
   it('her parça rengi için karonun çiçeği ve tomurcuğu, iki kalp yaprak yayınlanıyor (kuyruk çizimle)', () => {
-    const want = Object.values(BLOCK_ART).flatMap((n) => [`cicek-${n}`, `tomurcuk-${n}`]);
+    const want = Object.values(PLANT_ART_NAMES).flatMap((n) => [`cicek-${n}`, `tomurcuk-${n}`]);
     expect([...SHIPPED].sort()).toEqual([...want, 'yaprak1', 'yaprak2'].sort());
     expect(plantArtUrl('yaprak1')).toBe('/images/bitki/yaprak1.webp');
   });

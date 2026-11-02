@@ -17,19 +17,11 @@ import {
   loadBlockArt,
   type BlockArt,
 } from './textures';
-import {
-  bloomIndex,
-  bloomRotation,
-  createPlantAtlas,
-  loadPlantArt,
-  stemIndex,
-  PLANT_COLS,
-  PLANT_TILES,
-} from './plants';
+import { bloomIndex, bloomRotation, createPlantAtlas, stemIndex, PLANT_COLS, PLANT_TILES } from './plants';
 import type { PlantArt } from './plants';
 import { PLANTS } from '../game/plants';
 import { FLOW, hasCore, withCore } from '../game/cyclamenFlow';
-import { CORE_FX, coreMarkPulse, createCoreMarkCanvas } from './coreMark';
+import { CORE_FX, activeCorePulse, coreMarkPulse, createCoreMarkCanvas } from './coreMark';
 import {
   Budget,
   CYC_DONE,
@@ -193,6 +185,8 @@ export class View {
   coreTex!: PIXI.Texture;
   readonly marks: PIXI.Sprite[];
   coreT: number;
+  /** Aktif çekirdeğin hedef sırası: blokların arkasında altın şerit (Texture.WHITE). */
+  readonly coreLane: PIXI.Sprite;
   /** Yakınlık sağlanamayıp sönen çekirdeğin kısa sönme işareti (tek sprite), süresi ve görülen sayaç. */
   readonly fizzle: PIXI.Sprite;
   fizzleT: number;
@@ -238,9 +232,14 @@ export class View {
     this.fxLayer = new PIXI.Container();
     this.airLayer = new PIXI.Container();
     this.holeLayer = new PIXI.Container();
+    this.coreLane = new PIXI.Sprite(PIXI.Texture.WHITE);
+    this.coreLane.blendMode = PIXI.BLEND_MODES.ADD;
+    this.coreLane.tint = CORE_FX.laneTint;
+    this.coreLane.visible = false;
     this.boardC.addChild(
       this.airLayer,
       this.holeLayer,
+      this.coreLane,
       this.ghostLayer,
       this.cellLayer,
       this.activeLayer,
@@ -360,12 +359,12 @@ export class View {
     this.flavor = 'drain';
     this.lastLock = [];
     this.budget = new Budget();
-    // NS4-32: görseller gelince atlas yeniden kurulur (layout henüz yoksa ilk layout() zaten kurar)
-    // NS4-34: bitki parçaları da (karolar ve bitki ayrı ayrı yedeğe düşebilir)
-    void Promise.all([loadBlockArt(), loadPlantArt()]).then(([art, plant]) => {
-      if (!art && !plant) return;
+    // NS4-32: görseller gelince atlas yeniden kurulur (layout henüz yoksa ilk layout() zaten kurar).
+    // Her blok görseli kendi sıklamenini (çiçek, sap, yaprak) taşır: parça başına ayrı bitki katmanı (NS4-34)
+    // yüklenmez; hücre sprite'ındaki çekirdek işareti bitki görselinden bağımsız çalışır.
+    void loadBlockArt().then((art) => {
+      if (!art) return;
       this.art = art;
-      this.plantArt = plant;
       if (this.L) this.buildTextures(this.L.cell);
     });
   }
@@ -847,6 +846,7 @@ export class View {
   /** Yeni oyun: süren bütün efektler temizlenir (NS4-15 öncesi lifecycle'daki sıfırlamaları da kapsar). */
   resetFx() {
     this.overT = -1;
+    this.coreLane.visible = false;
     this.fizzleT = -1;
     this.fizzle.visible = false;
     this.fizzleSeen = this.game.fizzleVer;
@@ -1303,12 +1303,24 @@ export class View {
     // aday çekirdek (düşen parça, Next, Hold) nabızlı; tahtadaki aktif çekirdek sabit ve net. Son FLOW.coreFadeAt
     // parçasında aktif işaret hafifçe söner (sayaç/metin yok)
     const fade = g.coreLife > 0 && g.coreLife <= FLOW.coreFadeAt ? CORE_FX.fadeAlpha : 1;
+    // tahtadaki işaret yalnızca aktif çekirdektir: büyük, altın, kendi ritmiyle; hedef sırası şeritle aydınlanır
+    const ap = activeCorePulse(this.coreT, this.reducedMotion);
     for (let i = 0; i < this.marks.length; i++) {
       const mk = this.marks[i];
       if (!mk.visible) continue;
       const onBoard = i < this.cells.length;
-      mk.scale.set(onBoard ? 1 : cp.scale);
+      mk.scale.set(onBoard ? ap.scale : cp.scale);
       mk.alpha = onBoard ? fade : cp.alpha;
+      mk.tint = onBoard ? CORE_FX.activeTint : 0xffffff;
+    }
+    const laneRow = g.coreTargetRow - HIDDEN;
+    const lane = g.coreLife > 0 && laneRow >= 0 && g.state !== 'over' && this.overT < 0;
+    this.coreLane.visible = lane;
+    if (lane) {
+      this.coreLane.position.set(0, laneRow * c);
+      this.coreLane.width = COLS * c;
+      this.coreLane.height = c;
+      this.coreLane.alpha = ap.lane * fade;
     }
     // yakınlık sağlanamayan çekirdek kısa süre büyüyüp solar (reduced motion: efekt yok, işaret doğrudan kalkar)
     if (g.fizzleVer !== this.fizzleSeen) {

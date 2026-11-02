@@ -479,7 +479,7 @@ describe('skor tablosu ve global gönderim olayları; kişisel veri yok', () => 
       durationSeconds: 90,
       recordedAt: 1,
       submitted: false,
-      ruleset: 'cyclamen-flow-v2',
+      ruleset: 'cyclamen-flow-v3',
     });
     const input = dom.el('nick-input') as unknown as { value: string };
     input.value = '<x>';

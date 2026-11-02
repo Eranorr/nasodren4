@@ -1,5 +1,7 @@
 # Sıklamen gücü: çekirdek desteği (±4), kalıcı kural
 
+> **Yerini aldı:** 2026-11-02 itibarıyla güncel kural `cyclamen-flow-v3`: güç basınca hemen 3 gri sıra siler ([CYCLAMEN-POWER-V3.md](CYCLAMEN-POWER-V3.md)). Bu belge v2 kuralını anlatır.
+
 Kural seti: `cyclamen-flow-v2`. Bu belge, tek kullanımlık "Sıklamen özütü" gücünün sıklamen çekirdeği akışına (V3) bağlanmasını ve eski "alttaki 10 sırayı boşalt" kuralının kaldırılmasını anlatır.
 
 ## 1. Eski kural neden kaldırıldı

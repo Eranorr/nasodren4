@@ -819,6 +819,21 @@ input:focus-visible {
   border-color: color-mix(in srgb, var(--color-cyclamen) 70%, transparent);
   background: color-mix(in srgb, var(--color-cyclamen) 6%, var(--color-btn-bg));
 }
+/* güç hazır ve tahtada aktif çekirdek var: altın kenar ve parıltı (çekirdeğin altın işaretiyle aynı renk) */
+#btn-cyc.ready.core {
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 18%, var(--color-btn-bg));
+  animation: coreGlow 1.1s ease-in-out infinite;
+}
+@keyframes coreGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-warning) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-warning) 45%, transparent);
+  }
+}
 #btn-sneeze.ready {
   border-color: color-mix(in srgb, var(--color-sneeze) 75%, transparent);
   background: color-mix(in srgb, var(--color-sneeze) 7%, var(--color-btn-bg));
@@ -2577,9 +2592,14 @@ input:focus-visible {
     animation-duration: 0.01s;
   }
   .gbtn.ready,
+  #btn-cyc.ready.core,
   #danger.on,
   .breath {
     animation: none;
+  }
+  /* hareket yok: aktif çekirdek düğmesi sabit altın halkayla */
+  #btn-cyc.ready.core {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warning) 45%, transparent);
   }
   #pressure {
     transition: none;

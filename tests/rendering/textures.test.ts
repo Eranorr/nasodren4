@@ -95,9 +95,10 @@ function fingerprint(ops: readonly Op[]): string {
  * NS4-32: yedek jöle çizimi; komutlar (379) aynı, yalnızca NS4-32 paleti (a700ca8: f32c5079 / 8d5515c2 / f8db8392).
  */
 const PINNED: readonly (readonly [number, string])[] = [
-  [36, '95795c25:379'],
-  [64, '1250f48c:379'],
-  [104, '00ee1e62:379'],
+  // sıklamen görsel renkleri (2026-11-02): yalnızca renk değerleri değişti, komut sayısı aynı
+  [36, '402ed4b5:379'],
+  [64, '4d7d4de4:379'],
+  [104, '03957f58:379'],
 ];
 /** 8. sütunun (gri tıkanıklık) ilk translate komutundan önceki komutlar. */
 function colorPrefix(ops: readonly Op[], px: number): readonly Op[] {
@@ -149,17 +150,18 @@ describe('blok atlası NS4-13 (a700ca8) görünümünde', () => {
     expect(ops.length).toBeGreaterThan(432);
   });
 
-  it('NS4-32 blok paleti (sıklamen karolarına uyar; gri değişmedi)', () => {
+  it('blok paleti: her parçanın sıklamen görselinin taç yaprağı rengi; yedisi farklı; gri değişmedi', () => {
     expect(COLORS).toEqual({
-      1: '#5cc9c4',
-      2: '#ffcf5a',
-      3: '#e44d97',
-      4: '#7cc47e',
-      5: '#f4869f',
-      6: '#b45cf2',
-      7: '#f9a184',
+      1: '#f8f5f3', // I beyaz
+      2: '#f955ae', // O açık pembe
+      3: '#e4085c', // T alaca
+      4: '#ca41b9', // S mor
+      5: '#ec4a93', // Z pembe
+      6: '#b51943', // J bordo
+      7: '#dd263c', // L kırmızı
       8: '#8e93a6',
     });
+    expect(new Set(Object.values(COLORS)).size).toBe(8);
   });
 
   it('NS4-27: gülümseyen bulutçuk karosu: gri bloğun aynı çizimi + gülümseme ve yanaklar', () => {
@@ -206,13 +208,21 @@ describe('NS4-32: sıklamen blok görselleri', () => {
     });
   };
 
-  it('her parçanın görsel dosyası var; I turkuaz, J mor', () => {
+  it('her parçanın kendi sıklamen görseli var (kullanıcı eşlemesi: siklamen (1..7))', () => {
     expect(Object.keys(BLOCK_ART)).toEqual(['1', '2', '3', '4', '5', '6', '7']);
     expect(new Set(Object.values(BLOCK_ART)).size).toBe(7);
     expect([...SHIPPED].sort()).toEqual(Object.values(BLOCK_ART).sort());
-    expect(BLOCK_ART[1]).toBe('turkuaz');
-    expect(BLOCK_ART[6]).toBe('mor');
-    expect(blockArtUrl(3)).toBe('/images/bloklar/fusya.webp');
+    // 1 I, 2 O, 3 T, 4 S, 5 Z, 6 J, 7 L
+    expect(BLOCK_ART).toEqual({
+      1: 'siklamen-beyaz', // siklamen (5): uzun I
+      2: 'siklamen-acik-pembe', // siklamen (6): kare
+      3: 'siklamen-alaca', // siklamen (7): T
+      4: 'siklamen-mor', // siklamen (4): sol Z (S)
+      5: 'siklamen-pembe', // siklamen (3): sağ Z (Z)
+      6: 'siklamen-bordo', // siklamen (2): sol L (J)
+      7: 'siklamen-kirmizi', // siklamen (1): sağ L (L)
+    });
+    expect(blockArtUrl(3)).toBe('/images/bloklar/siklamen-alaca.webp');
   });
 
   it('görsel varsa 1-7 sütunları görselle (paylı, yumuşak örneklemeli), gri blok jöle + yüzle çizilir', () => {

@@ -48,6 +48,8 @@ interface HudCache {
   lines: number;
   cong: number;
   cyc: boolean | null;
+  /** Güç hazır ve tahtada aktif çekirdek var: basınca çekirdeğin hizasından silinir (düğme altın parlar). */
+  cycCore: boolean | null;
   sneeze: boolean | null;
   mult: number;
   danger: boolean | null;
@@ -79,6 +81,7 @@ function initialHud(): HudCache {
     lines: -1,
     cong: -1,
     cyc: null,
+    cycCore: null,
     sneeze: null,
     mult: -1,
     danger: null,
@@ -294,6 +297,11 @@ export function updateHud(g: Game, playing: boolean): void {
       toast(HEALTH_TOASTS.cyclamenReady.text);
       track('cyclamen_available', { level: g.level, congestion: cg });
     }
+  }
+  const cycCore = cyc && g.coreLife > 0;
+  if (cycCore !== hud.cycCore) {
+    hud.cycCore = cycCore;
+    $('btn-cyc').classList.toggle('core', cycCore);
   }
   if (sneeze !== hud.sneeze) {
     hud.sneeze = sneeze;

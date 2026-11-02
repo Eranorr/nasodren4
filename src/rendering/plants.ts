@@ -14,7 +14,21 @@
    ===================================================================== */
 import { LINK, ROLE, plantLinks, plantRole } from '../game/plants';
 import type { TetrominoType } from '../types/game';
-import { BLOCK_ART, loadImage } from './textures';
+import { loadImage } from './textures';
+
+/**
+ * NS4-34 bitki parçalarının renk adları (public/images/bitki/cicek-<ad>.webp). Blok görselleri artık kendi
+ * sıklamenini taşıdığı için bu katman oyunda yüklenmez (GameView); parçalar ve kod yerinde durur.
+ */
+export const PLANT_ART_NAMES: Readonly<Record<TetrominoType, string>> = {
+  1: 'turkuaz',
+  2: 'sari',
+  3: 'fusya',
+  4: 'yesil',
+  5: 'pembe',
+  6: 'mor',
+  7: 'seftali',
+};
 
 export type PlantImage = CanvasImageSource & { readonly width: number; readonly height: number };
 export interface PlantArt {
@@ -252,11 +266,11 @@ export function plantArtUrl(name: string): string {
   return `${import.meta.env.BASE_URL}images/bitki/${name}.webp`;
 }
 
-/** Bitki parçalarını yükler (renk adları BLOCK_ART ile aynı). Biri bile yüklenemezse null: bloklar bitkisiz kalır. */
+/** Bitki parçalarını yükler (renk adları PLANT_ART_NAMES). Biri bile yüklenemezse null: bloklar bitkisiz kalır. */
 export function loadPlantArt(): Promise<PlantArt | null> {
   if (typeof Image === 'undefined') return Promise.resolve(null);
   const each = (prefix: string) =>
-    Promise.all(TETROMINO_IDS.map((t) => loadImage(plantArtUrl(`${prefix}-${BLOCK_ART[t]}`)))).then(
+    Promise.all(TETROMINO_IDS.map((t) => loadImage(plantArtUrl(`${prefix}-${PLANT_ART_NAMES[t]}`)))).then(
       ([i, o, t, s, z, j, l]) => ({ 1: i, 2: o, 3: t, 4: s, 5: z, 6: j, 7: l }),
     );
   return Promise.all([
