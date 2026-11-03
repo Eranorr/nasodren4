@@ -133,6 +133,23 @@ export function wireGameEvents({ game, view, sound, buzz, lifecycle }: WireDeps)
   game.on('powerdone', (e) => {
     if (e.kind === 'sneeze' && game.sneezeUses >= 3) award('hapsu');
   });
+  // Sinüzit Atağı: kısa kırmızı-turuncu uyarı ve hafif sarsıntı (reduced motion: sarsıntı yok), sert bırakma sesi ve
+  // titreşimi (yeni ses yok). Spray: drenaj sesi clearstart'ta çalar; püskürtme GameView.onClearStart'ta.
+  game.on('attackstart', () => track('sinus_attack_started', { room: game.room, level: game.level }));
+  game.on('attack', (e) => {
+    view.sinusAttackFx();
+    sound.hard();
+    buzz(HAPTIC.hard);
+    track('sinus_attack_row_added', { attackCellsAdded: COLS - 1 + e.scattered, room: game.room, level: game.level });
+  });
+  game.on('spray', (e) => track('spray_used', { sprayTargets: e.cells.length, room: game.room, level: game.level }));
+  game.on('spraystate', (s) => {
+    if (s === 'ready') track('spray_ready', { room: game.room, level: game.level });
+    else if (s === 'notarget') track('spray_no_target', { room: game.room, level: game.level });
+  });
+  game.on('attackline', (e) =>
+    track('attack_line_cleared', { attackCellsCleared: e.cells, room: game.room, level: game.level }),
+  );
   // Sıklamen gücü: Sıklamen anı (ses, titreşim, başlık, ×2 vuruşu; alt metin yok). Analitik: aktif çekirdek vardı mı;
   // akan gri ve inen hücre sayısı core_drain_completed (power: true) ile gelir.
   game.on('cyclamen', (e) => {

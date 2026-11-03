@@ -21,7 +21,8 @@ import { bloomIndex, bloomRotation, createPlantAtlas, stemIndex, PLANT_COLS, PLA
 import type { PlantArt } from './plants';
 import { PLANTS } from '../game/plants';
 import { FLOW, hasCore, withCore } from '../game/cyclamenFlow';
-import { CORE_FX, activeCorePulse, coreMarkPulse, createCoreMarkCanvas } from './coreMark';
+import { ORIGIN } from '../game/sinusAttack';
+import { CORE_FX, activeCorePulse, coreMarkPulse, createAttackMarkCanvas, createCoreMarkCanvas } from './coreMark';
 import {
   Budget,
   CYC_DONE,
@@ -37,6 +38,7 @@ import {
   RELIEF_FX,
   ROOM_FX,
   SNEEZE_FX,
+  PROTO_FX,
   SPARKLE_TINTS,
   airflowRate,
   airflowSpeed,
@@ -183,6 +185,8 @@ export class View {
   plantTex: readonly PIXI.Texture[] = [];
   /** Sıklamen çekirdeği: işaret dokusu, hücre/önizleme sprite'larının işaret katmanları, nabız saati. */
   coreTex!: PIXI.Texture;
+  /** Atak grisi köşe işareti dokusu (tahta hücrelerinin 4. çocuğu). */
+  attackTex!: PIXI.Texture;
   readonly marks: PIXI.Sprite[];
   coreT: number;
   /** Aktif çekirdeğin hedef sırası: blokların arkasında altın şerit (Texture.WHITE). */
@@ -275,6 +279,11 @@ export class View {
       const s = withPlant(new PIXI.Sprite());
       s.anchor.set(0.5);
       s.visible = false;
+      // 4. çocuk: atak grisi işareti (hücreyle birlikte taşınır, savrulur, söner)
+      const am = new PIXI.Sprite();
+      am.anchor.set(0.5);
+      am.visible = false;
+      s.addChild(am);
       this.cellLayer.addChild(s);
       this.cells.push(s);
     }
@@ -414,7 +423,8 @@ export class View {
     const oldDrop = this.dropTex,
       oldHappy = this.happyTex,
       oldPetal = this.petalTex,
-      oldCore = this.coreTex;
+      oldCore = this.coreTex,
+      oldAttack = this.attackTex;
     const { atlas, P } = createBlockAtlas(px, this.art); // NS4-03: çizim rendering/textures.ts içinde
     const base = (this.atlasBase = PIXI.BaseTexture.from(atlas));
     // i: atlas sütunu (BLOCK_IDS sırası). NS4-04: önce bütün blok, sonra bütün hayalet karoları oluşturulur.
@@ -440,6 +450,8 @@ export class View {
     );
     this.coreTex = PIXI.Texture.from(createCoreMarkCanvas(px));
     for (const m of this.marks) m.texture = this.coreTex;
+    this.attackTex = PIXI.Texture.from(createAttackMarkCanvas(px));
+    for (const s of this.cells) (s.children[3] as PIXI.Sprite).texture = this.attackTex;
     this.fizzle.texture = this.coreTex;
     this.petalTex = PIXI.Texture.from(createPetalCanvas(cell * res * 0.6));
     for (const p of this.petals) p.s.texture = this.petalTex;
@@ -461,6 +473,7 @@ export class View {
     if (oldHappy) oldHappy.destroy(true);
     if (oldPetal) oldPetal.destroy(true);
     if (oldCore) oldCore.destroy(true);
+    if (oldAttack) oldAttack.destroy(true);
   }
 
   layout(L: Layout) {
@@ -520,6 +533,8 @@ export class View {
         if (v) {
           s.texture = this.tex[asBlock(v)];
           this.setPlant(s, v, g.plant[(r + HIDDEN) * COLS + col]);
+          (s.children[3] as PIXI.Sprite).visible =
+            v === PIECE.GARBAGE && g.origin[(r + HIDDEN) * COLS + col] === ORIGIN.attack;
           s.visible = true;
           s.alpha = 1;
           s.tint = 0xffffff;
@@ -535,12 +550,17 @@ export class View {
   /** NS4-30: gri bulutçuk içeren görünür sıralardaki boş hücrelere işaret koyar (havuz kadar; fazlası gösterilmez). */
   syncHoles() {
     const b = this.game.board,
-      c = this.L.cell;
+      c = this.L.cell,
+      o = this.game.origin;
     let n = 0;
     for (let r = 0; r < VIS && n < this.holes.length; r++) {
       const row = (r + HIDDEN) * COLS;
+      // kanal kaydı olan sıra (oda sırası, atak satırı) ya da oda grisi içeren sıra parlar; yalnızca dağınık atak
+      // grisi içeren sıra kanal değildir
+      const channel = (this.game.channelAt[r + HIDDEN] ?? -1) >= 0;
       let gray = false;
-      for (let col = 0; col < COLS; col++) if (b[row + col] === PIECE.GARBAGE) gray = true;
+      for (let col = 0; col < COLS; col++)
+        if (b[row + col] === PIECE.GARBAGE && (channel || o[row + col] !== ORIGIN.attack)) gray = true;
       if (!gray) continue;
       for (let col = 0; col < COLS && n < this.holes.length; col++) {
         if (b[row + col]) continue;
@@ -960,6 +980,9 @@ export class View {
     if (e.kind === 'collapse') {
       // tahta günceldir (syncBoard yeni konumları çizdi); hücreler eski sıralarından başlayıp iner
       this.placeDrops(this.anim, 0);
+    } else if (e.kind === 'flush' && g.flushBy === 'spray') {
+      // Spray: hedef sıra ışığı yok; silinen hücrelerden serin püskürtme
+      this.sprayBurst(this.anim.cells ?? []);
     } else if (e.kind === 'flush') {
       // hedef gri sıra kısa süre parlar (ilk satır flaşı; onClearEnd geri alır)
       const f = this.flashes[0];
@@ -1089,6 +1112,36 @@ export class View {
   }
 
   /** NS4-24: hapşırık patlaması: sarsıntı, tek sıcak vuruş ve savrulan hücrelerden yukarı saçılan konfeti. */
+  /** Sinüzit Atağı anı: kısa kırmızı-turuncu ışıma ve hafif sarsıntı. */
+  sinusAttackFx() {
+    if (!this.reducedMotion) this.kick(PROTO_FX.attackShake); // hareketi azalt: sarsıntı yok, yalnızca ışıma
+    this.startGlow(this.glow, PROTO_FX.attackGlow, PROTO_FX.attackPeak, PROTO_FX.attackMs, 1);
+  }
+
+  /** Spray: silinen her hücreden dağılan damlacıklar (görünür hücre indeksleri). */
+  sprayBurst(cells: readonly number[]) {
+    const c = this.L.cell,
+      dw = this.dropTex.orig.width;
+    for (const i of cells) {
+      const x = (i % COLS) * c + c / 2,
+        y = ((i / COLS) | 0) * c + c / 2;
+      for (let k = 0, n = this.count(PROTO_FX.sprayDrops); k < n; k++) {
+        const a = (k / Math.max(1, n)) * Math.PI * 2 + Math.random() * 0.6;
+        this.emitDrop(
+          x,
+          y,
+          PROTO_FX.sprayTints[k % PROTO_FX.sprayTints.length] ?? 0xffffff,
+          Math.cos(a) * c * (3 + Math.random() * 2),
+          Math.sin(a) * c * (3 + Math.random() * 2),
+          320 + Math.random() * 160,
+          c * 4,
+          ((0.18 + Math.random() * 0.1) * c) / dw,
+          2.2,
+        );
+      }
+    }
+  }
+
   sneezeBurst(rows: readonly number[]) {
     const c = this.L.cell,
       dw = this.dropTex.orig.width,

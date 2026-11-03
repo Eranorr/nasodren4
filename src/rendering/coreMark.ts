@@ -73,6 +73,32 @@ export function createCoreMarkCanvas(px: number): HTMLCanvasElement {
   return cv;
 }
 
+/**
+ * Sinüzit Atağı: atak kaynaklı gri bulutçuğun işareti: sağ alt köşede koyu konturlu küçük bir kama (renkten bağımsız
+ * şekil ipucu; hareketsiz, reduced motion'dan etkilenmez). Oda grisinde yoktur.
+ */
+export function createAttackMarkCanvas(px: number): HTMLCanvasElement {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = px;
+  const x = cv.getContext('2d');
+  if (!x) throw new Error('Canvas 2D bağlamı oluşturulamadı');
+  const e = px * 0.9,
+    s = px * 0.24,
+    w = Math.max(1, px * 0.05);
+  x.beginPath();
+  x.moveTo(e, e - s);
+  x.lineTo(e, e);
+  x.lineTo(e - s, e);
+  x.closePath();
+  x.lineJoin = 'round';
+  x.strokeStyle = 'rgba(40,12,20,.75)';
+  x.lineWidth = w * 2;
+  x.stroke();
+  x.fillStyle = 'rgba(255,138,92,.95)';
+  x.fill();
+  return cv;
+}
+
 /** Aktif çekirdeğin ölçeği ve hedef şeridinin alpha'sı (t ms). Reduced motion: sabit. */
 export function activeCorePulse(t: number, reduced: boolean): { readonly scale: number; readonly lane: number } {
   if (reduced) return { scale: CORE_FX.activeScale, lane: CORE_FX.laneAlpha };

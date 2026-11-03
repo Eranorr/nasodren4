@@ -33,6 +33,7 @@ import {
   NO_ROUND,
   PROTOCOL_VERSION,
   UUID_RE,
+  isOtherVersion,
   parseEnvelope,
   signedText,
   type Envelope,
@@ -90,7 +91,13 @@ export type Incoming =
       readonly round: number;
     }
   | { readonly t: 'players'; readonly host: string; readonly players: Player[]; readonly left?: string }
-  | { readonly t: 'start'; readonly round: number; readonly seed: number; readonly in: number; readonly ids: string[] }
+  | {
+      readonly t: 'start';
+      readonly round: number;
+      readonly seed: number;
+      readonly in: number;
+      readonly ids: string[];
+    }
   | ({ readonly t: 'st'; readonly from: string } & Payloads['st'])
   | {
       readonly t: 'fin';
@@ -146,6 +153,7 @@ interface Round {
 
 export function createNet({ load, api, win = null, identity = generateIdentity, now = Date.now }: NetDeps): Net {
   let handler: (m: Incoming) => void = () => {};
+  let versionWarned = false;
   let db: SupabaseClient | null = null;
   let channel: RealtimeChannel | null = null;
   let me: Me | null = null;
@@ -290,15 +298,23 @@ export function createNet({ load, api, win = null, identity = generateIdentity, 
     return true;
   }
 
-  function apply(e: Envelope) {
+  function apply(e: Envelope, retried = false) {
     const p = e.player,
       m = me;
     if (!m) return;
     switch (e.type) {
       case 'start': {
+        const ids = e.payload.ids;
+        // turda henüz tanımadığımız (yeni katılmış) bir üye var ya da ev sahibini yeni üyeyle birlikte bilmiyoruz:
+        // önce üye listesini sunucudan yenile, ardından iletiyi bir kez daha değerlendir
+        if (!retried && !ids.every((id) => members.has(id))) {
+          void refreshRoster().then(() => {
+            if (me === m) apply(e, true);
+          });
+          return;
+        }
         const host = visible()[0]?.id;
         if (p !== host || seenRounds.has(e.round) || e.round === NO_ROUND || live()) return;
-        const ids = e.payload.ids;
         if (!ids.includes(p) || !ids.every((id) => members.has(id))) return;
         round = { id: e.round, ids: new Set(ids), fin: new Set() };
         seenRounds.add(e.round);
@@ -332,6 +348,14 @@ export function createNet({ load, api, win = null, identity = generateIdentity, 
   function receive(raw: unknown) {
     const m = me;
     if (stage !== 'joined' || !m) return;
+    // başka protokol sürümü (eski açık sekme): oyun ona göre başlatılmaz; oyuncuya bir kez bildirilir
+    if (isOtherVersion(raw)) {
+      if (!versionWarned) {
+        versionWarned = true;
+        deliver({ t: 'error', msg: NET_TEXT.unavailable });
+      }
+      return;
+    }
     const e = parseEnvelope(raw);
     if (!e || e.room !== m.roomId || e.player === m.id) return;
     const mem = members.get(e.player);

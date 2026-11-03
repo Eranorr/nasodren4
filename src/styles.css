@@ -2593,6 +2593,7 @@ input:focus-visible {
   }
   .gbtn.ready,
   #btn-cyc.ready.core,
+  #stage #attack-bar.warn i,
   #danger.on,
   .breath {
     animation: none;
@@ -2909,4 +2910,67 @@ input:focus-visible {
 .score-table tbody tr.me td {
   background: var(--color-cyclamen-soft);
   color: var(--color-cyclamen-strong);
+}
+
+/* ---------- Sinüzit Atağı barı ve Spray (ui/sinusHud.ts) ---------- */
+#attack-bar[hidden],
+#btn-spray[hidden] {
+  display: none !important;
+}
+#attack-bar {
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-board) 55%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  pointer-events: none;
+}
+#attack-bar i {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
+  /* dolum: sakin turuncudan tehlike kırmızısına (yön ve oran protoHud.ts'ten) */
+  background: linear-gradient(90deg, var(--color-warning), var(--color-danger));
+  transform-origin: left;
+}
+#attack-bar.v i {
+  background: linear-gradient(0deg, var(--color-warning), var(--color-danger));
+  transform-origin: bottom;
+}
+/* bar dolmaya yakın: hafif nabız (uyarı hissi) */
+#attack-bar.warn i {
+  animation: attackWarn 0.9s ease-in-out infinite;
+}
+@keyframes attackWarn {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* atak anı: kısa, kontrollü kırmızı-turuncu parlama (tek sefer) */
+#attack-bar.hit {
+  box-shadow:
+    0 0 0 2px var(--color-danger),
+    0 0 12px 2px color-mix(in srgb, var(--color-danger-bright) 60%, transparent);
+}
+#btn-spray .charge {
+  background: color-mix(in srgb, var(--color-fresh) 18%, transparent);
+}
+#btn-spray .charge i {
+  background: var(--color-fresh);
+}
+#btn-spray.ready {
+  border-color: color-mix(in srgb, var(--color-fresh) 75%, transparent);
+  background: color-mix(in srgb, var(--color-fresh) 8%, var(--color-btn-bg));
+}
+/* V3: şarj dolu, hedef (atak grisi) yok: dolum çizgili ve sönük; düğme kapalı kalır */
+#btn-spray.idle .charge i {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-fresh) 55%, transparent) 0 4px,
+    transparent 4px 7px
+  );
 }

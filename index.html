@@ -153,6 +153,34 @@
             >
             <span class="charge" aria-hidden="true"><i id="sneeze-fill"></i></span>
           </button>
+          <!-- Spray ve Sinüzit Atağı barı (ui/sinusHud.ts) -->
+          <button id="btn-spray" class="gbtn" disabled aria-label="Spray">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#0f9e93"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M5 10h6v10H5z" />
+              <path d="M6 10V7h4v3M8 7V5h3" />
+              <path d="M15 6h.01M18 4h.01M18 8h.01M21 6h.01M16 10h.01M20 11h.01" />
+            </svg>
+            <span class="t">Spray</span>
+            <span class="charge" aria-hidden="true"><i id="spray-fill"></i></span>
+          </button>
+          <div
+            id="attack-bar"
+            class="abs"
+            role="progressbar"
+            aria-label="Sinüzit Atağı"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <i id="attack-fill"></i>
+          </div>
           <button id="btn-pause" class="gbtn" aria-label="Duraklat">
             <svg viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="5" width="4" height="14" rx="1.5" />

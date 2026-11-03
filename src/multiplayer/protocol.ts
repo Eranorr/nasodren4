@@ -13,7 +13,11 @@ import { COLS, VIS } from '../config/gameConfig';
 import { GAME_RULES, SCORE_LIMITS } from '../../supabase/functions/_shared/scoreRules.ts';
 import { SIG_RE } from '../../supabase/functions/_shared/sign.ts';
 
-export const PROTOCOL_VERSION = 1;
+/**
+ * 2: Sinüzit Atağı ve Spray kalıcı (kural seti sinus-attack-spray-v1); 1. sürümün istemcileriyle aynı tohum farklı oyun
+ * üretir. Başka sürümden gelen zarf reddedilir (net: tek seferlik "kullanılamıyor" bildirimi).
+ */
+export const PROTOCOL_VERSION = 2;
 /** Zarfın en büyük JSON boyutu (karakter). Canlı durum ~450 karakterdir. */
 export const MAX_ENVELOPE_CHARS = 1024;
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -111,6 +115,11 @@ export function validatePayload(type: EventType, raw: unknown): Payloads[EventTy
 const TYPES: readonly EventType[] = ['start', 'st', 'fin', 'away'];
 
 /** Ham Broadcast yükünü doğrular (boyut, alanlar, türler); imza burada denetlenmez. */
+/** Zarf biçiminde ama başka protokol sürümünden mi (eski açık sekme): reddedilir ve bildirilir. */
+export function isOtherVersion(raw: unknown): boolean {
+  return isObj(raw) && typeof raw['v'] === 'number' && raw['v'] !== PROTOCOL_VERSION && 'sig' in raw;
+}
+
 export function parseEnvelope(raw: unknown): Envelope | null {
   if (!isObj(raw)) return null;
   let size: number;

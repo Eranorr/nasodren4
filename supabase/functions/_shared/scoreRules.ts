@@ -55,9 +55,11 @@ export const CLIENT_VERSION_MAX = 32;
  *   cyclamen-flow-v2: Sıklamen gücü çekirdeği destekler (docs/CYCLAMEN-POWER-CORE-SUPPORT-FINAL.md).
  *   cyclamen-flow-v3: Sıklamen gücü basınca hemen 3 gri sıra siler; aktif çekirdek varsa onun hizasından
  *                     (docs/CYCLAMEN-POWER-V3.md). Drenaj puan vermez: skor üst sınırı değişmez.
+ *   sinus-attack-spray-v1: Sinüzit Atağı ve Spray kalıcı (docs/SINUS-ATTACK-AND-SPRAY-FINAL.md). Atak grisi içeren satır
+ *                     puan, satır ve seviye üretmez; Spray ve oda taşıması puan vermez: satır başına üst sınır aynı kalır.
  * Kural seti alanı olmayan (NS4-18'den kalan) kayıtlar LEGACY_RULESET sayılır.
  */
-export const RULESET = 'cyclamen-flow-v3';
+export const RULESET = 'sinus-attack-spray-v1';
 export const LEGACY_RULESET = 'legacy';
 /** Kural seti adı biçimi (veritabanı kısıtıyla aynı). */
 export const RULESET_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;

@@ -43,6 +43,7 @@ export function rowCells(g: Game, y: number): number[] {
 export function clearBoard(g: Game): void {
   g.board.fill(0);
   g.plant.fill(0); // NS4-34: elle yazılan hücrelere eski parçaların sapı kalmasın
+  g.origin.fill(0); // hücre kaynağı katmanı tahtayla birlikte temizlenir
   g.boardVer++;
 }
 
@@ -124,6 +125,11 @@ const EVENT_FLAGS: Record<GameEventName, true> = {
   allclear: true,
   core: true,
   cyclamen: true,
+  attackstart: true,
+  attack: true,
+  attackline: true,
+  spray: true,
+  spraystate: true,
 };
 /** GameEvents içindeki tüm olay adları (Record tipi eksik/fazla adı derleme hatası yapar). */
 export const ALL_EVENTS = Object.keys(EVENT_FLAGS) as GameEventName[];

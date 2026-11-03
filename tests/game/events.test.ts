@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CFG } from '../../src/config/gameConfig';
 import { PIECE } from '../../src/game/pieces';
+import { ORIGIN, SINUS } from '../../src/game/sinusAttack';
 import type { GameEventName } from '../../src/types/events';
 import {
   ALL_EVENTS,
@@ -13,13 +14,16 @@ import {
   stackRows,
 } from '../helpers/gameHelpers';
 
-const NO_PAYLOAD: readonly GameEventName[] = ['spawn', 'move', 'rotate', 'hold'];
+const NO_PAYLOAD: readonly GameEventName[] = ['spawn', 'move', 'rotate', 'hold', 'attackstart'];
 
 describe('olaylar', () => {
   it('olay adları sabittir', () => {
     expect([...ALL_EVENTS].sort()).toEqual(
       [
         'allclear',
+        'attack',
+        'attackline',
+        'attackstart',
         'clearend',
         'clearstart',
         'core',
@@ -36,6 +40,8 @@ describe('olaylar', () => {
         'rotate',
         'scored',
         'spawn',
+        'spray',
+        'spraystate',
       ].sort(),
     );
   });
@@ -90,6 +96,17 @@ describe('olaylar', () => {
     finishClear(g);
     stackRows(g, 7); // Sıklamen gücü: aktif çekirdek yok → en alttaki 3 gri sıra akar ('cyclamen')
     g.useCyc();
+    while (g.pending) finishClear(g);
+    // Sinüzit Atağı ('attackstart', 'attack'), Spray durumu ve kullanımı ('spraystate', 'spray'), atak satırı ('attackline')
+    g.sinusAttack();
+    g.sprayCharge = SINUS.sprayThreshold;
+    g.update(16);
+    g.useSpray();
+    while (g.pending) finishClear(g);
+    setupWell(g, 1);
+    g.board[21 * 10] = PIECE.GARBAGE;
+    g.origin[21 * 10] = ORIGIN.attack;
+    dropVerticalI(g);
     while (g.pending) finishClear(g);
     // görünür alan dolu: gizli satırlarda kilitlenen parça → oyun sonu (lockout)
     placePiece(g, PIECE.O, 0, 3, 0);

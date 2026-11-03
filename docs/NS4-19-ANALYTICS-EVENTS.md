@@ -78,6 +78,19 @@ Oyun hunisi kişisel veri toplamadan ölçülebilir hale getirildi.
 | `score_submit_succeeded`  | gönderim kabul edildi                                        | —                                                                                                       |
 | `score_submit_failed`     | deneme başarısız                                             | `code`: `nickname`, `duplicate`, `rejected`, `rate_limited`, `offline`, `timeout`, `server`, `disabled` |
 
+**Sinüzit Atağı ve Spray** (kural seti `sinus-attack-spray-v1`, [SINUS-ATTACK-AND-SPRAY-FINAL.md](SINUS-ATTACK-AND-SPRAY-FINAL.md)). Payload'lar yalnızca sayısal oyun bağlamıdır (`room` 0 tabanlı):
+
+| Olay                     | Ne zaman                                         | Payload                               |
+| ------------------------ | ------------------------------------------------ | ------------------------------------- |
+| `sinus_attack_started`   | atak tetiklendi (satır eklenmeden önce)          | `room`, `level`                       |
+| `sinus_attack_row_added` | atak satırı ve dağınık griler eklendi            | `attackCellsAdded`, `room`, `level`   |
+| `spray_ready`            | Spray kullanılabilir oldu (durum değişiminde)    | `room`, `level`                       |
+| `spray_no_target`        | şarj dolu ama atak grisi yok (durum değişiminde) | `room`, `level`                       |
+| `spray_used`             | Spray kullanıldı                                 | `sprayTargets`, `room`, `level`       |
+| `attack_line_cleared`    | atak grisi içeren tam satır puansız silindi      | `attackCellsCleared`, `room`, `level` |
+
+Atak satırı normal satır temizleme olaylarına (`first_drain`, öğretici `clear` adımı, rozetler) yazılmaz; yalnızca `attack_line_cleared` gelir.
+
 Her `score_submit_started` için tam olarak bir sonuç olayı gelir (`succeeded` veya `failed`). Geçersiz takma ad ağa gitmez ve `failed/nickname` olarak sayılır.
 
 **Olayların kaynağı:**

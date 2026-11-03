@@ -167,6 +167,9 @@ export class InputController {
           case '2':
             game.useSneeze();
             break;
+          case '3': // Spray (hedef yoksa etkisiz)
+            game.useSpray();
+            break;
           case 'Escape':
           case 'p':
           case 'P':
@@ -288,6 +291,9 @@ export class InputController {
     });
     this.bindBtn('btn-sneeze', () => {
       if (playing()) game.useSneeze();
+    });
+    this.bindBtn('btn-spray', () => {
+      if (playing()) game.useSpray();
     });
     this.bindBtn('btn-pause', () => {
       if (playing()) this.deps.pause();

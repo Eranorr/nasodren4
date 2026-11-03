@@ -26,7 +26,7 @@ const body = (over: Record<string, unknown> = {}) => ({
   level: 3,
   durationSeconds: 245,
   clientVersion: 'web-tetris-1',
-  ruleset: 'cyclamen-flow-v3',
+  ruleset: 'sinus-attack-spray-v1',
   ...over,
 });
 const SECRET = 'service-role-SECRET-should-never-leak';
@@ -68,7 +68,7 @@ describe('tetris-submit-score: giriş denetimleri', () => {
       duration_seconds: 245,
       game_hash: await sha256Hex('game:pepper-1:3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b'),
       client_version: 'web-tetris-1',
-      ruleset: 'cyclamen-flow-v3',
+      ruleset: 'sinus-attack-spray-v1',
     });
     expect(JSON.stringify(rows)).not.toMatch(/3f2b8c1e|ip|agent/i); // ham oyun kimliği / adres saklanmaz
   });

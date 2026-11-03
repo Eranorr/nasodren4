@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTracker, newSessionId } from '../../src/analytics/analytics';
 import { CFG, ROOMS } from '../../src/config/gameConfig';
 import { PIECE } from '../../src/game/pieces';
+import { ORIGIN, SINUS } from '../../src/game/sinusAttack';
 import type { AnalyticsEvent } from '../../src/types/analytics';
 import { createAppStubs } from '../helpers/appStubs';
 import { installFakeDom, type FakeDom } from '../helpers/fakeDom';
@@ -63,6 +64,12 @@ const SCHEMA: Record<AnalyticsEvent, Record<string, Kind>> = {
   core_expired: { room: 'number', level: 'number' },
   core_triggered: { room: 'number', level: 'number' },
   core_drain_completed: { room: 'number', level: 'number', cells: 'number', moved: 'number', power: 'boolean' },
+  sinus_attack_started: { room: 'number', level: 'number' },
+  sinus_attack_row_added: { attackCellsAdded: 'number', room: 'number', level: 'number' },
+  spray_ready: { room: 'number', level: 'number' },
+  spray_no_target: { room: 'number', level: 'number' },
+  spray_used: { sprayTargets: 'number', room: 'number', level: 'number' },
+  attack_line_cleared: { attackCellsCleared: 'number', room: 'number', level: 'number' },
   final_choice: { choice: ['continue', 'finish'], dur_s: 'number' },
   replay_clicked: {},
   leaderboard_opened: {},
@@ -368,6 +375,37 @@ describe('sıklamen çekirdeği olayları', () => {
   });
 });
 
+describe('Sinüzit Atağı ve Spray olayları', () => {
+  it('atak, Spray durumu ve kullanımı, atak satırı: şemaya uygun, kişisel veri yok; atak satırı first_drain yazmaz', async () => {
+    const { g, lc } = await loadGame(3);
+    lc.start();
+    clearBoard(g);
+    g.sinusAttack();
+    expect([count('sinus_attack_started'), count('sinus_attack_row_added')]).toEqual([1, 1]);
+    expect(last('sinus_attack_row_added')).toMatchObject({ room: 0, level: 1 });
+    g.sprayCharge = SINUS.sprayThreshold;
+    g.update(16);
+    expect(count('spray_ready')).toBe(1);
+    g.useSpray();
+    while (g.pending) finishClear(g);
+    expect(last('spray_used')).toMatchObject({ room: 0, level: 1 });
+    // hedefsiz: şarj dolu, atak grisi yok
+    clearBoard(g);
+    g.sprayCharge = SINUS.sprayThreshold;
+    g.update(16);
+    expect(count('spray_no_target')).toBe(1);
+    // yalnızca atak satırı: attack_line_cleared, first_drain yok
+    setupWell(g, 1);
+    g.board[21 * 10] = PIECE.GARBAGE;
+    g.origin[21 * 10] = ORIGIN.attack;
+    placePiece(g, PIECE.I, 1, 7, 0);
+    g.hardDrop();
+    expect(last('attack_line_cleared')).toMatchObject({ attackCellsCleared: 1, room: 0, level: 1 });
+    expect(count('first_drain')).toBe(0);
+    for (const r of records()) expect(validate(r), r.event).toEqual([]);
+  });
+});
+
 describe('öğretici olayları', () => {
   async function tut(done = false) {
     const { Tutorial } = await import('../../src/tutorial/Tutorial');
@@ -479,7 +517,7 @@ describe('skor tablosu ve global gönderim olayları; kişisel veri yok', () => 
       durationSeconds: 90,
       recordedAt: 1,
       submitted: false,
-      ruleset: 'cyclamen-flow-v3',
+      ruleset: 'sinus-attack-spray-v1',
     });
     const input = dom.el('nick-input') as unknown as { value: string };
     input.value = '<x>';

@@ -23,7 +23,7 @@ Akış:
 2. Yalnızca POST; yalnızca `application/json`; gövde en çok 2 KB.
 3. Alan doğrulama: tam alan kümesi; takma ad; tamsayı aralıkları; `seviye = min(20, 1 + satır/10)`.
 4. Süreye göre makullük: satır için en kısa süre ve cömert bir puan üst sınırı.
-5. Kural seti yalnızca güncel kural seti (`cyclamen-flow-v3`, docs/CYCLAMEN-POWER-V3.md) olabilir. Kural seti değişince fonksiyon yeniden yayınlanmalıdır.
+5. Kural seti yalnızca güncel kural seti (`sinus-attack-spray-v1`, docs/SINUS-ATTACK-AND-SPRAY-FINAL.md) olabilir. Kural seti değişince fonksiyon yeniden yayınlanmalıdır.
 6. Hız sınırı: adres başına dakikada 6, saatte 60. Sayaç veritabanındadır; anahtar, adresin tuzlu özetidir.
 7. Tekrar engeli: `gameId` tuzlu özeti (`game_hash`) benzersizdir. Aynı oyun ikinci kez gelirse 409 döner.
 8. Satır eklenir ve kural setindeki sıra döner.
@@ -81,6 +81,7 @@ Private kanal (Realtime Authorization) kullanılmadı: kimlik doğrulama gerekti
 - `20261101000000_tetris_scores_baseline.sql`: canlıda SQL Editor ile elle uygulanan ilk kurulum (güvenli değil; olduğu gibi saklanır).
 - `20261101120000_tetris_secure_scores_and_rooms.sql`: ileri yönlü güvenlik migration'ı. Veri silmez; geri alma notu içinde.
 - `20261102000000_tetris_ruleset_v3.sql`: kural seti `cyclamen-flow-v3` (Sıklamen gücü 3 gri sıra); okuma RPC'sinin varsayılanı. Veri silmez. `tetris-submit-score` yeniden yayınlanmalıdır.
+- `20261103000000_tetris_ruleset_sinus_attack_spray.sql`: kural seti `sinus-attack-spray-v1` (Sinüzit Atağı ve Spray kalıcı); okuma RPC'sinin varsayılanı. Veri silmez. `tetris-submit-score` yeniden yayınlanmalıdır (docs/SINUS-ATTACK-AND-SPRAY-FINAL.md, bölüm 9).
 - Eski NS4-18 migration'ları (`leaderboard_scores`) canlıya hiç uygulanmadı (tablo projede yok). Git geçmişinde kalır; yeniden eklenmedi.
 - Canlı projede CLI migration geçmişi yoksa, CLI ile çalışılmaya başlandığında bu iki sürüm `supabase migration repair --status applied <sürüm>` ile işaretlenmelidir.
 

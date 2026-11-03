@@ -73,6 +73,19 @@ export interface GlowRecipe {
  * NS4-24: Hapşırık: önce tahta iki kez "nefes alır" (anticipation, ilk `windup` oranı; hücreler titrer),
  * sonra savrulan hücreler yukarı uçar ve renkli konfeti (hücre başına `confetti`) saçılır. Islak hiçbir şey yok.
  */
+/**
+ * Sinüzit Atağı ve Spray. Atak: kısa kırmızı-turuncu tahta ışıması ve hafif sarsıntı (reduced motion
+ * çarpanları uygulanır). Spray: silinen her hücreden serin damlacıklar (mevcut parçacık havuzu).
+ */
+export const PROTO_FX = {
+  attackGlow: 0xff6a3d,
+  attackPeak: 0.22,
+  attackMs: 360,
+  attackShake: 0.25,
+  sprayDrops: 5,
+  sprayTints: [0x5fe6d6, 0xbff0ea, 0xffffff],
+} as const;
+
 export const SNEEZE_FX = {
   windup: 0.45,
   shake: 0.45,

@@ -28,11 +28,25 @@ describe('prototip ve varyant kalıntısı yok', () => {
     }
   });
 
+  it('Sinüzit Atağı ve Spray kalıcı: prototip anahtarı, denge profilleri ve maskeleri kaynakta yok', () => {
+    for (const gone of ['/app/protoMode.ts', '/game/protoMechanics.ts', '/ui/protoHud.ts', '/dev/protoDemo.ts'])
+      expect(
+        Object.keys(sources).some((f) => f.endsWith(gone)),
+        gone,
+      ).toBe(false);
+    for (const [file, src] of Object.entries(sources)) {
+      expect(src, file).not.toMatch(
+        /prototype=|sinus-attack-spray&|balance=v\d|\bBALANCE\b|ProtoMods|NO_MODS|maskToMods/,
+      );
+      expect(src, file).not.toMatch(/\.mods\b|\.bal\b|modsToMask|protoMask|allowMods|setTrackingEnabled/);
+    }
+  });
+
   it('geliştirme araçları yalnızca DEV dalında dinamik import edilir', () => {
     const src = bootstrapSrc.replace(/\r\n/g, '\n');
     const dev = src.indexOf('if (import.meta.env.DEV) {');
     expect(dev).toBeGreaterThan(0);
-    for (const m of ['coreDemo', 'collisionDemo', 'fxDemo', 'screensDemo', 'audioDemo']) {
+    for (const m of ['coreDemo', 'collisionDemo', 'fxDemo', 'screensDemo', 'audioDemo', 'sinusDemo']) {
       expect(src.slice(dev), m).toContain(`import('../dev/${m}')`);
       expect(src.slice(0, dev), m).not.toContain(m);
     }

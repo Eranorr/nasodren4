@@ -14,6 +14,7 @@
    ===================================================================== */
 import { COLS, ROWS } from '../config/gameConfig';
 import { PIECE } from './pieces';
+import { ORIGIN } from './sinusAttack';
 import { ALL_LINKS, LINK, ROLE, plantRole } from './plants';
 
 /** Bitki baytında çekirdek biti (plants.ts: 0-3 bağlantı, 4-6 rol; 7 boş). */
@@ -61,10 +62,18 @@ export function shiftedRow(y: number, removed: readonly number[]): number {
 }
 
 /**
+ * Çekirdeğin ve Sıklamen gücünün sayacağı gri: oda grisi. `origin` (Game.origin) verilirse atak kaynaklı gri yokmuş
+ * gibi sayılır (atak grisi yalnızca Spray'in hedefidir); oyunda her gri oda ya da atak kaynaklıdır.
+ */
+const isRoomGray = (board: Uint8Array, k: number, origin?: Uint8Array) =>
+  board[k] === PIECE.GARBAGE && origin?.[k] !== ORIGIN.attack;
+
+/**
  * Aktivasyon: `k` hücresinin (çekirdek) çevresinde (sütun ±FLOW.nearCols, sıra ±FLOW.nearRows) gri var mı; varsa hedef
  * sıra (deterministik): en yakın gri (|dx| + |dy|), eşitlikte alttaki sıra, sonra çekirdek sütununa yakın olan. Yoksa -1.
+ * `origin`: atak grisi sayılmaz.
  */
-export function nearGrayRow(board: Uint8Array, k: number): number {
+export function nearGrayRow(board: Uint8Array, k: number, origin?: Uint8Array): number {
   const x0 = k % COLS,
     y0 = (k / COLS) | 0;
   let best = -1,
@@ -74,7 +83,7 @@ export function nearGrayRow(board: Uint8Array, k: number): number {
     for (let dx = -FLOW.nearCols; dx <= FLOW.nearCols; dx++) {
       const x = x0 + dx,
         y = y0 + dy;
-      if (x < 0 || x >= COLS || y < 0 || y >= ROWS || board[y * COLS + x] !== PIECE.GARBAGE) continue;
+      if (x < 0 || x >= COLS || y < 0 || y >= ROWS || !isRoomGray(board, y * COLS + x, origin)) continue;
       const d = Math.abs(dx) + Math.abs(dy),
         ax = Math.abs(dx);
       if (d < bd || (d === bd && (y > best || (y === best && ax < bdx)))) {
@@ -90,12 +99,13 @@ export function nearGrayRow(board: Uint8Array, k: number): number {
 /**
  * Sıklamen gücünün sileceği sıralar: gri içeren sıralardan en çok `n` tanesi. `target` (aktif çekirdeğin hedef sırası)
  * verilirse ona en yakınlar (eşit uzaklıkta alttaki önce), verilmezse (-1) en alttakiler. Sıralar küçükten büyüğe.
+ * `origin`: yalnızca oda grisi içeren sıralar sayılır.
  */
-export function powerRows(board: Uint8Array, target: number, n: number): number[] {
+export function powerRows(board: Uint8Array, target: number, n: number, origin?: Uint8Array): number[] {
   const rows: number[] = [];
   for (let y = 0; y < ROWS; y++)
     for (let x = 0; x < COLS; x++)
-      if (board[y * COLS + x] === PIECE.GARBAGE) {
+      if (isRoomGray(board, y * COLS + x, origin)) {
         rows.push(y);
         break;
       }
@@ -106,10 +116,16 @@ export function powerRows(board: Uint8Array, target: number, n: number): number[
     .sort((a, b) => a - b);
 }
 
-export function grayCellsInSpan(board: Uint8Array, row: number, col: number, span: number): number[] {
+export function grayCellsInSpan(
+  board: Uint8Array,
+  row: number,
+  col: number,
+  span: number,
+  origin?: Uint8Array,
+): number[] {
   const out: number[] = [];
   for (let x = Math.max(0, col - span); x <= Math.min(COLS - 1, col + span); x++)
-    if (board[row * COLS + x] === PIECE.GARBAGE) out.push(row * COLS + x);
+    if (isRoomGray(board, row * COLS + x, origin)) out.push(row * COLS + x);
   return out;
 }
 
@@ -122,7 +138,12 @@ const fall = new Int16Array(COLS * ROWS);
  * rol, çekirdek) hücreyle birlikte taşınır; farklı miktarda inen (ya da yerinde kalan) komşuyla sap bağlantısı kopar.
  * `board` ve `plant` yerinde güncellenir. Dönen değer [eski, yeni] indeks çiftleri (alttan yukarı).
  */
-export function collapseColumns(board: Uint8Array, plant: Uint8Array, cols: Iterable<number>): [number, number][] {
+export function collapseColumns(
+  board: Uint8Array,
+  plant: Uint8Array,
+  cols: Iterable<number>,
+  origin?: Uint8Array,
+): [number, number][] {
   const moves: [number, number][] = [];
   fall.fill(0);
   for (const x of cols) {
@@ -158,6 +179,11 @@ export function collapseColumns(board: Uint8Array, plant: Uint8Array, cols: Iter
     plant[to] = plant[from];
     board[from] = 0;
     plant[from] = 0;
+    // kaynak katmanı (renkli hücrede 0) hücreyle birlikte taşınır; boş kalan hücrede eski kaynak kalmaz
+    if (origin) {
+      origin[to] = origin[from] ?? 0;
+      origin[from] = 0;
+    }
   }
   return moves;
 }

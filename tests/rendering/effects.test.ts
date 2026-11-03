@@ -29,6 +29,7 @@ import {
   createGame,
   dropVerticalI,
   fillRow,
+  idx,
   finishClear,
   placePiece,
   setCell,
@@ -611,6 +612,24 @@ describe('boşluk işaretleri', () => {
     clearBoard(g);
     v.syncBoard();
     expect(marks()).toHaveLength(0);
+  });
+
+  it('yalnızca kanal kaydı olan sıralar parlar; dağınık atak grisi içeren sıra parlamaz', () => {
+    clearBoard(g);
+    g.channelAt.fill(-1);
+    fillRow(g, 21, PIECE.GARBAGE, [4]); // kanal sırası (oda / atak satırı)
+    g.channelAt[21] = 4;
+    g.board[idx(2, 20)] = PIECE.GARBAGE; // dağınık tek atak grisi: 9 boş hücre
+    g.origin[idx(2, 20)] = 2;
+    g.boardVer++;
+    const at = () => marks().map((h) => Math.round((h.y - v.L.cell / 2) / v.L.cell));
+    v.syncBoard();
+    expect(at()).toEqual([VIS - 1]);
+    g.origin[idx(2, 20)] = 1; // oda grisi içeren sıra parlar (kanal kaydı olmasa da)
+    v.syncBoard();
+    expect(at().filter((r) => r === VIS - 2)).toHaveLength(9);
+    g.origin.fill(0);
+    g.channelAt.fill(-1);
   });
 
   it('oda başında kanal işaretlenir; satır temizlenince güncellenir; oyun sonunda söner', () => {

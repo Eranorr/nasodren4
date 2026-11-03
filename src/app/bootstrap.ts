@@ -32,6 +32,7 @@ import { createRoomApi } from '../multiplayer/roomApi';
 import { createLeaderboardClient, type GlobalEntry } from '../leaderboard/globalClient';
 import { createNet } from '../multiplayer/net';
 import { createVersus, type Versus } from '../multiplayer/versus';
+import { createSinusHud } from '../ui/sinusHud';
 import { computeLayout, versusLayout } from '../rendering/layout';
 import { loadLocalScores, updateLocalScore } from '../leaderboard/localScores';
 import { loadNickname, saveNickname } from '../leaderboard/nickname';
@@ -88,6 +89,7 @@ export function bootstrap(): void {
       L = v.L;
       versus.layout(v.opps);
     } else L = computeLayout(W, H);
+    sinusHud.layout(L);
     applyHudLayout(L);
     tutorialView.layout(L);
     // NS4-13: yeniden yerleşimde süren dokunmatik jest iptal edilir (hücre ve tahta konumu değişti)
@@ -119,6 +121,9 @@ export function bootstrap(): void {
   // NS4-18: yerel + global skor (Supabase, tetris_scores). Ortam değişkenleri yoksa istemci devre dışıdır
   // (oyun ve yerel tablo çalışır, "Çok oyunculu" gizlenir).
   const leaderboard = createLeaderboardClient(leaderboardConfig);
+  // Sinüzit Atağı barı ve Spray düğmesi
+  const sinusHud = createSinusHud();
+  game.on('attack', () => sinusHud.onAttack());
   let lastSubmitted: GlobalEntry | null = null;
   const submitPanel = createSubmitPanel({
     client: leaderboard,
@@ -234,6 +239,7 @@ export function bootstrap(): void {
     const appState = lifecycle.getState(); // game.update içinde 'over' olmuş olabilir; orijinaldeki gibi burada okunur
     if (appState === 'playing' || appState === 'over') {
       updateHud(game, appState === 'playing');
+      sinusHud.sync(game, appState === 'playing');
       reveal.update(game, dt, appState === 'playing'); // NS4-38: "Sıradaki" gizem kartı
     }
     // NS4-20: tıkalı burun: müzik tıkanıklıkla boğuklaşır; oyun dışında açık
@@ -285,6 +291,10 @@ export function bootstrap(): void {
     // sıklamen çekirdeği gösterimi ve durum (__fn.core)
     void import('../dev/coreDemo').then(({ createCoreDemo }) => {
       fn.core = createCoreDemo(game, lifecycle);
+    });
+    // Sinüzit Atağı ve Spray bakım araçları (__fn.sinus: atağı tetikle, Spray'i doldur, kaynak katmanını incele)
+    void import('../dev/sinusDemo').then(({ createSinusDemo }) => {
+      fn.sinus = createSinusDemo(game, lifecycle);
     });
     // gri bulutçuk teması gösterimi (__fn.collisionDemo)
     void import('../dev/collisionDemo').then(({ createCollisionDemo }) => {

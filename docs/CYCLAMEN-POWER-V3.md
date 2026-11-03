@@ -1,5 +1,7 @@
 # Sıklamen gücü v3: basınca 3 gri sıra (kural seti `cyclamen-flow-v3`)
 
+> **Kural seti yerini aldı:** 2026-11-03 itibarıyla güncel kural seti `sinus-attack-spray-v1` ([SINUS-ATTACK-AND-SPRAY-FINAL.md](SINUS-ATTACK-AND-SPRAY-FINAL.md)). Sıklamen gücünün 3 gri sıra kuralı aynen geçerlidir; güç artık yalnızca oda grilerini siler (atak grisi Spray'in hedefidir).
+
 Önceki kural (v2, [CYCLAMEN-POWER-CORE-SUPPORT-FINAL.md](CYCLAMEN-POWER-CORE-SUPPORT-FINAL.md)) oyuncuya "bozuk" göründü:
 
 - Aktif çekirdek yokken basınca hiçbir şey silinmiyor, etki sıradaki parçaya geçiyordu.

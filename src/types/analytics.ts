@@ -76,6 +76,17 @@ export interface AnalyticsPayloads {
   core_expired: { room: number; level: number };
   core_triggered: { room: number; level: number };
   core_drain_completed: { room: number; level: number; cells: number; moved: number; power: boolean };
+  /**
+   * Sinüzit Atağı ve Spray: atak tetiklendi; atak satırı eklendi (eklenen atak grisi); Spray hazır oldu / dolu ama
+   * hedefsiz kaldı; Spray kullanıldı (hedef sayısı); atak satırı puansız silindi (içindeki atak grisi). Atak satırı
+   * first_drain gibi satır temizleme olaylarına yazılmaz. Yalnızca sayısal oyun verisi (room: 0 tabanlı).
+   */
+  sinus_attack_started: { room: number; level: number };
+  sinus_attack_row_added: { attackCellsAdded: number; room: number; level: number };
+  spray_ready: { room: number; level: number };
+  spray_no_target: { room: number; level: number };
+  spray_used: { sprayTargets: number; room: number; level: number };
+  attack_line_cleared: { attackCellsCleared: number; room: number; level: number };
   /** Oyun sonu "Tekrar oyna". */
   replay_clicked: NoPayload;
   leaderboard_opened: NoPayload;

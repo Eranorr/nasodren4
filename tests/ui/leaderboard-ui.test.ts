@@ -29,7 +29,7 @@ const entry = (n: number, score: number, nickname = ''): LocalScore => ({
   durationSeconds: 90,
   recordedAt: 1000 + n,
   submitted: false,
-  ruleset: 'cyclamen-flow-v3',
+  ruleset: 'sinus-attack-spray-v1',
 });
 /** Elle çözülen sahte istemci. */
 function fakeClient(enabled = true) {
@@ -356,7 +356,7 @@ describe('oyun sonu entegrasyonu (lifecycle)', () => {
     expect(stored.v).toBe(1);
     expect(stored.entries).toHaveLength(1);
     expect(stored.entries[0]).toMatchObject({
-      ruleset: 'cyclamen-flow-v3', // kural setiyle kaydedilir
+      ruleset: 'sinus-attack-spray-v1', // kural setiyle kaydedilir
       nickname: 'Ferah',
       score: 4321,
       lines: 23,

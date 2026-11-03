@@ -35,6 +35,9 @@ interface LayoutBase {
   readonly nextSlot: Pt;
   readonly compactBtns: boolean;
   readonly compactStats: boolean;
+  /** Sinüzit Atağı barı (portrede tahtanın altında yatay, yatayda tahtanın sağında dikey) ve Spray butonu. */
+  readonly attackBar: Rect;
+  readonly btnSpray: Rect;
 }
 
 export interface PortraitLayout extends LayoutBase {

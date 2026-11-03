@@ -13,6 +13,10 @@
    torba başına bir çekirdekli parça, yakınlıkla aktifleşme, sonraki satır
    temizlemesinde kontrollü drenaj ve drenajın dokunduğu sütunlarda renkli
    hücre çökmesi. Sıklamen gücü basınca hemen 3 gri sıra siler (useCyc; aktif çekirdek varsa onun hizasından).
+   Sinüzit Atağı ve Spray (bkz. sinusAttack.ts ve docs/SINUS-ATTACK-AND-SPRAY-FINAL.md): 60 sn aktif oynanışta
+   alttan tek boşluklu atak satırı ve dağınık atak grileri; Spray yalnızca atak grisini temizler. Hücre kaynağı
+   katmanı (origin) oda ve atak grisini ayırır: oda hedefi, çekirdek ve Sıklamen gücü atak grisini görmez; atak
+   grisi içeren tam satır puan, satır, seviye, kombo ve B2B üretmez.
    ===================================================================== */
 import { COLS, ROWS, HIDDEN, VIS, CFG, ROOMS } from '../config/gameConfig';
 import { PIECE, SHAPES, KICK_JLSTZ, KICK_I, kickKey, nextRotation } from './pieces';
@@ -29,6 +33,18 @@ import {
   shiftedRow,
   withCore,
 } from './cyclamenFlow';
+import {
+  ORIGIN,
+  SINUS,
+  attackRows,
+  carryAttackCells,
+  coloredInRows,
+  hasAttackGray,
+  isAttackGray,
+  pickAttackCells,
+  pushGarbageRow,
+  scatterGray,
+} from './sinusAttack';
 import type { GameEventArgs, GameEventListener, GameEventName, PendingClear } from '../types/events';
 import type {
   GameOverReason,
@@ -59,7 +75,42 @@ export class Game {
   readonly board: Uint8Array;
   /** NS4-34: hücrenin bitki baytı (sap bağlantıları + rol, bkz. plants.ts); tahtayla aynı dizinler. */
   readonly plant: Uint8Array;
+  /** Sıra başına hava kanalı sütunu (-1: yok). Oda gri sıralarında kurulur; satırlarla ve atakla kayar. */
+  readonly channelAt: Int8Array;
+  /**
+   * Hücre kaynağı (ORIGIN; board ile aynı dizinler): oda başlangıç grisi ya da Sinüzit Atağı grisi; renkli ve boş
+   * hücrede 0. Board ile birlikte kayar, silinir, temizlenir (satır silme, atak, çökme, hücre silme, oda, reset).
+   */
+  readonly origin: Uint8Array;
   // reset() içinde atanan alanlar (reset() constructor'dan çağrılır)
+  /** Sinüzit Atağı ve Spray rastgelelik akışları (tohumlu oyunda tohumdan türer; parça sırasıyla karışmaz). */
+  private attackRand!: () => number;
+  private sprayRand!: () => number;
+  /** Sinüzit Atağı: barın dolan süresi (ms), atak sayısı ve eklenen gri bulutçuk. */
+  attackT!: number;
+  attacks!: number;
+  attackGray!: number;
+  /** Atak grisi içeren temizlenen tam satır (puan, satır, seviye, kombo, B2B üretmez). */
+  attackLines!: number;
+  /** Spray durumu (değişince 'spraystate' yayılır): dolmuyor/doluyor, hazır, dolu ama hedef yok. */
+  sprayStatus!: 'charging' | 'ready' | 'notarget';
+  /**
+   * Oda geçişi: yeni odaya taşınan atak grisi, bunlardan eski yerinde kalamayıp yeniden konumlanan, alt bölgede yer
+   * bulamayıp üst sıralara yerleşen ve hiç yer bulamadığı için top-out'a yol açan geçiş sayısı.
+   */
+  carriedAttackGray!: number;
+  /** Çekirdek drenajı ve Sıklamen gücüyle silinen oda kaynaklı gri (ölçüm). */
+  coreDrainRoomCells!: number;
+  powerDrainRoomCells!: number;
+  relocatedAttackGray!: number;
+  carryOverflow!: number;
+  carryTopouts!: number;
+  /** Spray: şarj (kırılan renkli hücre, en çok eşik), kullanım ve silinen hücre sayısı. */
+  sprayCharge!: number;
+  sprays!: number;
+  sprayed!: number;
+  /** Süren drenajı başlatan: çekirdek, Sıklamen gücü ya da Spray. */
+  flushBy!: 'core' | 'power' | 'spray';
   /** Rastgelelik kaynağı (torba, çekirdek konumu, oda dizilimi); tohumsuz oyunda Math.random. */
   private rand!: () => number;
   state!: GameState;
@@ -157,6 +208,8 @@ export class Game {
     this.handlers = {};
     this.board = new Uint8Array(COLS * ROWS);
     this.plant = new Uint8Array(COLS * ROWS);
+    this.channelAt = new Int8Array(ROWS).fill(-1);
+    this.origin = new Uint8Array(COLS * ROWS);
     this.reset();
     this.state = 'idle';
     this.type = 0;
@@ -192,8 +245,28 @@ export class Game {
    */
   reset(opts?: { readonly rooms?: boolean; readonly seed?: number | undefined }) {
     this.rand = opts?.seed === undefined ? () => Math.random() : seeded(opts.seed);
+    // Sinüzit Atağı ve Spray: tohumlu oyunda tohumdan türeyen ayrı akışlar (çok oyunculu herkes aynı; parça sırası
+    // değişmez); tohumsuz oyunda oyunun akışı (yalnızca atak/Spray anında çekilir)
+    if (opts?.seed === undefined) this.attackRand = this.sprayRand = () => this.rand();
+    else {
+      this.attackRand = seeded((opts.seed ^ 0x5a17ac0d) >>> 0);
+      this.sprayRand = seeded((opts.seed ^ 0x3c6ef372) >>> 0);
+    }
+    this.channelAt.fill(-1);
+    this.attackT = 0;
+    this.attackLines = 0;
+    this.sprayStatus = 'charging';
+    this.attacks = 0;
+    this.attackGray = 0;
+    this.carriedAttackGray = this.relocatedAttackGray = this.carryOverflow = this.carryTopouts = 0;
+    this.coreDrainRoomCells = this.powerDrainRoomCells = 0;
+    this.sprayCharge = 0;
+    this.sprays = 0;
+    this.sprayed = 0;
+    this.flushBy = 'core';
     this.board.fill(0);
     this.plant.fill(0);
+    this.origin.fill(0);
     this.bag = [];
     this.queue = [];
     this.core = false;
@@ -261,6 +334,21 @@ export class Game {
     this.spawn();
   }
 
+  /** Oda hedefindeki gri sayısı: yalnızca oda grileri (atak grisi sayılmaz). */
+  roomGoalGray() {
+    let n = 0;
+    for (let i = 0; i < this.board.length; i++)
+      if (this.board[i] === PIECE.GARBAGE && !isAttackGray(this.board, this.origin, i)) n++;
+    return n;
+  }
+
+  /** Tahtadaki atak kaynaklı gri sayısı. */
+  attackGrayCount() {
+    let n = 0;
+    for (let i = 0; i < this.board.length; i++) if (isAttackGray(this.board, this.origin, i)) n++;
+    return n;
+  }
+
   /** NS4-27: tahtadaki gri bulutçuk (hücre 8) sayısı. */
   grayCount() {
     let n = 0;
@@ -272,13 +360,18 @@ export class Game {
    * NS4-27: odaya girer: tahta temizlenir; oda ise alttan `rows` sıra gri bulutçuk dizilir (hiçbir sıra dolu değildir).
    * NS4-30: her sırada hava kanalının boşluğu (kanallar `channels` parçada, her parça ayrı sütunda, alttan yukarı)
    * ve 0..extraHoles ek boşluk. ROOMS.length: Serbest nefes (boş tahta).
+   * Sinüzit Atağı: `carry` (önceki odanın atak grileri, eski dizinler) oda kurulduktan sonra carryAttackCells ile
+   * yerleşir; puan, satır ya da Spray şarjı yok. Yer bulamayan hücre varsa oyun mevcut kuralla biter (blockout):
+   * false.
    */
-  enterRoom(i: number) {
+  enterRoom(i: number, carry: readonly number[] = []): boolean {
     this.room = i;
     this.board.fill(0);
     this.plant.fill(0);
     this.coreLife = 0; // oda değişince tahtadaki aktif çekirdek de gider (tetiklemez)
     this.coreTargetRow = -1;
+    this.channelAt.fill(-1);
+    this.origin.fill(0); // atak grileri aşağıda yeni odaya yeniden yerleşir (carry)
     const def = ROOMS[i];
     if (def) {
       const seg = Math.ceil(def.rows / def.channels);
@@ -291,30 +384,62 @@ export class Game {
         }
         const y = ROWS - 1 - k,
           extra = (this.rand() * (def.extraHoles + 1)) | 0;
-        for (let x = 0; x < COLS; x++) this.board[y * COLS + x] = x === channel ? 0 : PIECE.GARBAGE;
+        for (let x = 0; x < COLS; x++) {
+          this.board[y * COLS + x] = x === channel ? 0 : PIECE.GARBAGE;
+          this.origin[y * COLS + x] = x === channel ? ORIGIN.none : ORIGIN.room;
+        }
+        this.channelAt[y] = channel;
         for (let h = 0; h < extra;) {
           const x = (this.rand() * COLS) | 0;
           if (this.board[y * COLS + x]) {
             this.board[y * COLS + x] = 0;
+            this.origin[y * COLS + x] = ORIGIN.none;
             h++;
           }
         }
       }
     }
-    this.roomGray = this.roomGray0 = this.grayCount();
+    let lost = 0;
+    if (carry.length) {
+      const r = carryAttackCells(this.board, this.plant, this.origin, this.channelAt, carry, SINUS.attackZoneRows);
+      this.carriedAttackGray += r.placed.length;
+      this.relocatedAttackGray += r.relocated;
+      this.carryOverflow += r.overflow;
+      lost = r.lost;
+    }
+    this.roomGray = this.roomGray0 = this.roomGoalGray();
     this.boardVer++;
     this.emit('roomstart', { room: i, gray: this.roomGray });
+    if (lost) {
+      this.carryTopouts++;
+      this.gameOver('blockout');
+    }
+    return !lost;
+  }
+
+  private roomCellsIn(cells: readonly number[]) {
+    let n = 0;
+    for (const k of cells) if (this.origin[k] === ORIGIN.room) n++;
+    return n;
+  }
+
+  /** Oda geçişinde yeni odaya taşınacak atak grileri (dizinler, alttan yukarı). */
+  attackCarry(): number[] {
+    const out: number[] = [];
+    for (let k = this.board.length - 1; k >= 0; k--) if (isAttackGray(this.board, this.origin, k)) out.push(k);
+    return out;
   }
 
   /** NS4-30: odanın açıklık oranı (0..1; temizlenen gri bulutçuk / başlangıç). Serbest nefeste ve akış kapalıyken 1. */
   roomOpenness() {
-    return this.roomGray0 > 0 ? 1 - this.roomGray / this.roomGray0 : 1;
+    // oran 0'ın altına inmez
+    return this.roomGray0 > 0 ? Math.max(0, 1 - this.roomGray / this.roomGray0) : 1;
   }
 
   /** NS4-27: odadaki son gri bulutçuk temizlendi mi (Serbest nefeste ve oda akışı kapalıyken hep false). */
   roomCleared() {
     if (!this.rooms || this.room >= ROOMS.length) return false;
-    this.roomGray = this.grayCount();
+    this.roomGray = this.roomGoalGray();
     return this.roomGray === 0;
   }
 
@@ -535,6 +660,7 @@ export class Game {
         cy = this.y + s[i][1];
       this.board[cy * COLS + cx] = this.type;
       this.plant[cy * COLS + cx] = withCore(plant[i], this.core);
+      this.origin[cy * COLS + cx] = 0; // renkli hücrenin kaynağı yok
       cells.push(cy * COLS + cx);
       if (cy >= HIDDEN) allHidden = false;
     }
@@ -543,7 +669,7 @@ export class Game {
       fizzled = false;
     if (this.core) {
       const head = cells.find((k) => hasCore(this.plant[k])) ?? -1;
-      const row = head >= 0 ? nearGrayRow(this.board, head) : -1;
+      const row = head >= 0 ? nearGrayRow(this.board, head, this.origin) : -1;
       if (row >= 0) {
         this.clearCoreExcept(head);
         this.coreTargetRow = row;
@@ -577,12 +703,27 @@ export class Game {
         }
       if (f) full.push(y);
     }
-    this.scoreClear(full.length, tspin);
-    if (full.length && this.emptyExcept(full)) this.scoreAllClear(full.length);
+    // atak satırı (atak grisi içeren tam satır): tahtadan normal biçimde silinir ama puan, satır, seviye, kombo, B2B,
+    // Tetris/T-spin sayımı, Tam Ferahlık ve Spray şarjı üretmez; yalnızca normal satırlar sayılır
+    const atk = attackRows(this.board, this.origin, full);
+    const normal = atk.length ? full.filter((y) => !atk.includes(y)) : full;
+    // standart satır temizlemesinde kırılan renkli hücreler Spray'i doldurur (dolunca birikmez)
+    if (normal.length)
+      this.sprayCharge = Math.min(SINUS.sprayThreshold, this.sprayCharge + coloredInRows(this.board, normal));
+    // yalnızca atak satırı silindiyse puanlama hiç çalışmaz (kombo ve B2B olduğu gibi kalır)
+    if (normal.length || !atk.length) this.scoreClear(normal.length, tspin);
+    if (normal.length && this.emptyExcept(full)) this.scoreAllClear(normal.length);
+    if (atk.length) {
+      let cells = 0;
+      for (const y of atk)
+        for (let x = 0; x < COLS; x++) if (isAttackGray(this.board, this.origin, y * COLS + x)) cells++;
+      this.attackLines += atk.length;
+      this.emit('attackline', { rows: atk.length, cells });
+    }
     if (this.coreLife > 0) {
-      // aktif çekirdeği ilk standart satır temizlemesi tetikler (çekirdeğin kendi parçasınınki dahil);
+      // aktif çekirdeği ilk standart (normal) satır temizlemesi tetikler (çekirdeğin kendi parçasınınki dahil);
       // temizleme olmazsa yeni parça ömürden düşer, ömür biterse çekirdek söner
-      if (full.length) {
+      if (normal.length) {
         this.flushFrom = findCore(this.board, this.plant);
         this.coreLife = 0;
         this.emit('core', { kind: 'triggered' });
@@ -681,12 +822,16 @@ export class Game {
       if (w !== r) {
         this.board.copyWithin(w * COLS, r * COLS, r * COLS + COLS);
         this.plant.copyWithin(w * COLS, r * COLS, r * COLS + COLS);
+        this.origin.copyWithin(w * COLS, r * COLS, r * COLS + COLS);
+        this.channelAt[w] = this.channelAt[r] ?? -1;
       }
       w--;
     }
     for (; w >= 0; w--) {
       this.board.fill(0, w * COLS, w * COLS + COLS);
       this.plant.fill(0, w * COLS, w * COLS + COLS);
+      this.origin.fill(0, w * COLS, w * COLS + COLS);
+      this.channelAt[w] = -1;
     }
     this.boardVer++;
   }
@@ -753,7 +898,81 @@ export class Game {
       this.cycSupport = 'rows';
       this.emit('cyclamen', { core: false });
     }
-    this.beginPowerFlush(powerRows(this.board, target, FLOW.powerRows));
+    this.beginPowerFlush(powerRows(this.board, target, FLOW.powerRows, this.origin));
+    return true;
+  }
+
+  /**
+   * Sinüzit Atağı. Alttan tek boşluklu atak satırı gelir (tahta, bitki, kaynak ve kanal kaydı bir sıra yukarı kayar),
+   * ardından en alt SINUS.attackZoneRows sıranın boş hücrelerine en çok SINUS.attackScatter atak grisi dağılır.
+   * Satır, puan sayılmaz. Taşma: en üst sıra doluysa oyun biter (blockout); düşen parça sığmazsa yukarı itilir,
+   * olmazsa overlap.
+   */
+  sinusAttack() {
+    if (this.state !== 'play') return;
+    this.emit('attackstart');
+    const hole = Math.min(COLS - 1, Math.floor(this.attackRand() * COLS));
+    if (!pushGarbageRow(this.board, this.plant, this.origin, this.channelAt, hole)) return this.gameOver('blockout');
+    if (this.coreTargetRow >= 0) this.coreTargetRow--;
+    this.fizzleAt = -1;
+    // düşen parça tahtayla birlikte bir sıra yukarı taşınır; gelen gri parçanın altına yazılmaz
+    if (this.type) this.y--;
+    const blocked = new Set<number>();
+    if (this.type) for (const [dx, dy] of SHAPES[this.type][this.rot]) blocked.add((this.y + dy) * COLS + this.x + dx);
+    const added = scatterGray(
+      this.board,
+      this.origin,
+      this.channelAt,
+      this.attackRand,
+      SINUS.attackScatter,
+      SINUS.attackZoneRows,
+      blocked,
+    );
+    this.attacks++;
+    this.attackGray += COLS - 1 + added.length;
+    if (this.rooms && this.room < ROOMS.length) this.roomGray = this.roomGoalGray();
+    this.boardVer++;
+    this.pieceVer++;
+    this.emit('attack', { hole, scattered: added.length });
+    this.fixActiveOverlap();
+  }
+
+  /** Spray dolu ama görünür tahtada atak grisi yok (hedefsiz; düğme kapalı, şarj korunur). */
+  sprayNoTarget() {
+    return this.sprayCharge >= SINUS.sprayThreshold && !hasAttackGray(this.board, this.origin, HIDDEN);
+  }
+
+  /** Spray kullanılabilir mi: şarj dolu, oynanış sürüyor ve görünür tahtada atak grisi var. */
+  canSpray() {
+    return (
+      this.state === 'play' &&
+      this.sprayCharge >= SINUS.sprayThreshold &&
+      hasAttackGray(this.board, this.origin, HIDDEN)
+    );
+  }
+  /**
+   * Spray: görünür tahtadaki atak grilerinden en çok SINUS.sprayCells benzersiz tanesi silinir (oda grisi ve renkli
+   * hücre seçilmez); ardından sütun çökmesi. Puan, satır, seviye, kombo yok. Şarj sıfırlanır.
+   */
+  useSpray() {
+    if (!this.canSpray()) return false;
+    const cells = pickAttackCells(this.board, this.origin, this.sprayRand, SINUS.sprayCells, HIDDEN);
+    if (!cells.length) return false;
+    this.sprayCharge = 0;
+    this.sprays++;
+    this.sprayed += cells.length;
+    this.emit('spray', { cells });
+    this.flushFrom = -1;
+    this.flushBy = 'spray';
+    this.flushByPower = false;
+    this.flushRow = -1;
+    this.flushCol = -1;
+    this.lastFlush = cells.length;
+    const p = { kind: 'flush', rows: [], cells } as const;
+    this.state = 'draining';
+    this.stateT = FLOW.rowMs;
+    this.pending = p;
+    this.emit('clearstart', p);
     return true;
   }
 
@@ -775,17 +994,24 @@ export class Game {
     this.pending = null; // NS4-02: yalnızca clearing/draining sırasında çağrılır, pending doludur
     this.state = 'play';
     if (p.kind === 'room') {
-      this.enterRoom(this.room + 1);
+      const alive = this.enterRoom(this.room + 1, this.attackCarry());
       this.emit('clearend', p);
+      if (!alive) return; // V4: taşınan atak grisine yer kalmadı (top-out)
       this.spawn();
       return;
     }
     if (p.kind === 'flush') {
       this.removeCells(p.cells ?? []);
-      this.score += FLOW.flushBonus;
+      if (this.flushBy !== 'spray') this.score += FLOW.flushBonus;
+      // Spray çekirdeğin hücresini sildiyse çekirdek tetiklemeden gider
+      if (this.coreLife > 0 && findCore(this.board, this.plant) < 0) {
+        this.coreLife = 0;
+        this.coreTargetRow = -1;
+      }
       this.emit('clearend', p);
       if (this.beginCollapse(p.cells ?? [])) return;
-      this.emit('core', { kind: 'drained', cells: this.lastFlush, moved: 0, power: this.flushByPower });
+      if (this.flushBy !== 'spray')
+        this.emit('core', { kind: 'drained', cells: this.lastFlush, moved: 0, power: this.flushByPower });
       if (this.roomCleared()) this.beginRoomClear();
       else if (this.type)
         this.fixActiveOverlap(); // güçle tetiklenen drenaj: düşen parça sürer
@@ -795,12 +1021,13 @@ export class Game {
     if (p.kind === 'collapse') {
       // tahta çökme başlarken güncellendi; satır temizlemesi ya da puan yok
       this.emit('clearend', p);
-      this.emit('core', {
-        kind: 'drained',
-        cells: this.lastFlush,
-        moved: this.lastCollapseMoves,
-        power: this.flushByPower,
-      });
+      if (this.flushBy !== 'spray')
+        this.emit('core', {
+          kind: 'drained',
+          cells: this.lastFlush,
+          moved: this.lastCollapseMoves,
+          power: this.flushByPower,
+        });
       if (this.roomCleared()) this.beginRoomClear();
       else if (this.type)
         this.fixActiveOverlap(); // güçle tetiklenen drenaj: düşen parça sürer
@@ -834,14 +1061,17 @@ export class Game {
    */
   beginFlush(span: number = FLOW.span, power = false): boolean {
     this.flushFrom = -1;
+    this.flushBy = power ? 'power' : 'core';
     this.flushByPower = power;
     this.clearCore();
     this.boardVer++;
     const row = this.coreTargetRow;
     this.coreTargetRow = -1;
     this.flushRow = row;
-    const cells = row >= 0 ? grayCellsInSpan(this.board, row, this.coreTargetCol, span) : [];
+    const cells = row >= 0 ? grayCellsInSpan(this.board, row, this.coreTargetCol, span, this.origin) : [];
     if (!cells.length) return false;
+    if (power) this.powerDrainRoomCells += this.roomCellsIn(cells);
+    else this.coreDrainRoomCells += this.roomCellsIn(cells);
     this.flushes++;
     this.flushedCells += cells.length;
     this.lastFlush = cells.length;
@@ -860,12 +1090,14 @@ export class Game {
    */
   beginPowerFlush(rows: readonly number[]): boolean {
     this.flushFrom = -1;
+    this.flushBy = 'power';
     this.flushByPower = true;
     this.clearCore();
     this.coreTargetRow = -1;
     this.boardVer++;
-    const cells = rows.flatMap((r) => grayCellsInSpan(this.board, r, 0, COLS));
+    const cells = rows.flatMap((r) => grayCellsInSpan(this.board, r, 0, COLS, this.origin));
     if (!cells.length) return false;
+    this.powerDrainRoomCells += this.roomCellsIn(cells);
     this.flushRow = rows[rows.length - 1] ?? -1;
     this.flushCol = -1;
     this.flushes++;
@@ -887,7 +1119,7 @@ export class Game {
   beginCollapse(drained: readonly number[]): boolean {
     const cols = new Set<number>();
     for (const k of drained) cols.add(k % COLS);
-    const moves = collapseColumns(this.board, this.plant, cols);
+    const moves = collapseColumns(this.board, this.plant, cols, this.origin);
     this.lastCollapseFull = false;
     this.lastCollapseMoves = moves.length;
     if (!moves.length) return false;
@@ -926,6 +1158,7 @@ export class Game {
       const x = k % COLS;
       this.board[k] = 0;
       this.plant[k] = 0;
+      this.origin[k] = 0;
       if (k >= COLS) this.plant[k - COLS] &= ~LINK.down;
       if (k < (ROWS - 1) * COLS) this.plant[k + COLS] &= ~LINK.up;
       if (x > 0) this.plant[k - 1] &= ~LINK.right;
@@ -956,6 +1189,25 @@ export class Game {
       this.stateT -= dt;
       if (this.stateT <= 0) this.finishPending();
       return;
+    }
+    // Sinüzit Atağı barı yalnızca aktif oynanışta dolar (temizleme/drenaj/oda geçişinde yukarıda döndü; mola ve oyun
+    // sonunda update çağrılmaz)
+    this.attackT += dt;
+    if (this.attackT >= SINUS.attackMs) {
+      this.attackT = 0;
+      this.sinusAttack();
+      if (this.state !== 'play') return;
+    }
+    // Spray durumu: değişince bir kez yayılır (analitik ve görünüm)
+    const ss =
+      this.sprayCharge < SINUS.sprayThreshold
+        ? 'charging'
+        : hasAttackGray(this.board, this.origin, HIDDEN)
+          ? 'ready'
+          : 'notarget';
+    if (ss !== this.sprayStatus) {
+      this.sprayStatus = ss;
+      this.emit('spraystate', ss);
     }
     // yerçekimi
     const interval = this.gravityMs();

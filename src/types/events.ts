@@ -71,8 +71,18 @@ export interface GameEvents {
   roomclear: RoomClearEvent;
   allclear: AllClearEvent;
   core: CoreEvent;
-  /** Sıklamen gücü kullanıldı: aktif çekirdek vardı (hemen tetiklendi) ya da yoktu (sıradaki parça çekirdeklendi). */
+  /** Sıklamen gücü kullanıldı: aktif çekirdek vardı (hizasından) ya da yoktu (en alttaki gri sıralar). */
   cyclamen: { readonly core: boolean };
+  /** Sinüzit Atağı tetiklendi (satır eklenmeden önce; taşma olursa ardından gameover gelir). */
+  attackstart: void;
+  /** Sinüzit Atağı satırı eklendi (alttan gelen satırın boşluk sütunu, alt bölgeye dağılan gri sayısı). */
+  attack: { readonly hole: number; readonly scattered: number };
+  /** Atak grisi içeren tam satırlar silindi (puansız; satır sayısı ve içlerindeki atak grisi). */
+  attackline: { readonly rows: number; readonly cells: number };
+  /** Spray kullanıldı (silinecek atak grisi indeksleri). */
+  spray: { readonly cells: readonly number[] };
+  /** Spray durumu değişti: doluyor, hazır ya da dolu ama hedefsiz (atak grisi yok). */
+  spraystate: 'charging' | 'ready' | 'notarget';
 }
 
 export type GameEventName = keyof GameEvents;

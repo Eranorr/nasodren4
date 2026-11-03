@@ -8,6 +8,7 @@ import {
   NO_ROUND,
   PROTOCOL_VERSION,
   signedText,
+  validatePayload,
   type Unsigned,
 } from '../../src/multiplayer/protocol';
 import type { ApiResult, Joined, Member, RoomApi } from '../../src/multiplayer/roomApi';
@@ -282,6 +283,27 @@ describe('oda: kurma, katılma, üyelik sunucuda', () => {
 });
 
 describe('imzalı iletiler: kimlik, sıra, tur', () => {
+  it('protokol sürümü 2: eski sürümün (1) imzalı başlatma iletisi reddedilir ve bir kez bildirilir; tur başlamaz', async () => {
+    expect(PROTOCOL_VERSION).toBe(2);
+    const w = world();
+    const { cs, ids, roomId, topic } = await room(w, 2);
+    const old = {
+      v: 1,
+      room: roomId,
+      round: crypto.randomUUID(),
+      player: ids[0] ?? '',
+      seq: 5,
+      type: 'start',
+      payload: { n: 1, seed: 9, in: 0, ids },
+    } as unknown as Unsigned;
+    w.h.inject(topic, await envelope(w.keyOf(ids[0] ?? ''), old));
+    w.h.inject(topic, await envelope(w.keyOf(ids[0] ?? ''), { ...old, seq: 6 }));
+    await wait(80);
+    expect(cs[1]?.last('start')).toBeUndefined();
+    expect(cs[1]?.got.filter((m) => m.t === 'error')).toEqual([{ t: 'error', msg: NET_TEXT.unavailable }]);
+    // başlatma yükünde ek alan (eski prototip maskesi) kabul edilmez
+    expect(validatePayload('start', { n: 1, seed: 9, in: 0, ids, m: 3 })).toBeNull();
+  });
   it('yalnızca ev sahibi başlatır; herkes aynı tohumu ve oyuncuları alır', async () => {
     const w = world();
     const { cs, ids } = await room(w, 2);
@@ -292,6 +314,27 @@ describe('imzalı iletiler: kimlik, sıra, tur', () => {
     await until(() => cs.every((c) => !!c.last('start')));
     expect(cs[1]?.last('start')).toEqual(cs[0]?.last('start'));
     expect(cs[0]?.last('start')?.ids).toEqual(ids);
+  });
+  it('başlatma iletisinde henüz tanınmayan yeni üye: liste yenilenir, tur kabul edilir (yarış hatası)', async () => {
+    const w = world();
+    const { cs, ids, roomId, code, topic } = await room(w, 2);
+    // üçüncü üye sunucuya eklenir ama kanala bağlanmaz: B onu tanımıyor
+    const x = await generateIdentity();
+    const j = await w.s.api.join(code, 'Oyuncu X', x.pub);
+    if (!j.ok) throw new Error('join');
+    const all = [...ids, j.value.playerId];
+    const e: Unsigned = {
+      v: PROTOCOL_VERSION,
+      room: roomId,
+      round: crypto.randomUUID(),
+      player: ids[0] ?? '',
+      seq: 77,
+      type: 'start',
+      payload: { n: 1, seed: 9, in: 0, ids: all },
+    };
+    w.h.inject(topic, await envelope(w.keyOf(ids[0] ?? ''), e));
+    await until(() => !!cs[1]?.last('start'));
+    expect(cs[1]?.last('start')?.ids).toEqual(all);
   });
   it('ev sahibi olmayan üyenin imzalı sahte "start" iletisi yok sayılır', async () => {
     const w = world();
@@ -376,7 +419,7 @@ describe('imzalı iletiler: kimlik, sıra, tur', () => {
     w.h.inject(topic, { ...good, type: 'kick' });
     w.h.inject(topic, { ...good, extra: 1 });
     w.h.inject(topic, { ...good, payload: { ...good.payload, x: 'y'.repeat(MAX_ENVELOPE_CHARS) } });
-    w.h.inject(topic, { ...good, v: 2 });
+    w.h.inject(topic, { ...good, v: 1 }); // eski sürüm
     w.h.inject(topic, await envelope(w.keyOf(b), { ...e, room: crypto.randomUUID(), seq: 2001 }));
     await wait(120);
     expect(cs[0]?.all('st').some((m) => m.s === 601)).toBe(false);

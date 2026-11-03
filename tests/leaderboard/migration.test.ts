@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import baseline from '../../supabase/migrations/20261101000000_tetris_scores_baseline.sql?raw';
 import secure from '../../supabase/migrations/20261101120000_tetris_secure_scores_and_rooms.sql?raw';
 import v3 from '../../supabase/migrations/20261102000000_tetris_ruleset_v3.sql?raw';
+import sinus from '../../supabase/migrations/20261103000000_tetris_ruleset_sinus_attack_spray.sql?raw';
 import { RULESET } from '../../supabase/functions/_shared/scoreRules.ts';
 import envProduction from '../../.env.production?raw';
 import envExample from '../../.env.local.example?raw';
@@ -35,11 +36,15 @@ describe('migration zinciri', () => {
       '20261101000000_tetris_scores_baseline.sql',
       '20261101120000_tetris_secure_scores_and_rooms.sql',
       '20261102000000_tetris_ruleset_v3.sql',
+      '20261103000000_tetris_ruleset_sinus_attack_spray.sql',
     ]);
   });
-  it('v3: okuma RPC varsayılanı güncel kural seti; yetkiler aynı; veri silinmez', () => {
-    const c = sql(v3);
-    expect(RULESET).toBe('cyclamen-flow-v3');
+  it('v3 (tarihsel): okuma RPC varsayılanı cyclamen-flow-v3 idi', () => {
+    expect(sql(v3)).toContain("ruleset_name text default 'cyclamen-flow-v3'");
+  });
+  it('sinus-attack-spray-v1: okuma RPC varsayılanı güncel kural seti; yetkiler aynı; veri silinmez', () => {
+    const c = sql(sinus);
+    expect(RULESET).toBe('sinus-attack-spray-v1');
     expect(c).toContain(
       `create or replace function public.tetris_get_leaderboard( limit_count integer default 10, ruleset_name text default '${RULESET}' )`,
     );
@@ -49,10 +54,11 @@ describe('migration zinciri', () => {
       'revoke all on function public.tetris_get_leaderboard(integer, text) from public, anon, authenticated;',
     );
     expect(c).not.toMatch(/drop table|truncate|delete from|grant [^;]*(insert|update|delete)/i);
-    expect(v3).toContain('Geri alma (rollback)');
+    expect(sinus).toContain('Geri alma (rollback)');
+    expect(sinus).toContain("default 'cyclamen-flow-v3' ile yeniden");
   });
   it('veri kaybı yok: DROP TABLE / TRUNCATE / DELETE FROM tetris_scores kullanılmaz', () => {
-    for (const s of [sql(baseline), code, sql(v3)]) {
+    for (const s of [sql(baseline), code, sql(v3), sql(sinus)]) {
       expect(s).not.toMatch(/drop table|truncate/i);
       expect(s).not.toMatch(/delete from public\.tetris_scores/i);
     }

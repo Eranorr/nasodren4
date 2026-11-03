@@ -214,7 +214,7 @@ export function createLifecycle({
       durationSeconds: Math.max(1, Math.round(game.elapsed / 1000)),
       recordedAt: Date.now(),
       submitted: false,
-      ruleset: RULESET, // sıklamen çekirdeği kural seti (eski kayıtlar ayrı listelenir)
+      ruleset: RULESET, // güncel kural seti (eski kayıtlar ayrı listelenir)
     };
     if (recordedId !== gameId) {
       recordedId = gameId;

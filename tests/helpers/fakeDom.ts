@@ -169,7 +169,7 @@ export const SCREEN_IDS = [
   'scr-set',
   'scr-scores',
 ] as const;
-const BUTTON_IDS = ['btn-hold', 'btn-cyc', 'btn-sneeze', 'btn-pause'];
+const BUTTON_IDS = ['btn-hold', 'btn-cyc', 'btn-sneeze', 'btn-spray', 'btn-pause'];
 const ELEMENT_IDS = [
   'hud-score',
   'hud-level',
@@ -198,6 +198,9 @@ const ELEMENT_IDS = [
   'cyc-sub',
   'sneeze-sub',
   'sneeze-fill',
+  'spray-fill',
+  'attack-bar',
+  'attack-fill',
   'badge-mult',
   // NS4-38: skor kazancı, tıkanıklık kartı ve "Sıradaki" gizem kartı
   'score-delta',

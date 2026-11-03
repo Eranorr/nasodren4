@@ -22,7 +22,7 @@ const valid = () => ({
   level: 3,
   durationSeconds: 245,
   clientVersion: 'web-tetris-1',
-  ruleset: 'cyclamen-flow-v3',
+  ruleset: 'sinus-attack-spray-v1',
 });
 
 describe('kurallar oyun sabitleriyle tutarlı', () => {
